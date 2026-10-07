@@ -44,10 +44,17 @@ app:
     enabled: true
   news:
     scheduler-enabled: true
-    sources: []            # no source is configured by default (real provider = OPEN ITEM)
+    sources: []            # use the live profile for real RSS sources
   ai:
-    provider: ${AI_PROVIDER:none}       # none | stub ; a real provider is an OPEN ITEM
+    provider: ${AI_PROVIDER:none}       # none | stub | openai
     embedding-dimension: 1536
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+      timeout-seconds: ${OPENAI_TIMEOUT_SECONDS:60}
+      max-completion-tokens: ${OPENAI_MAX_COMPLETION_TOKENS:4096}
   lock:
     redis-enabled: ${LOCK_REDIS_ENABLED:false}
   admin:

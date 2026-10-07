@@ -1,4 +1,4 @@
-git-- ============================================================================
+-- ============================================================================
 -- Phase 1 schema: news ISSUE engine
 --
 -- Scope (frozen P0): NEWS_SOURCE, NEWS_ARTICLE, ISSUE, ISSUE_ARTICLE, ASYNC_JOB

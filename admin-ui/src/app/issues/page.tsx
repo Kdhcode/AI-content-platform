@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmt, qs, type IssueListItem, type Page } from "@/lib/api";
-import { Badge, ErrorText, Pager, Shell } from "@/components/ui";
+import { Badge, ErrorText, Pager, Shell, PageHeading } from "@/components/ui";
 
 export default function IssuesPage() {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("REVIEW");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
   const [data, setData] = useState<Page<IssueListItem> | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -18,10 +18,14 @@ export default function IssuesPage() {
     } catch (e) { setError(e); }
   }, [q, status, page]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("status");
+    if (requested && ["REVIEW", "ACTIVE", "CLOSED", "MERGED", "EXCLUDED"].includes(requested)) setStatus(requested);
+  }, []);
 
   return (
     <Shell>
-      <h1>이슈</h1>
+      <PageHeading eyebrow="ISSUE DESK" title="이슈 관리" description="같은 사건을 하나로 묶고, 중요한 맥락을 검수하세요." />
       <div className="row">
         <input type="text" placeholder="제목/요약 검색" value={q} onChange={(e) => { setPage(0); setQ(e.target.value); }} />
         <select value={status} onChange={(e) => { setPage(0); setStatus(e.target.value); }}>

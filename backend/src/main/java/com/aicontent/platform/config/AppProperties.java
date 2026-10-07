@@ -50,7 +50,7 @@ public record AppProperties(
             @DefaultValue java.util.Map<String, String> config) {}
 
     public record Ai(
-            /** none | stub. "none" fails every AI call with AI_PROVIDER_NOT_CONFIGURED (real provider is an OPEN ITEM). */
+            /** none | stub | openai. "none" fails every AI call with AI_PROVIDER_NOT_CONFIGURED. */
             @DefaultValue("none") String provider,
             @DefaultValue("1536") int embeddingDimension,
             @DefaultValue("2") int analysisMaxAttempts,

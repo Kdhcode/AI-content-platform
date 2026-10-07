@@ -4,9 +4,9 @@
 
 | # | 항목 | 현재 상태 | 정할 때 바꿀 곳 |
 |---|---|---|---|
-| 1 | 실제 뉴스 공급원(RSS/API/크롤링)과 이용 약관·저작권 범위 | 범용 RSS 어댑터 + 로컬 FIXTURE만 있음. 소스 0개가 기본 | `NewsSourceAdapter` 구현체 추가 → `NewsAdapterConfig`에 빈 등록 → `app.news.sources` 또는 `news_source` 행 추가. 어댑터 밖으로 사이트 전용 코드가 새지 않게 |
-| 2 | LLM 공급자·모델 | `none`(실패) / `stub`(개발용) | `AiClient` 구현 → `AiConfig`의 `switch`에 case 추가 → `app.ai.provider`. 토큰/비용은 `AiCompletion`으로 `ai_log`에 이미 기록되며 단가 계산은 미구현 |
-| 3 | 임베딩 모델과 차원 | `vector(1536)` 고정 | 모델 확정 후 새 Flyway 마이그레이션으로 `news_article.embedding`, `issue.embedding`, HNSW 인덱스 재생성 + `app.ai.embedding-dimension`. 모델을 바꾸면 기존 벡터는 재임베딩 필요 |
+| 1 | 실제 뉴스 공급원(RSS/API/크롤링)과 이용 약관·저작권 범위 | `live` 프로파일에 연합뉴스·BBC RSS 등록, 실제 수집 검증 완료. 기본 프로파일은 소스 0개 | 추가 공급원과 상용 이용 범위는 확정 필요. `app.news.sources` 또는 `NewsSourceAdapter` 구현체로 확장 |
+| 2 | LLM 공급자·모델 | `none` / `stub` / `openai` 구현. 기본 OpenAI 모델 `gpt-4o-mini`, HTTP 모의 서버 통합 검증 완료. 실제 API 키 없어 외부 호출 미검증 | `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`. 계정의 모델 접근 권한·품질·예산 확정 필요. 단가 계산은 미구현 |
+| 3 | 임베딩 모델과 차원 | `text-embedding-3-small` 어댑터, `vector(1536)` 고정. 실제 pgvector 통합 테스트 통과, 외부 API 호출 미검증 | `OPENAI_EMBEDDING_MODEL`. 차원 변경은 새 Flyway 마이그레이션 필요. 모델을 바꾸면 기존 벡터 전체 재임베딩, stub DB와 실제 모델 DB 분리 |
 | 4 | 판단 임계값(후보 수 5, 최소 유사도 0.60, SAME 0.85, NEW 0.70, 후보 기간 30일) | 초기 추정값 | `app.classifier.*`. 실제 공급자로 `EvalLlmIT`를 돌린 기준선(`docs/EVALUATION.md`)을 보고 확정. **합격 기준(정밀도/재현율 목표)도 그때 정함** |
 | 5 | 관리자 최종 인증 방식(세션/JWT/OIDC), 비밀번호 정책, 로그인 잠금 | HTTP Basic | `security/SecurityConfig`, `admin-ui/src/lib/api.ts` |
 | 6 | 배포 환경(컨테이너/오케스트레이션), 시크릿 관리, DB·Redis 호스팅 | `docker-compose.yml`은 로컬 개발·테스트용 | 배포 방식 확정 후 Dockerfile/CI 추가 |

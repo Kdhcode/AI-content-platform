@@ -12,7 +12,7 @@
 ```
 
 > **먼저 읽을 것:** [docs/VERIFY.md](docs/VERIFY.md) — 이 코드에서 *실행해서 확인한 것*과 *아직 실행해 보지 못한 것*이 구분되어 있습니다.
-> 실제 뉴스 공급원과 LLM/임베딩 공급자는 정해지지 않았습니다([docs/OPEN_ITEMS.md](docs/OPEN_ITEMS.md)). 기본 설정(`AI_PROVIDER=none`)에서는 AI 호출이 명확한 오류로 실패하며, 개발용 `stub` 제공자는 모델이 아닙니다.
+> `live` 프로파일에 실제 연합뉴스·BBC RSS가 등록되고, `AI_PROVIDER=openai`로 LLM·임베딩 API를 연결할 수 있습니다. 실제 외부 AI 호출에는 별도 API 키가 필요합니다. 기본값 `none`은 AI 호출을 실패시키고 개발용 `stub`은 모델이 아닙니다. 검증 결과와 실행 방법은 [docs/VERIFY.md](docs/VERIFY.md)를 보세요.
 
 ## 구성
 | 위치 | 내용 |
@@ -32,6 +32,10 @@
 - 공급자(LLM·임베딩·뉴스 소스)는 인터페이스 뒤에 있고, 새 공급자 추가 위치는 OPEN_ITEMS에 있습니다.
 
 ## 빠른 시작
+
+관리자 첫 화면은 실제 DB 현황을 보여주는 대시보드입니다. 기사·이슈·작업·RSS 소스 관리와 검수 화면으로 이동할 수 있습니다.
+현재 Windows 로컬 DB의 생성 과정과 접속 설정은 [docs/DB_SETUP.md](docs/DB_SETUP.md)에 있습니다.
+
 ```bash
 docker compose up -d
 cd backend && ADMIN_USERNAME=admin ADMIN_PASSWORD='change-me' AI_PROVIDER=stub mvn spring-boot:run
@@ -40,4 +44,4 @@ cd ../admin-ui && cp .env.example .env.local && npm install && npm run dev     #
 뉴스 소스는 `app.news.sources`(또는 `news_source` 테이블)에 추가합니다. 설정 키와 테스트 실행은 [docs/VERIFY.md](docs/VERIFY.md)를 보세요.
 
 ## 주요 설정(`application.yml`, 환경 변수)
-`DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub), `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전).
+`DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub|openai), `OPENAI_API_KEY/OPENAI_CHAT_MODEL/OPENAI_EMBEDDING_MODEL`, `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전).

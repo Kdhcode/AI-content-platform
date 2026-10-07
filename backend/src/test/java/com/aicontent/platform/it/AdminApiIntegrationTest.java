@@ -40,6 +40,25 @@ class AdminApiIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+        mvc.perform(get("/api/admin/dashboard"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void dashboardReportsStoredPipelineCountsAndDatabaseConfiguration() throws Exception {
+        collectSample();
+        mvc.perform(get("/api/admin/dashboard").with(httpBasic("op", "op-pw")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.counts.articles").value(3))
+                .andExpect(jsonPath("$.data.counts.issues").value(2))
+                .andExpect(jsonPath("$.data.counts.successfulJobs").value(10))
+                .andExpect(jsonPath("$.data.counts.failedJobs").value(0))
+                .andExpect(jsonPath("$.data.pipeline.length()").value(4))
+                .andExpect(jsonPath("$.data.system.schemaVersion").value("1"))
+                .andExpect(jsonPath("$.data.system.vectorVersion").isNotEmpty())
+                .andExpect(jsonPath("$.data.system.aiProvider").value("stub"))
+                .andExpect(jsonPath("$.data.system.password").doesNotExist())
+                .andExpect(jsonPath("$.data.system.apiKey").doesNotExist());
     }
 
     @Test

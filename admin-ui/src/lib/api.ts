@@ -87,6 +87,21 @@ export type Job = {
   finishedAt: string | null;
 };
 
+export type NewsSource = {
+  id: number; name: string; type: string; baseUrl: string | null; enabled: boolean; status: string;
+  collectionIntervalSeconds: number; lastAttemptAt: string | null; lastSuccessAt: string | null;
+  failureCount: number; lastError: string | null;
+};
+
+export type Dashboard = {
+  counts: { articles: number; issues: number; reviewIssues: number; enabledSources: number;
+    successfulJobs: number; failedJobs: number; waitingJobs: number; auditEvents: number };
+  pipeline: { jobType: string; total: number; success: number; failed: number; pending: number; running: number }[];
+  system: { database: string; postgresVersion: string; port: number; vectorVersion: string | null;
+    schemaVersion: string | null; aiProvider: string; schedulerEnabled: boolean };
+  checkedAt: string;
+};
+
 export function qs(params: Record<string, string | number | undefined | null>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));

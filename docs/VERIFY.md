@@ -1,72 +1,144 @@
-# 검증 현황과 실행 방법
+# 실행 검증 기록 (2026-10-07)
 
-이 코드는 **패키지 저장소(Maven Central, npm) 접근이 막힌 환경**에서 작성했습니다. 그래서 "여기서 실제로 실행해 확인한 것"과 "코드로만 작성되어 아직 실행해 보지 못한 것"이 분명히 나뉩니다. 아래 표를 기준으로 보세요.
+## 결과
 
-## 1. 실제로 실행해서 확인한 것
+| 대상 | 결과와 범위 |
+|---|---|
+| 백엔드 컴파일·패키징 | Maven 3.9.9, 설치된 Temurin JDK 25로 Java 21 대상 컴파일·실행 JAR 생성 성공 |
+| DB·Flyway | PostgreSQL 16.4 + pgvector 0.8.0에 원본 V1 적용 성공. vector 컬럼과 HNSW 인덱스를 대체하지 않음 |
+| 전체 Maven 테스트 | **92개 통과, 실패 0**: 단위 63개 + DB 통합 29개. 대시보드 집계·인증·DB 정보 검증 포함 |
+| SQL 검증 | 별도 `aicontent_sql` DB에서 `ALL SCHEMA ASSERTIONS PASSED`, `ALL QUERY ASSERTIONS PASSED` |
+| 백엔드 실행 | `http://localhost:8080/actuator/health` → `UP` |
+| 관리자 화면 | `npm run build`, `npm run typecheck` 성공. `http://localhost:3000` 실행 |
+| 실제 RSS 등록·수집 | `live` 프로파일로 연합뉴스·BBC World 2개를 `news_source`에 등록. 실제 피드 HTTP 200, 기사 저장 성공 |
+| 실제 RSS → 관리자 검수 | **AI는 stub**. 기사 9건, 수집 5건 + 분석/임베딩/분류 각 9건 = 작업 32건 모두 SUCCESS. 감사 로그에 REVIEW → ACTIVE 기록 |
+| Chrome 관리자 흐름 | 로그인 → 뉴스 소스 → 지금 수집 → 기사 상세 → 검수 확정. 두 소스 각각 PASS, 브라우저 실행 오류 0 |
+| 새 대시보드 화면 | 1440px 데스크톱·390px 모바일 검증 통과. 실제 DB의 기사 9건·이슈 8개·완료 작업 32건과 화면 집계 일치. API 오류 0, 모바일 가로 넘침 없음 |
+| OpenAI 어댑터 | 인증 헤더, JSON 응답/사용량, 1536차원 임베딩, 401/429/503, 잘못된 응답·차원·키 누락 단위 테스트 통과 |
+| OpenAI 어댑터 전체 흐름 | **로컬 HTTP 모의 서버** + 실제 PostgreSQL/pgvector. RSS → 분석 → 임베딩 → 후보 검색 → LLM REVIEW → 관리자 확정 → 감사 로그 통합 테스트 통과 |
+| 실제 OpenAI 외부 호출 | **미검증**. 실행 환경에 API 키가 없어 유료 LLM·임베딩 호출과 실제 모델 품질은 확인하지 못함 |
 
-| 대상 | 방법 | 결과 |
-|---|---|---|
-| DB 스키마(`V1__phase1_schema.sql`) | 로컬 PostgreSQL 16에 적용(pgvector가 없어 `vector(1536)`→`float8[]`로 바꾸고 extension·HNSW 줄 제외) | 오류 없이 적용 |
-| 제약·트리거·작업 큐 SQL | `backend/src/test/resources/sql/verify_schema.sql` (중복 기사 CHECK, MERGED 일관성 CHECK, primary 연결 유니크, dedupe 부분 유니크, updated_at 트리거, claim 문, 하트비트 만료 복구 문) | `ALL SCHEMA ASSERTIONS PASSED` |
-| 동시 claim | 두 세션에서 동시에 claim 실행 | 서로 다른 작업을 막힘 없이 가져감(`SKIP LOCKED`) |
-| 리포지토리 핵심 SQL | `backend/src/test/resources/sql/verify_queries.sql` — 수집(ON CONFLICT 중복, 제목 중복, 소스 백오프/DEGRADED), 집계 재계산, 빈 이슈 CLOSED, 요약 MANUAL 보호, 병합 표시, 분류 이력, ai_job upsert, 감사 로그, 기사/이슈/작업 목록 쿼리(ILIKE ESCAPE, 정렬), 사용자명 대소문자 | `ALL QUERY ASSERTIONS PASSED` |
-| 프레임워크 없는 Java 로직 | JDK `javac`로 컴파일하고 JUnit 부분집합 호환 러너로 실행. **56개 테스트 전부 통과**: URL/제목 정규화, 날짜 파서, RSS 어댑터(로컬 HTTP 서버로 정상/429/500/404/타임아웃/깨진 XML/DOCTYPE 거부), JVM 락, JSON 추출, 템플릿 렌더러, 임베딩 입력, 스텁 임베딩, `DecisionPolicy`, `IssueContentMerger`, 프롬프트 파일↔변수 일치(실제 `user.md` 렌더링 포함), 평가 지표·러너 | 56 passed, 0 failed |
-| TypeScript 구문 | `tsc --noEmit` | 구문 오류 0 (남은 오류는 모두 `react`/`next` 타입이 없어서 나는 것) |
-| Java 구문 | `javac` 파싱 | 구문 오류 0 (의존성 누락 오류만 존재) |
+V1 첫 줄의 기존 `git--` 오타는 작업 시작 시 이미 `--`로 수정되어 있었으며, 그 수정을 유지한 채 검증했다.
+Redis는 선택 기능이므로 이번 실행에서는 `LOCK_REDIS_ENABLED=false`로 사용했다. Redis 락 실행 검증은 포함하지 않는다.
 
-검증 중 잡아서 고친 결함:
-- `InJvmDistributedLock`이 같은 스레드에서 재진입되던 문제 → 세마포어로 수정(테스트가 발견).
-- 컴파일하지 못한 Spring 코드를 별도 에이전트가 읽기 전용으로 리뷰해 찾은 것(모두 수정 완료):
-  1. `IssueClassificationService.apply`에서 재할당된 지역변수를 람다가 캡처(컴파일 오류).
-  2. `NoneAiClient`가 `AiClient`와 `EmbeddingClient`를 동시에 구현해 기본 설정(`AI_PROVIDER=none`)에서 `NoUniqueBeanDefinitionException`으로 기동 실패 → `NoneAiClient`/`NoneEmbeddingClient`로 분리(회귀 테스트 추가).
-  3. 통합 테스트 픽스처가 2026-10 고정 날짜라 30일 후보 창을 넘기면 실패 → 테스트 프로파일에서 창을 넓힘.
-  4. 분류 락 대기(60초)가 워커 동시성×LLM 지연보다 짧으면 `LOCK_TIMEOUT`이 재시도 횟수를 소모 → 대기/TTL 기본값을 300초로 상향(근본 해결은 OPEN_ITEMS #7).
-  5. 잘못된 비밀번호의 401이 JSON 봉투 없이 나가던 것 → Basic 인증 진입점도 같은 JSON 응답으로 통일.
-  리뷰는 컴파일러가 아니므로 이 목록이 전부라는 뜻은 아닙니다. 첫 `mvn compile`이 최종 판정입니다.
+## 현재 로컬 실행 환경
 
-## 2. 코드는 있지만 아직 실행하지 못한 것 (처음 실행할 때 확인하세요)
+Docker가 설치되어 있지 않아 프로젝트의 비추적 `.local/` 아래에 임시 도구·DB·로그를 준비했다.
 
-| 대상 | 이유 | 처음에 볼 곳 |
-|---|---|---|
-| **Spring 코드 전체의 컴파일/기동** | Maven Central 403으로 의존성을 받을 수 없었음 | `mvn -q -DskipTests compile` |
-| pgvector 의존 SQL: `avg(embedding)`, `<=>` 후보 검색, `CAST(:v AS vector)`, HNSW 인덱스 | 로컬 PG에 pgvector 없음 | `IssueRepository.recomputeAggregates`, `IssueCandidateFinder`, `NewsArticleRepository.saveEmbedding`. `docker compose up -d`의 `pgvector/pgvector:pg16`에서 통합 테스트로 확인 |
-| 통합 테스트 27개(`backend/src/test/java/.../it/*`) | DB + Spring 컨텍스트 필요 | 아래 3절 |
-| 관리자 컨트롤러·보안(MockMvc 테스트 포함) | 위와 동일 | `AdminApiIntegrationTest` |
-| networknt 스키마 검증, Redis 락(Lua), Flyway 연동 | 라이브러리 미설치 | `SchemaValidator`, `RedisDistributedLock` |
-| `EvalDatasetLoader`/`EvalDatasetTest`/`EvalLlmIT`/`LlmJudge` | Jackson/Spring 필요 | 평가 세트 JSON 자체는 파이썬으로 구조 검사함(27건, id 유일, 사건 그룹의 첫 보도는 모호 아님) |
-| 관리자 UI 빌드·화면 동작 | npm 패키지 미설치 | `cd admin-ui && npm install && npm run build` |
+- Maven: `.local/apache-maven-3.9.9/bin/mvn.cmd`, Maven 저장소 `.local/m2/`.
+- PostgreSQL: `.local/pg16/pgsql/bin/`, 데이터 `.local/pgdata/`.
+- DB: `127.0.0.1:55432`, 개발 DB `aicontent`, 테스트 DB `aicontent_test`.
+- PostgreSQL 인증: 이 임시 개발 클러스터는 loopback만 수신하고 `trust` 인증을 사용한다.
+- 백엔드: `live` 프로파일, `AI_PROVIDER=stub`, 관리자 `admin` / `local-review-2026` (로컬 검증 전용).
+- 관리자: `http://localhost:3000`의 **뉴스 소스** 화면에서 수집을 시작할 수 있다.
 
-처음 돌릴 때 특히 의심해 볼 지점(작성자가 미리 짚은 위험): JdbcClient의 null 파라미터 타입 추론(PostgreSQL이 타입을 못 정하는 `:x IS NULL` 패턴은 `CAST`로 이미 처리), `IN (:statuses)` 컬렉션 전개, `@Scheduled` 플레이스홀더, `TransactionTemplate` 주입, networknt 1.5.1 API 이름.
+DB 생성·인증·데이터 위치와 접속 정보: [DB_SETUP.md](DB_SETUP.md).
 
-## 3. 실행 방법
+로그: `.local/backend-dashboard-tests.log`, `.local/backend-all-tests.log`, `.local/backend-package.log`, `.local/backend-server.log`,
+`.local/admin-build.log`, `.local/browser-flow.log`, `.local/browser-flow-yonhap.log`,
+`.local/sql-schema.log`, `.local/sql-queries.log`.
 
-필요: JDK 21, Maven 3.9+, Docker, Node 20+.
+추가 화면 검증 로그: `.local/browser-dashboard.log`, `.local/browser-flow-redesign.log`.
+실제 화면 캡처: `.local/screenshots/newsroom-dashboard.png`, `newsroom-dashboard-preview.png`,
+`newsroom-login.png`, `newsroom-mobile.png`.
 
-```bash
-docker compose up -d                      # PostgreSQL(pgvector) + Redis. 테스트용 DB aicontent_test도 함께 생성
+PostgreSQL 바이너리는 [PostgreSQL 공식 Windows 다운로드 안내](https://www.postgresql.org/download/windows/)가
+연결하는 EDB 배포본을 사용했다. 임시 검증용 pgvector DLL은
+[portalcorp/pgvector_compiled](https://github.com/portalcorp/pgvector_compiled)의 PostgreSQL 16 Windows 패키지다.
+표준 재현 환경은 저장소의 `docker-compose.yml`에 정의된 `pgvector/pgvector:pg16`이다.
 
+## 표준 재실행
+
+필요: JDK 21+, Maven 3.9+, Docker, Node 20+, Chrome (브라우저 흐름 검증용).
+프로젝트 루트에서 DB를 준비하고 각 서버는 별도 터미널에서 실행한다.
+
+```powershell
+docker compose up -d
 cd backend
-mvn test                                  # 단위 + 통합 테스트(통합은 localhost:5432의 aicontent_test 사용)
-mvn test -DexcludedGroups=integration   # 단위 테스트만(DB 불필요; 통합 테스트는 @Tag("integration"))
+mvn test
+# DB 없이 단위 테스트만 실행하려면:
+# mvn test -DexcludedGroups=integration
 
-# 서버 실행(개발용 스텁 AI, 관리자 계정 생성). 실제 AI 공급자는 OPEN ITEM이라 stub은 개발용일 뿐입니다.
-ADMIN_USERNAME=admin ADMIN_PASSWORD='change-me' AI_PROVIDER=stub mvn spring-boot:run
-
-# 로컬 JSON 파일에서 기사를 읽는 FIXTURE 소스 예시(파일 내용은 직접 준비: [{title,url,publisher,publishedAt,text}, ...])
-#   --app.news.sources[0].name=local --app.news.sources[0].type=FIXTURE --app.news.sources[0].base-url=/abs/path/articles.json
-
-cd ../admin-ui
-cp .env.example .env.local                # BACKEND_URL
-npm install && npm run dev                # http://localhost:3000
+$env:ADMIN_USERNAME = 'admin'
+$env:ADMIN_PASSWORD = '<로컬 관리자 비밀번호>'
+$env:AI_PROVIDER = 'stub'
+mvn spring-boot:run '-Dspring-boot.run.profiles=live'
 ```
 
-고정 평가 세트 실행(결과 지표 출력): `mvn -Dtest=EvalLlmIT -Deval.run=true -Dapp.ai.provider=<공급자> test` — 자세한 내용은 [EVALUATION.md](EVALUATION.md).
+```powershell
+cd admin-ui
+npm ci
+npm run build
+npm run start
+```
 
-## 4. 검증 SQL 재실행(pgvector 없는 PostgreSQL)
+이번 임시 DB를 다시 사용하면 `DB_URL=jdbc:postgresql://127.0.0.1:55432/aicontent`,
+`TEST_DB_URL=jdbc:postgresql://127.0.0.1:55432/aicontent_test`를 설정한다.
+DB를 중지/시작하려면 프로젝트 루트에서 다음 명령을 사용한다.
 
-```bash
-sed -e 's/vector(1536)/float8[]/g' -e '/CREATE EXTENSION/d' -e '/USING hnsw/d' \
-    backend/src/main/resources/db/migration/V1__phase1_schema.sql | psql -d <빈 DB> -v ON_ERROR_STOP=1
-psql -d <같은 DB> -f backend/src/test/resources/sql/verify_schema.sql
-psql -d <같은 DB> -f backend/src/test/resources/sql/verify_queries.sql
+```powershell
+& .local/pg16/pgsql/bin/pg_ctl.exe -D .local/pgdata -m fast -w stop
+& .local/pg16/pgsql/bin/pg_ctl.exe -D .local/pgdata -l .local/postgres-server.log -o '-p 55432 -h 127.0.0.1' -w start
+```
+
+## 실제 OpenAI 연결
+
+어댑터는 [Chat Completions 공식 API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)와
+[Embeddings 공식 API](https://developers.openai.com/api/reference/resources/embeddings/methods/create)를 사용한다.
+JSON 모드로 생성한 응답을 기존 전체 JSON Schema로 다시 검증한다.
+기존 스키마의 조건부 `allOf/if/then`과 선택 필드를 유지하기 위해 서버의 strict schema 모드를 사용하지 않는다.
+HTTP 오류의 응답 본문이나 API 키는 작업·AI 오류 로그에 저장하지 않는다.
+
+**stub 벡터와 실제 모델 벡터를 혼합하지 않는다.** 실제 실행에는 별도 빈 DB를 사용한다.
+모델 변경 시에도 기존 기사·이슈 벡터 전체를 재임베딩해야 한다.
+
+```powershell
+# Docker DB에서는 아래처럼 별도 DB를 만들 수 있다.
+docker compose exec postgres createdb -U aicontent aicontent_live
+cd backend
+$env:DB_URL = 'jdbc:postgresql://localhost:5432/aicontent_live'
+$env:ADMIN_USERNAME = 'admin'
+$env:ADMIN_PASSWORD = '<로컬 관리자 비밀번호>'
+$env:AI_PROVIDER = 'openai'
+# OPENAI_API_KEY는 이 터미널의 환경 변수 또는 backend/application-local.yml에 별도로 설정한다.
+# 비추적 YAML을 쓰면 -Dspring-boot.run.profiles=live,local 을 사용한다.
+$env:OPENAI_CHAT_MODEL = 'gpt-4o-mini'
+$env:OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
+mvn spring-boot:run '-Dspring-boot.run.profiles=live'
+```
+
+추가 설정: `OPENAI_BASE_URL`(기본 `https://api.openai.com/v1`), `OPENAI_TIMEOUT_SECONDS`(60),
+`OPENAI_MAX_COMPLETION_TOKENS`(4096). 스키마 차원은 1536으로 고정한다.
+`AI_PROVIDER=openai`에 키가 없으면 서버가 즉시 설정 오류로 종료하며 stub으로 대체하지 않는다.
+
+`live` 프로파일은 초기 수집을 소스당 3건으로 제한하고 자동 스케줄러는 꺼 둔다.
+뉴스 소스 화면에서 수동 수집한 뒤 필요하면 `NEWS_MAX_ARTICLES_PER_RUN`, `NEWS_SCHEDULER_ENABLED`를 설정한다.
+등록되는 기사 본문은 RSS가 제공하는 설명/콘텐츠이며 별도의 원문 웹페이지 수집은 포함하지 않는다.
+
+## 브라우저 흐름 재검증
+
+**로컬 개발 DB에만 실행한다.** 뉴스 수집과 이슈 상태 변경·확정을 수행한다.
+관리자 서버를 실행한 상태에서 별도 터미널을 사용한다.
+
+```powershell
+cd admin-ui
+$env:ADMIN_USERNAME = 'admin'
+$env:ADMIN_PASSWORD = '<실행 중인 관리자 비밀번호>'
+$env:VERIFY_SOURCE_NAME = 'bbc-world' # 또는 yonhap-latest
+npm run verify:flow
+# 화면·실제 DB 집계·모바일·캡처 검증(기사 상태를 변경하지 않음):
+npm run verify:dashboard
+```
+
+기본값은 실제 임베딩 모델을 요구하므로 stub 서버에서 실행하면 실패한다.
+stub 흐름만 확인할 때는 `VERIFY_REQUIRE_REAL_AI=false`를 명시한다.
+Chrome 대신 Playwright Chromium을 사용하려면 `npx playwright install chromium` 후
+`VERIFY_BROWSER_CHANNEL=chromium`을 설정한다.
+`VERIFY_TIMEOUT_SECONDS`(기본 180), `VERIFY_UI_URL`(기본 `http://localhost:3000`)도 설정할 수 있다.
+유료 모델의 모든 호출·토큰을 최종 확인하려면 DB에서 `ai_log.provider`, `model`, `success`를 함께 확인한다.
+
+```sql
+SELECT job_type, status, count(*) FROM async_job GROUP BY 1,2;
+SELECT provider, model, call_type, success, count(*) FROM ai_log GROUP BY 1,2,3,4;
+SELECT actor, action, target_id, after_state->>'status' FROM admin_audit_log ORDER BY id;
 ```
