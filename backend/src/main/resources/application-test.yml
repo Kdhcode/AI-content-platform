@@ -1,0 +1,15 @@
+# Used by integration tests (docker compose up -d; database aicontent_test is created by docker/init-test-db.sql)
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/aicontent_test}
+    username: ${DB_USER:aicontent}
+    password: ${DB_PASSWORD:aicontent}
+app:
+  worker:
+    enabled: false          # tests drive JobWorker.runPending(...) synchronously
+  news:
+    scheduler-enabled: false
+  ai:
+    provider: stub
+  classifier:
+    candidate-window-days: 36500   # fixtures use fixed 2026 dates; do not let the 30-day window age them out

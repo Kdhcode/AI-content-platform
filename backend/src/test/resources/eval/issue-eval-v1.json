@@ -1,0 +1,507 @@
+{
+  "name": "issue-eval-v1",
+  "version": 1,
+  "disclaimer": "모든 기사는 평가를 위해 만든 가상(fictional) 데이터입니다. 실제 뉴스·실존 인물/기관과 무관하며, 파이프라인 검증 전용입니다.",
+  "cases": [
+    {
+      "id": "E01",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-01T09:10:00+09:00",
+      "title": "가상시 A동 상가 건물에서 불…주민 30여 명 대피",
+      "summary": "10월 1일 오전 8시경 가상시 A동 상가 건물 3층에서 불이 나 주민 30여 명이 대피했다.",
+      "keyFacts": [
+        "10월 1일 오전 8시경 가상시 A동 상가 건물 3층에서 화재 발생",
+        "주민 30여 명 대피",
+        "소방당국이 진화 중"
+      ],
+      "entities": [
+        "가상시",
+        "A동 상가",
+        "가상소방서"
+      ],
+      "eventGroup": "G1",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E02",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-10-01T11:30:00+09:00",
+      "title": "가상시 A동 상가 화재 1시간 만에 진화, 인명 피해 없어",
+      "summary": "가상시 A동 상가 건물 화재가 발생 약 1시간 만에 진화됐으며 인명 피해는 없었다.",
+      "keyFacts": [
+        "가상시 A동 상가 화재 약 1시간 만에 진화",
+        "인명 피해 없음",
+        "3층 점포 일부 소실"
+      ],
+      "entities": [
+        "가상시",
+        "A동 상가",
+        "가상소방서"
+      ],
+      "eventGroup": "G1",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E03",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-02T10:00:00+09:00",
+      "title": "A동 상가 화재 원인은 전기 합선 추정…합동감식",
+      "summary": "가상시 A동 상가 화재의 원인이 전기 합선으로 추정된다는 합동감식 결과가 나왔다.",
+      "keyFacts": [
+        "가상시 A동 상가 화재 원인 전기 합선 추정",
+        "경찰과 소방이 합동감식 진행"
+      ],
+      "entities": [
+        "가상시",
+        "A동 상가",
+        "가상경찰서",
+        "가상소방서"
+      ],
+      "eventGroup": "G1",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E04",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-03T09:00:00+09:00",
+      "title": "A동 상가 화재 피해 점포 12곳…가상시 긴급 지원 검토",
+      "summary": "가상시 A동 상가 화재로 피해를 본 점포가 12곳으로 집계돼 시가 긴급 지원을 검토한다.",
+      "keyFacts": [
+        "가상시 A동 상가 화재 피해 점포 12곳",
+        "가상시가 긴급 지원 검토"
+      ],
+      "entities": [
+        "가상시",
+        "A동 상가"
+      ],
+      "eventGroup": "G1",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E05",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-10-04T07:40:00+09:00",
+      "title": "허구군 B리 물류창고 화재…연기 확산",
+      "summary": "10월 4일 새벽 허구군 B리 물류창고에서 불이 나 연기가 인근 마을로 확산했다.",
+      "keyFacts": [
+        "10월 4일 새벽 허구군 B리 물류창고 화재",
+        "연기가 인근 마을로 확산",
+        "소방 대응 2단계 발령"
+      ],
+      "entities": [
+        "허구군",
+        "B리 물류창고",
+        "허구소방서"
+      ],
+      "eventGroup": "G2",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": "G1과 같은 '화재'지만 다른 날짜·다른 지역: SAME이면 오류(반례)"
+    },
+    {
+      "id": "E06",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-04T13:00:00+09:00",
+      "title": "B리 물류창고 불길 잡혀…내부 재고 대부분 소실",
+      "summary": "허구군 B리 물류창고 화재의 큰 불길이 잡혔으나 내부 재고 대부분이 소실됐다.",
+      "keyFacts": [
+        "허구군 B리 물류창고 큰 불길 진화",
+        "내부 재고 대부분 소실"
+      ],
+      "entities": [
+        "허구군",
+        "B리 물류창고",
+        "허구소방서"
+      ],
+      "eventGroup": "G2",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E07",
+      "publisher": "가상경제",
+      "publishedAt": "2026-07-28T08:30:00+09:00",
+      "title": "예시전자, 2분기 영업이익 전년 대비 12% 감소",
+      "summary": "예시전자가 2026년 2분기 영업이익이 전년 동기 대비 12% 감소했다고 발표했다.",
+      "keyFacts": [
+        "예시전자 2026년 2분기 영업이익 전년 대비 12% 감소",
+        "2분기 실적 발표"
+      ],
+      "entities": [
+        "예시전자"
+      ],
+      "eventGroup": "G4",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E08",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-07-28T10:20:00+09:00",
+      "title": "예시전자 2분기 실적 부진…반도체 부문 적자 지속",
+      "summary": "예시전자의 2분기 실적이 부진했으며 반도체 부문 적자가 이어졌다.",
+      "keyFacts": [
+        "예시전자 2분기 실적 부진",
+        "반도체 부문 적자 지속"
+      ],
+      "entities": [
+        "예시전자"
+      ],
+      "eventGroup": "G4",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E09",
+      "publisher": "가상경제",
+      "publishedAt": "2026-10-02T08:30:00+09:00",
+      "title": "예시전자, 3분기 영업이익 8% 증가…반등 성공",
+      "summary": "예시전자가 2026년 3분기 영업이익이 전년 동기 대비 8% 증가했다고 발표했다.",
+      "keyFacts": [
+        "예시전자 2026년 3분기 영업이익 전년 대비 8% 증가",
+        "3분기 실적 발표"
+      ],
+      "entities": [
+        "예시전자"
+      ],
+      "eventGroup": "G3",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": "같은 기업의 다른 분기 실적: E07/E08(2분기)과 SAME이면 오류(반례)"
+    },
+    {
+      "id": "E10",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-02T09:40:00+09:00",
+      "title": "예시전자 3분기 실적 발표…반도체 흑자 전환",
+      "summary": "예시전자가 3분기 실적을 발표했으며 반도체 부문이 흑자로 전환했다.",
+      "keyFacts": [
+        "예시전자 3분기 실적 발표",
+        "반도체 부문 흑자 전환"
+      ],
+      "entities": [
+        "예시전자"
+      ],
+      "eventGroup": "G3",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E11",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-02T15:00:00+09:00",
+      "title": "예시전자 3분기 호실적에 주가 5% 상승",
+      "summary": "예시전자의 3분기 호실적이 알려지며 주가가 5% 상승했다.",
+      "keyFacts": [
+        "예시전자 3분기 호실적",
+        "주가 5% 상승"
+      ],
+      "entities": [
+        "예시전자"
+      ],
+      "eventGroup": "G3",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E12",
+      "publisher": "가상경제",
+      "publishedAt": "2026-10-01T10:00:00+09:00",
+      "title": "샘플은행, 청년 전용 신규 대출 상품 출시",
+      "summary": "샘플은행이 10월 1일 청년 전용 신규 대출 상품을 출시했다.",
+      "keyFacts": [
+        "샘플은행 10월 1일 청년 전용 대출 상품 출시",
+        "금리 우대 조건 적용"
+      ],
+      "entities": [
+        "샘플은행"
+      ],
+      "eventGroup": "G5",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E13",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-01T14:20:00+09:00",
+      "title": "샘플은행 청년 대출 상품 공개…한도 최대 5천만 원",
+      "summary": "샘플은행이 출시한 청년 전용 대출 상품의 한도가 최대 5천만 원으로 공개됐다.",
+      "keyFacts": [
+        "샘플은행 청년 전용 대출 한도 최대 5천만 원"
+      ],
+      "entities": [
+        "샘플은행"
+      ],
+      "eventGroup": "G5",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E14",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-02T09:30:00+09:00",
+      "title": "테스트대학교, 신임 총장에 김가상 교수 선출",
+      "summary": "테스트대학교가 10월 2일 신임 총장으로 김가상 교수를 선출했다.",
+      "keyFacts": [
+        "테스트대학교 10월 2일 신임 총장 선출",
+        "후보 김가상 교수 당선"
+      ],
+      "entities": [
+        "테스트대학교",
+        "김가상"
+      ],
+      "eventGroup": "G6",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E15",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-10-02T12:00:00+09:00",
+      "title": "김가상 신임 총장 '등록금 동결 노력'",
+      "summary": "테스트대학교 김가상 신임 총장이 등록금 동결을 위해 노력하겠다고 밝혔다.",
+      "keyFacts": [
+        "김가상 신임 총장 등록금 동결 노력 의지"
+      ],
+      "entities": [
+        "테스트대학교",
+        "김가상"
+      ],
+      "eventGroup": "G6",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E16",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-03T09:00:00+09:00",
+      "title": "[칼럼] 테스트대학교 총장 선출이 남긴 과제",
+      "summary": "테스트대학교 총장 선출 과정에서 드러난 제도적 과제를 짚는 칼럼.",
+      "keyFacts": [
+        "총장 선출 과정의 제도적 과제 논의"
+      ],
+      "entities": [
+        "테스트대학교"
+      ],
+      "eventGroup": "G6",
+      "multiEvent": false,
+      "ambiguous": true,
+      "note": "칼럼: 사건 보도가 아니라 사람마다 판단이 갈림(ambiguous)"
+    },
+    {
+      "id": "E17",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-05T07:00:00+09:00",
+      "title": "가상시 폭우로 도로 침수…출근길 혼잡",
+      "summary": "10월 5일 새벽 가상시에 시간당 70mm 폭우가 내려 주요 도로가 침수됐다.",
+      "keyFacts": [
+        "10월 5일 새벽 가상시 시간당 70mm 폭우",
+        "주요 도로 침수",
+        "출근길 교통 혼잡"
+      ],
+      "entities": [
+        "가상시"
+      ],
+      "eventGroup": "G7",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E18",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-10-05T09:10:00+09:00",
+      "title": "가상시 폭우 피해 속출…지하차도 통제",
+      "summary": "가상시 폭우로 지하차도가 통제되고 주택 침수 신고가 이어졌다.",
+      "keyFacts": [
+        "가상시 폭우로 지하차도 통제",
+        "주택 침수 신고 이어짐"
+      ],
+      "entities": [
+        "가상시"
+      ],
+      "eventGroup": "G7",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E19",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-06T10:00:00+09:00",
+      "title": "가상시, 폭우 피해 복구 지원금 지급 결정",
+      "summary": "가상시가 10월 5일 폭우 피해 가구에 복구 지원금을 지급하기로 했다.",
+      "keyFacts": [
+        "가상시 10월 5일 폭우 피해 복구 지원금 지급 결정"
+      ],
+      "entities": [
+        "가상시"
+      ],
+      "eventGroup": "G7",
+      "multiEvent": false,
+      "ambiguous": true,
+      "note": "후속 정책 보도: 같은 사건의 후속인지 별개 정책 이슈인지 갈림(ambiguous)"
+    },
+    {
+      "id": "E20",
+      "publisher": "가상경제",
+      "publishedAt": "2026-10-03T11:00:00+09:00",
+      "title": "허구항 컨테이너 물동량 3개월 연속 증가",
+      "summary": "허구항의 컨테이너 물동량이 3개월 연속 증가했다.",
+      "keyFacts": [
+        "허구항 컨테이너 물동량 3개월 연속 증가"
+      ],
+      "entities": [
+        "허구항"
+      ],
+      "eventGroup": "G9",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E21",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-04T16:00:00+09:00",
+      "title": "샘플시립도서관 야간 개방 시범 운영",
+      "summary": "샘플시립도서관이 야간 개방을 시범 운영한다.",
+      "keyFacts": [
+        "샘플시립도서관 야간 개방 시범 운영"
+      ],
+      "entities": [
+        "샘플시립도서관"
+      ],
+      "eventGroup": "G10",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E22",
+      "publisher": "샘플뉴스",
+      "publishedAt": "2026-10-05T13:00:00+09:00",
+      "title": "가상 프로야구 올스타전 개최지 확정",
+      "summary": "가상 프로야구 올스타전 개최지가 확정됐다.",
+      "keyFacts": [
+        "가상 프로야구 올스타전 개최지 확정"
+      ],
+      "entities": [
+        "가상 프로야구"
+      ],
+      "eventGroup": "G11",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E23",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-03T07:00:00+09:00",
+      "title": "[오늘의 주요 뉴스] 상가 화재 지원 검토·허구항 물동량·도서관 개방",
+      "summary": "하루의 서로 무관한 주요 소식을 모은 묶음 기사.",
+      "keyFacts": [
+        "A동 상가 화재 지원 검토",
+        "허구항 물동량 증가",
+        "도서관 야간 개방"
+      ],
+      "entities": [
+        "가상시",
+        "허구항"
+      ],
+      "eventGroup": "BUNDLE-1",
+      "multiEvent": true,
+      "ambiguous": false,
+      "note": "묶음 기사: 어떤 이슈에도 자동 연결 금지"
+    },
+    {
+      "id": "E24",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-06T07:00:00+09:00",
+      "title": "[조간 브리핑] 폭우 복구·예시전자 주가·총장 공약",
+      "summary": "여러 사건을 한 번에 소개하는 조간 브리핑.",
+      "keyFacts": [
+        "폭우 복구 지원",
+        "예시전자 주가",
+        "총장 공약"
+      ],
+      "entities": [
+        "가상시",
+        "예시전자"
+      ],
+      "eventGroup": "BUNDLE-2",
+      "multiEvent": true,
+      "ambiguous": false,
+      "note": "묶음 기사"
+    },
+    {
+      "id": "E25",
+      "publisher": "가상경제",
+      "publishedAt": "2026-10-02T17:00:00+09:00",
+      "title": "샘플은행 청년 대출 첫날 문의 폭주",
+      "summary": "샘플은행 청년 전용 대출 상품 출시 첫날 문의가 폭주했다.",
+      "keyFacts": [
+        "샘플은행 청년 대출 출시 첫날 문의 폭주"
+      ],
+      "entities": [
+        "샘플은행"
+      ],
+      "eventGroup": "G5",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E26",
+      "publisher": "가상일보",
+      "publishedAt": "2026-10-04T10:00:00+09:00",
+      "title": "B리 물류창고 화재 원인 조사 착수",
+      "summary": "허구군 B리 물류창고 화재의 원인 조사가 시작됐다.",
+      "keyFacts": [
+        "허구군 B리 물류창고 화재 원인 조사 착수"
+      ],
+      "entities": [
+        "허구군",
+        "허구소방서"
+      ],
+      "eventGroup": "G2",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    },
+    {
+      "id": "E27",
+      "publisher": "예시방송",
+      "publishedAt": "2026-10-05T19:00:00+09:00",
+      "title": "가상시 폭우, 하천 수위 위험 수준 근접",
+      "summary": "가상시 폭우로 하천 수위가 위험 수준에 근접했다.",
+      "keyFacts": [
+        "가상시 폭우로 하천 수위 위험 수준 근접",
+        "10월 5일 저녁 기준"
+      ],
+      "entities": [
+        "가상시"
+      ],
+      "eventGroup": "G7",
+      "multiEvent": false,
+      "ambiguous": false,
+      "note": ""
+    }
+  ]
+}

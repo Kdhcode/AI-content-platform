@@ -1,0 +1,2 @@
+{ "key": "issue-classifier", "version": "v1", "schemaVersion": "issue-classifier.v1", "temperature": 0.0,
+  "description": "새 기사가 후보 ISSUE 중 하나와 같은 사건인지 판단 (SAME_ISSUE / NEW_ISSUE / REVIEW)" }

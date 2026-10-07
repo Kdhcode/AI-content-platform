@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: ai-content-platform
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/aicontent}
+    username: ${DB_USER:aicontent}
+    password: ${DB_PASSWORD:aicontent}
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  jackson:
+    default-property-inclusion: always
+    serialization:
+      write-dates-as-timestamps: false
+  main:
+    banner-mode: off
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: false   # Redis is optional (locks only); it must never take the service out of rotation
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"
+
+app:
+  worker:
+    enabled: true
+  news:
+    scheduler-enabled: true
+    sources: []            # no source is configured by default (real provider = OPEN ITEM)
+  ai:
+    provider: ${AI_PROVIDER:none}       # none | stub ; a real provider is an OPEN ITEM
+    embedding-dimension: 1536
+  lock:
+    redis-enabled: ${LOCK_REDIS_ENABLED:false}
+  admin:
+    bootstrap-username: ${ADMIN_USERNAME:}
+    bootstrap-password: ${ADMIN_PASSWORD:}

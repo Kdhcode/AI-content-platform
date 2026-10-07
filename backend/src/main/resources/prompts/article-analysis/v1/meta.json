@@ -1,0 +1,2 @@
+{ "key": "article-analysis", "version": "v1", "schemaVersion": "article-analysis.v1", "temperature": 0.0,
+  "description": "뉴스 기사 1건에서 요약/핵심 사실/개체/분류를 구조화 JSON으로 추출" }
