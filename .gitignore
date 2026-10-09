@@ -8,3 +8,4 @@ admin-ui/next-env.d.ts
 .env.local
 .env.*.local
 application-local.yml
+__pycache__/
