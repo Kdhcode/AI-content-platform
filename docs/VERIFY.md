@@ -29,7 +29,7 @@ Docker가 설치되어 있지 않아 프로젝트의 비추적 `.local/` 아래�
 - PostgreSQL: `.local/pg16/pgsql/bin/`, 데이터 `.local/pgdata/`.
 - DB: `127.0.0.1:55432`, 개발 DB `aicontent`, 테스트 DB `aicontent_test`.
 - PostgreSQL 인증: 이 임시 개발 클러스터는 loopback만 수신하고 `trust` 인증을 사용한다.
-- 백엔드: `live` 프로파일, `AI_PROVIDER=stub`, 관리자 `admin` / `local-review-2026` (로컬 검증 전용).
+- 백엔드: `live` 프로파일, `AI_PROVIDER=stub`, 관리자 `admin` / 비밀번호는 실행 시 `ADMIN_PASSWORD` 환경 변수로 지정 (문서·Git에 기록하지 않음).
 - 관리자: `http://localhost:3000`의 **뉴스 소스** 화면에서 수집을 시작할 수 있다.
 
 DB 생성·인증·데이터 위치와 접속 정보: [DB_SETUP.md](DB_SETUP.md).

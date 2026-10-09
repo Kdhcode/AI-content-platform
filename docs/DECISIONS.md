@@ -40,12 +40,13 @@
 | 기사 1건 = 1 트랜잭션(저장 + 분석 작업 등록) | 한 기사 오류가 나머지를 막지 않고, 기사만 있고 작업이 없는 상태가 생기지 않음 |
 | 발행시각 파싱 실패 → `published_at=NULL`, 원문은 `published_at_raw`에 보존 | 시각을 추측해서 채우지 않음. 이슈 집계는 `COALESCE(published_at, collected_at)` |
 | 소스 실패 3회 연속 → `DEGRADED`, 실패 횟수만큼 수집 간격을 늘림(최대 6배), 성공 시 복구 | 죽은 피드를 계속 두드리지 않기 |
-| 실제 뉴스 공급원은 지정하지 않음. RSS 어댑터(범용)와 FIXTURE 어댑터(로컬 JSON)만 제공 | 지시서: 임의 뉴스 데이터 생성 금지. 공급원 선정은 OPEN ITEM |
+| 기본 프로파일은 소스 0개. RSS 어댑터(범용)·FIXTURE 어댑터(로컬 JSON) 제공. **2026-10-07 변경:** opt-in `live` 프로파일에 연합뉴스·BBC World RSS 등록(소스당 초기 3건, 자동 스케줄러 기본 off) | 지시서: 임의 뉴스 데이터 생성 금지. 실제 흐름 검증용으로 공개 RSS만 사용. 추가 공급원·상용 이용 범위는 OPEN ITEM #1 |
 
 ## 5. AI 계층
 | 결정 | 이유 |
 |---|---|
 | `AiClient`/`EmbeddingClient` 인터페이스 뒤에 공급자를 숨김. 제공자는 `none`(기본, 호출 시 `AI_PROVIDER_NOT_CONFIGURED`), `stub`(개발/테스트 전용) | 공급자 선정은 OPEN ITEM. 설정이 없을 때 조용히 가짜 결과를 만들지 않고 큰 소리로 실패 |
+| **2026-10-07 추가:** `openai` 제공자(`OpenAiClient`/`OpenAiEmbeddingClient`). 기본 모델 `gpt-4o-mini`·`text-embedding-3-small`(1536차원). JSON 모드로 받은 뒤 기존 전체 JSON Schema로 재검증(서버 strict 모드 미사용). `AI_PROVIDER=openai`인데 키가 없으면 기동 실패(stub 대체 없음). HTTP 오류 본문·키는 로그에 저장하지 않음 | 조건부 `allOf/if/then`이 있는 기존 스키마를 그대로 쓰기 위함. 실제 외부 호출·품질은 미검증, 모델·예산 확정은 OPEN ITEM #2·#3 |
 | LLM 출력은 반드시 `StructuredOutputService`를 거침: JSON 추출 → 파싱 → JSON Schema(2020-12) 검증 → 실패 시 오류를 힌트로 재시도 → 그래도 실패하면 예외 | "검증 없는 LLM 출력 저장 금지". 시도마다 `ai_log`에 성공/실패·프롬프트 버전·원문 기록 |
 | 분석 호출은 출력 검증 실패에 한해 최대 2회 시도(`app.ai.analysis-max-attempts`). 검증 실패로 끝나면 작업은 재시도 없이 FAILED(기사 FAILED) | 같은 프롬프트를 작업 단위로 다시 돌려도 같은 결과일 가능성이 큼. 관리자가 재분석 가능 |
 | 프롬프트는 `src/main/resources/prompts/<key>/<version>/{system.md,user.md,schema.json,meta.json}` | 버전 디렉터리는 불변(변경 = 새 버전). 클래스패스에 두면 배포물과 함께 버전이 고정됨. 사용 버전은 `app.prompts.*` |
