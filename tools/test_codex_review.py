@@ -173,6 +173,67 @@ class ReviewToolTest(unittest.TestCase):
         cr.state_file(self.repo).write_text('0' * 40 + '\n', encoding='utf-8')
         head = cr.git(self.repo, 'rev-parse', 'HEAD')
         self.assertEqual(cr.pending_commits(self.repo, '0' * 40), [head])
+        self.assertIn('reason=commit object missing', cr.history_log(self.repo).read_text(encoding='utf-8'))
+
+    # regression (f2c985c review #3): the state commit EXISTS but is outside HEAD's first-parent history
+
+    def assert_head_only_and_recorded(self, last):
+        head = cr.git(self.repo, 'rev-parse', 'HEAD')
+        self.assertEqual(cr.pending_commits(self.repo, last), [head])
+        log = cr.history_log(self.repo).read_text(encoding='utf-8')
+        self.assertIn('last_processed=' + last, log)
+        self.assertIn('head=' + head, log)
+        self.assertIn('reason=not in first-parent history', log)
+
+    def test_state_commit_on_other_branch_after_switch(self):
+        base = cr.git(self.repo, 'rev-parse', 'HEAD')
+        run(['git', 'checkout', '-q', '-b', 'feature'], self.repo)
+        feature = self.commit('f.txt', 'f\n', 'feature work')
+        run(['git', 'checkout', '-q', 'main'], self.repo)
+        for i in range(3):
+            self.commit('m%d.txt' % i, 'm\n', 'main %d' % i)
+        # old code: rev-list HEAD ^feature returned all 3 main commits instead of HEAD only
+        old = cr.lines_of(cr.git(self.repo, 'rev-list', '--first-parent', 'HEAD', '^' + feature))
+        self.assertEqual(len(old), 3)
+        self.assertNotEqual(base, feature)
+        self.assert_head_only_and_recorded(feature)
+
+    def test_state_commit_left_behind_by_reset(self):
+        dropped = self.commit('a.txt', 'a\n', 'A (will be dropped)')
+        run(['git', 'reset', '-q', '--hard', 'HEAD~1'], self.repo)
+        for i in range(2):
+            self.commit('b%d.txt' % i, 'b\n', 'B%d' % i)
+        cr.git(self.repo, 'cat-file', '-e', dropped + '^{commit}')   # object still exists
+        self.assert_head_only_and_recorded(dropped)
+
+    def test_state_commit_only_reachable_through_second_parent(self):
+        run(['git', 'checkout', '-q', '-b', 'feature'], self.repo)
+        feature = self.commit('f.txt', 'f\n', 'feature work')
+        run(['git', 'checkout', '-q', 'main'], self.repo)
+        self.commit('m.txt', 'm\n', 'main work')
+        run(['git', 'merge', '-q', '--no-ff', '--no-edit', 'feature'], self.repo)
+        self.assert_head_only_and_recorded(feature)
+
+    def test_main_with_stale_state_reviews_head_once_and_moves_state(self):
+        run(['git', 'checkout', '-q', '-b', 'feature'], self.repo)
+        feature = self.commit('f.txt', 'f\n', 'feature work')
+        run(['git', 'checkout', '-q', 'main'], self.repo)
+        for i in range(3):
+            self.commit('m%d.txt' % i, 'm\n', 'main %d' % i)
+        head = cr.git(self.repo, 'rev-parse', 'HEAD')
+        cr.state_file(self.repo).write_text(feature + '\n', encoding='utf-8')
+        cr.main(['--repo', str(self.repo)])
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('COMMIT: ' + head, self.calls()[0]['prompt'])
+        self.assertEqual(cr.read_state(self.repo), head)
+
+    def test_state_in_first_parent_history_still_walks_forward(self):
+        start = cr.git(self.repo, 'rev-parse', 'HEAD')
+        a = self.commit('a.txt', 'a\n', 'A')
+        b = self.commit('b.txt', 'b\n', 'B')
+        self.assertEqual(cr.pending_commits(self.repo, start), [a, b])
+        self.assertEqual(cr.pending_commits(self.repo, b), [])
+        self.assertFalse(cr.history_log(self.repo).exists())
 
     def test_commit_option_does_not_change_state(self):
         old = cr.git(self.repo, 'rev-parse', 'HEAD')
@@ -219,15 +280,75 @@ class ReviewToolTest(unittest.TestCase):
 
     def test_placeholders_and_code_references_are_not_flagged(self):
         lines = [
-            'password: ${DB_PASSWORD:aicontent}',
+            'password: ${DB_PASSWORD}',
+            'password: ${DB_PASSWORD:}',
+            'password: ${DB_PASSWORD:?DB_PASSWORD is required}',
+            'password: ${DB_PASSWORD:-change-me}',
             "$env:ADMIN_PASSWORD = '<로컬 관리자 비밀번호>'",
             "ADMIN_PASSWORD='change-me'",
             'api-key: ${OPENAI_API_KEY:}',
             'String apiKey = properties.apiKey();',
+            'this.password = password;',
+            'if (password == null) return;',
+            'boolean ok = apiKey != expectedKey;',
+            'api_key = os.environ["OPENAI_API_KEY"]',
+            "line = 'ADMIN_PASSWORD=' + value + ' # production'",
+            'body = "admin password: \\"" + word * 2 + "\\"\\n"',
             'OPENAI_API_KEY는 환경 변수로 설정한다.',
             'apiKey: "sk-test-not-a-real-key"  # codex-review: allow-secret',
         ]
         self.assertEqual(cr.scan_secrets(('x', l) for l in lines), [])
+
+    # regression (f2c985c review #1): trailing comments and spaces inside quotes
+
+    SECRET = 'Pr0d' + 'Secret' + '42x'          # assembled at runtime; not a literal in this file
+
+    def assert_flagged(self, line):
+        self.assertEqual([k for _, k in cr.scan_secrets([('x', line)])], ['credential-like assignment'], line)
+
+    def test_unquoted_value_with_trailing_comment_is_flagged(self):
+        for line in ['ADMIN_PASSWORD=' + self.SECRET + ' # production',
+                     'ADMIN_PASSWORD=' + self.SECRET + '# production',
+                     'db.password: ' + self.SECRET + '   # local only',
+                     'API_KEY=' + self.SECRET + ' // note',
+                     'client_secret = ' + self.SECRET + ' ; ini comment',
+                     '+  password: ' + self.SECRET + ' # added line in a diff']:
+            self.assert_flagged(line)
+
+    def test_quoted_value_with_spaces_is_flagged(self):
+        phrase = 'correct horse ' + 'battery staple'
+        for line in ['password = "' + phrase + '"',
+                     "password: '" + phrase + "'  # yaml",
+                     'ADMIN_PASSWORD="' + phrase + '" # .env with comment']:
+            self.assert_flagged(line)
+
+    def test_trailing_comment_secret_blocks_review_end_to_end(self):
+        sha = self.commit('deploy/settings.ini', 'admin_password = ' + self.SECRET + ' # production\n', 'ini')
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('deploy/settings.ini:1', str(ctx.exception))
+        self.assertNotIn(self.SECRET, str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+
+    # regression (f2c985c review #2): ${VAR:default} defaults are checked
+
+    def test_env_reference_default_is_checked(self):
+        for line in ['password: ${DB_PASSWORD:' + self.SECRET + '}',
+                     'password: ${DB_PASSWORD:-' + self.SECRET + '}',
+                     'password: ${DB_PASSWORD-' + self.SECRET + '}',
+                     'password: ${DB_PASSWORD:=' + self.SECRET + '}',
+                     'password: "${DB_PASSWORD:' + self.SECRET + '}"',  # codex-review: allow-secret (fixture)
+                     'password: ${DB_PASSWORD:${LEGACY_PASSWORD:' + self.SECRET + '}}',
+                     'password: ${DB_PASSWORD:' + self.SECRET + '}  # local default']:
+            self.assert_flagged(line)
+
+    def test_env_default_secret_blocks_review_end_to_end(self):
+        sha = self.commit('backend/application.yml',
+                          'spring:\n  datasource:\n    password: ${DB_PASSWORD:' + self.SECRET + '}\n', 'yml')
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('backend/application.yml:3', str(ctx.exception))
+        self.assertEqual(self.calls(), [])
 
     def test_excluded_files_not_sent_and_listed(self):
         (self.repo / '.env').write_text('OPENAI_API_KEY=whatever-value-123\n', encoding='utf-8')

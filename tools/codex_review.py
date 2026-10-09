@@ -7,8 +7,13 @@ Review policy
 - Watch / repeated runs: every first-parent commit between the last processed commit and
   HEAD is reviewed in order, so commits made between two polls are not skipped. On the
   very first run (no state file) only HEAD is reviewed; use --commit for older ones.
+  If the last processed commit is not in HEAD's first-parent history (branch switch, reset,
+  rebase, or the object is gone), only HEAD is reviewed and the event is appended to
+  .local/collaboration/reviews/history_changes.log.
 - Before anything is sent to Codex, the whole prompt (diff + context documents) is scanned
   for secrets. Any hit aborts the run. Excluded files are listed in the prompt and report.
+  Credential-like assignments are detected with trailing comments and with quoted values
+  that contain spaces. ${VAR:default} is not trusted as a placeholder: its default is checked.
 - Codex runs with user config, rules, shell tool, apps, plugins and hooks disabled, in a
   read-only sandbox inside an empty temporary repository.
 - A report is written only after a successful, non-empty review. Failures never mark a
@@ -63,13 +68,70 @@ SECRET_PATTERNS = [
     ('JWT', re.compile(r'\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}')),
 ]
 _SECRET_NAME = r'(?:password|passwd|pwd|secret|api[_\-]?key|access[_\-]?key|auth[_\-]?token|access[_\-]?token|client[_\-]?secret|private[_\-]?key)'
-# KEY = "literal" / KEY: 'literal'  (quoted literal values in any file type)
-QUOTED_ASSIGN = re.compile(r'(?i)' + _SECRET_NAME + r'[\w\-]*["\']?\s*[:=]\s*(["\'])(?P<v>[^"\'\s]{8,})\1')
-# yaml / properties / .env style, unquoted:  db.password: hunter2hunter2 / API_KEY=abc...
-UNQUOTED_ASSIGN = re.compile(r'(?i)^[+\- ]?\s*[\w.\-]*' + _SECRET_NAME + r'[\w.\-]*\s*[:=]\s*(?P<v>[^\s"\'#]{8,})\s*$')
+MIN_SECRET_LEN = 8
+# A secret-named key followed by a single ':' or '=' (not '==', '!=', '<=', ...), then the value:
+#   KEY = "any text, spaces allowed"   KEY: 'single quoted'
+#   KEY=bare_value   KEY: bare_value  # trailing comment   (bare value ends at space, #, //, ; or ,)
+ASSIGNMENT = re.compile(
+    r'(?i)(?<![\w.\-])[\w.\-]*' + _SECRET_NAME + r'[\w.\-]*["\']?\s*(?<![=!<>:])[:=](?![=:])\s*'
+    r'(?:"(?P<dq>[^"\n]*)"|\'(?P<sq>[^\'\n]*)\'|(?P<bare>[^\s"\'#;,()\[\]]+)(?=\s*(?:$|#|//|;|,)))')
+CONCATENATION = re.compile(r'^\s*["\']?\s*[+,).%]|[+,(]\s*["\']?\s*$')
+SHELL_NAME = re.compile(r'[A-Za-z_]\w*')
+PROPERTY_NAME = re.compile(r'^[A-Za-z_][\w.\-]*$')
+IDENTIFIER = re.compile(r'^[A-Za-z_$][\w.$]*$')
+SECRET_NAME_IN = re.compile(r'(?i)' + _SECRET_NAME)
 PLACEHOLDER = re.compile(
-    r'(?i)^(?:\$\{.*\}|\$\(.*\)|%\w+%|<.*>|\{\{.*\}\}|change-?me|changeit|example\w*|dummy\w*|placeholder\w*'
+    r'(?i)^(?:\$\(.*\)|%\w+%|<.*>|\{\{.*\}\}|change-?me|changeit|example\w*|dummy\w*|placeholder\w*'
     r'|your[_\-].*|x{4,}|\*{3,}|redacted|none|null|test[\w\-]*|fake[\w\-]*)$')
+
+
+def env_reference_default(value):
+    """Parse ${...}. Returns None if value is not a reference, '' if it has no fallback value,
+    otherwise the default text (which may itself be a nested ${...}).
+
+    ${NAME:default} ${NAME:-default} ${NAME:=default}  (shell / Spring / compose; Spring names may contain '-')
+    ${NAME-default} ${NAME=default}                    (shell, only when there is no ':')
+    ${NAME} ${NAME:?message} ${NAME?message}           (no fallback value)
+    """
+    if not (value.startswith('${') and value.endswith('}')):
+        return None
+    inner = value[2:-1].strip()
+    if ':' in inner:
+        name, rest = inner.split(':', 1)
+        if not PROPERTY_NAME.match(name.strip()):
+            return None
+        if rest.startswith('?'):
+            return ''
+        return rest[1:] if rest[:1] in ('-', '=') else rest
+    m = SHELL_NAME.match(inner)
+    if not m:
+        return None
+    rest = inner[m.end():]
+    if not rest or rest[0] == '?':
+        return ''
+    if rest[0] in ('-', '='):
+        return rest[1:]
+    return '' if PROPERTY_NAME.match(inner) else None      # ${app.db-password}: dotted/hyphenated name only
+
+
+def literal_secret(value, line=''):
+    """True when an assigned value looks like a real credential rather than a reference or placeholder.
+
+    ${VAR:default} is not trusted as a placeholder: the default is checked on its own, because a
+    real password can sit there. Only references without a (non-placeholder) default are skipped.
+    """
+    value = value.strip()
+    default = env_reference_default(value)
+    if default is not None:
+        return literal_secret(default, line)
+    if len(value) < MIN_SECRET_LEN or PLACEHOLDER.match(value):
+        return False
+    if IDENTIFIER.match(value) and ('.' in value or line.rstrip().endswith(';') or
+                                    (SECRET_NAME_IN.search(value) and not re.search(r'\d', value))):
+        # Code reference, not a literal: key = props.apiKey / this.password = password; / password = password.
+        # A value with digits that merely contains a secret word (Pr0dSecret42) is still treated as a literal.
+        return False
+    return True
 
 
 def git(repo, *args, quiet=False):
@@ -153,9 +215,12 @@ def scan_secrets(sources):
         for name, pattern in SECRET_PATTERNS:
             if pattern.search(line):
                 findings.append((location, name))
-        for pattern in (QUOTED_ASSIGN, UNQUOTED_ASSIGN):
-            m = pattern.search(line)
-            if m and not PLACEHOLDER.match(m.group('v')):
+        for m in ASSIGNMENT.finditer(line):
+            quoted = m.group('dq') if m.group('dq') is not None else m.group('sq')
+            if quoted is not None and CONCATENATION.search(quoted):
+                continue        # 'KEY=' + variable + '...': the "value" is code between two string literals
+            value = quoted if quoted is not None else m.group('bare')
+            if literal_secret(value, line):
                 findings.append((location, 'credential-like assignment'))
                 break
     return findings
@@ -270,17 +335,43 @@ def read_state(repo):
     return sha or None
 
 
+def history_log(repo):
+    return reviews_dir(repo) / 'history_changes.log'
+
+
+def record_history_change(repo, last, head, reason):
+    line = (time.strftime('%Y-%m-%dT%H:%M:%S%z') + ' last_processed=' + last + ' head=' + head +
+            ' reason=' + reason + ' action=review HEAD only\n')
+    with history_log(repo).open('a', encoding='utf-8') as f:
+        f.write(line)
+    print('History changed (' + reason + '): last processed', last[:12], 'is not in the first-parent history of',
+          'HEAD', head[:12] + '. Reviewing HEAD only; recorded in', history_log(repo).name, flush=True)
+
+
 def pending_commits(repo, last):
+    """Commits to review, oldest first.
+
+    The last processed commit must be in HEAD's FIRST-PARENT history. Merely existing is not enough:
+    after a branch switch, reset or rebase the old object can survive, and walking from it would
+    re-review unrelated history. Outside that history the policy is: review HEAD only, and record it.
+    """
     head = git(repo, 'rev-parse', 'HEAD')
     if last is None:
         return [head]
+    if last == head:
+        return []
+    first_parent_history = lines_of(git(repo, 'rev-list', '--first-parent', head))
     try:
-        git(repo, 'cat-file', '-e', last + '^{commit}', quiet=True)
-    except subprocess.CalledProcessError:
-        print('Last processed commit', last[:12], 'no longer exists (history rewritten?); reviewing HEAD only.',
-              flush=True)
+        position = first_parent_history.index(last)
+    except ValueError:
+        try:
+            git(repo, 'cat-file', '-e', last + '^{commit}', quiet=True)
+            reason = 'not in first-parent history'
+        except subprocess.CalledProcessError:
+            reason = 'commit object missing'
+        record_history_change(repo, last, head, reason)
         return [head]
-    shas = lines_of(git(repo, 'rev-list', '--reverse', '--first-parent', head, '^' + last))
+    shas = list(reversed(first_parent_history[:position]))
     if len(shas) > MAX_PENDING:
         raise RuntimeError(str(len(shas)) + ' unreviewed commits since ' + last[:12] + ' (limit ' +
                            str(MAX_PENDING) + '). Review them with --commit, or delete the state file to '
