@@ -76,3 +76,4 @@
 - 2026-10-09 · Windows 시간 초과 후 자식 프로세스 종료 · **미검증** (3-2 참조)
 - 2026-10-12 · 기준 `7db8fe3` + 시간 초과 프로세스 트리 종료 커밋 · `python -m unittest discover -s tools -p "test_*.py" -v` · **32개 통과, 실패 0** (Linux, Python 3.13, 가짜 codex. 실제 Codex CLI·Windows 실행 없음). 새 테스트를 수정 전 코드로 돌리면 실패함(손자 프로세스 생존)
 - 2026-10-12 · Maven 테스트, 관리자 UI build/typecheck · **미실행**. 클라우드 작업 환경에서 PostgreSQL 16.4 + pgvector 0.8.0은 띄웠으나 Maven Central·npm 레지스트리가 네트워크 정책으로 차단되어 의존성을 받지 못함. 사용자 PC에서 실행 필요
+- 2026-10-12 · `--skip <sha> --reason <사유>` 추가: 다음 대기 커밋 1개만 리뷰 없이 처리 완료로 넘기고 `history_changes.log`에 기록. 삭제된 줄의 옛 기본값처럼 비밀 검사가 반드시 차단하는 커밋 때문에 감시가 멈추지 않게 하기 위함. 리포트를 만들지 않으므로 리뷰된 것으로 보이지 않음 · `python -m unittest discover -s tools -p "test_*.py" -v` · **33개 통과, 실패 0** (Linux, 가짜 codex)

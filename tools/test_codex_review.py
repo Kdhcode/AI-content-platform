@@ -436,6 +436,27 @@ class ReviewToolTest(unittest.TestCase):
             time.sleep(0.1)
         self.assertFalse(pid_alive(pid), 'codex descendant survived the timeout')
 
+    def test_skip_next_pending_commit_only(self):
+        cr.main(['--repo', str(self.repo)])                 # state = initial commit
+        first = self.commit('a.txt', 'a\n', 'A')
+        second = self.commit('b.txt', 'b\n', 'B')
+        with self.assertRaises(RuntimeError):                # not the next pending commit
+            cr.main(['--repo', str(self.repo), '--skip', second, '--reason', 'x'])
+        with self.assertRaises(SystemExit):                  # reason is mandatory
+            cr.main(['--repo', str(self.repo), '--skip', first])
+        calls = len(self.calls())
+        cr.main(['--repo', str(self.repo), '--skip', first, '--reason', 'deleted default value'])
+        self.assertEqual(cr.read_state(self.repo), first)
+        self.assertEqual(len(self.calls()), calls)           # nothing sent to codex
+        self.assertFalse(self.report(first).exists())        # not presented as reviewed
+        log = cr.history_log(self.repo).read_text(encoding='utf-8')
+        self.assertIn('skipped=' + first, log)
+        self.assertIn('deleted default value', log)
+        cr.main(['--repo', str(self.repo)])                  # the next run reviews only B
+        self.assertEqual(cr.read_state(self.repo), second)
+        self.assertTrue(self.report(second).exists())
+        self.assertFalse(self.lock().exists())
+
     def test_second_instance_refused_while_locked(self):
         self.lock().parent.mkdir(parents=True, exist_ok=True)
         self.lock().write_text('', encoding='utf-8')

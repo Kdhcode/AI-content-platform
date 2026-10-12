@@ -414,6 +414,25 @@ def pending_commits(repo, last):
     return shas
 
 
+def skip_commit(repo, sha, reason):
+    """Mark the NEXT pending commit as processed without sending it to Codex.
+
+    For commits the secret scan must block even though nothing secret remains, e.g. a commit
+    that deletes an old default value (deleted lines are scanned and cannot carry an allow mark).
+    Only the next pending commit can be skipped, so nothing else is passed over silently.
+    """
+    pending = pending_commits(repo, read_state(repo))
+    if not pending or pending[0] != sha:
+        raise RuntimeError('Only the next pending commit can be skipped' +
+                           (' (' + pending[0][:12] + ').' if pending else '; nothing is pending.'))
+    line = (time.strftime('%Y-%m-%dT%H:%M:%S%z') + ' skipped=' + sha + ' reason=' +
+            ' '.join(reason.split()) + ' action=not sent to Codex\n')
+    with history_log(repo).open('a', encoding='utf-8') as f:
+        f.write(line)
+    write_atomic(state_file(repo), sha + '\n')
+    print('Skipped', sha[:12], '(not reviewed); recorded in', history_log(repo).name, flush=True)
+
+
 def process(repo, force=False, dry_run=False, timeout=CODEX_TIMEOUT_SECONDS):
     """Review every pending commit in order; stop at the first failure."""
     for sha in pending_commits(repo, read_state(repo)):
@@ -430,7 +449,14 @@ def main(argv=None):
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--commit', help='review this one commit (does not change the processed-commit state)')
     parser.add_argument('--timeout', type=int, default=CODEX_TIMEOUT_SECONDS)
+    parser.add_argument('--skip', metavar='SHA',
+                        help='mark the next pending commit processed without review (needs --reason)')
+    parser.add_argument('--reason', help='why --skip is needed; written to history_changes.log')
     args = parser.parse_args(argv)
+    if args.skip and not (args.reason and args.reason.strip()):
+        parser.error('--skip needs --reason')
+    if args.skip and (args.commit or args.watch):
+        parser.error('--skip cannot be combined with --commit or --watch')
     if args.interval < 5:
         parser.error('--interval must be at least 5 seconds')
     repo = Path(git(Path(args.repo).resolve(), 'rev-parse', '--show-toplevel'))
@@ -441,6 +467,9 @@ def main(argv=None):
         raise SystemExit('Another reviewer is running. If it crashed, remove review.lock after checking.')
     os.close(fd)
     try:
+        if args.skip:
+            skip_commit(repo, git(repo, 'rev-parse', args.skip + '^{commit}'), args.reason)
+            return
         if args.commit:
             review(repo, git(repo, 'rev-parse', args.commit + '^{commit}'), args.force, args.dry_run, args.timeout)
             return
