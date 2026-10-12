@@ -5,7 +5,7 @@
 | # | 항목 | 현재 상태 | 정할 때 바꿀 곳 |
 |---|---|---|---|
 | 1 | 실제 뉴스 공급원(RSS/API/크롤링)과 이용 약관·저작권 범위 | `live` 프로파일에 연합뉴스·BBC RSS 등록, 실제 수집 검증 완료. 기본 프로파일은 소스 0개 | 추가 공급원과 상용 이용 범위는 확정 필요. `app.news.sources` 또는 `NewsSourceAdapter` 구현체로 확장 |
-| 2 | LLM 공급자·모델 | `none` / `stub` / `openai` 구현. 기본 OpenAI 모델 `gpt-4o-mini`, HTTP 모의 서버 통합 검증 완료. 실제 API 키 없어 외부 호출 미검증 | `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`. 계정의 모델 접근 권한·품질·예산 확정 필요. 단가 계산은 미구현 |
+| 2 | LLM 공급자·모델 | `none` / `stub` / `openai` 구현. 기본 OpenAI 모델 `gpt-4o-mini`, HTTP 모의 서버 통합 검증 완료. 실제 API 키 없어 외부 호출 미검증 | `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`. 계정의 모델 접근 권한·품질·예산 확정 필요. **2026-10-12:** 비용 계산 구현(`AiCostCalculator` → `ai_log.estimated_cost_usd`). 단가는 코드·기본 설정에 넣지 않았으므로 `app.ai.pricing`에 직접 입력해야 기록됨(미설정이면 NULL) |
 | 3 | 임베딩 모델과 차원 | `text-embedding-3-small` 어댑터, `vector(1536)` 고정. 실제 pgvector 통합 테스트 통과, 외부 API 호출 미검증 | `OPENAI_EMBEDDING_MODEL`. 차원 변경은 새 Flyway 마이그레이션 필요. 모델을 바꾸면 기존 벡터 전체 재임베딩, stub DB와 실제 모델 DB 분리 |
 | 4 | 판단 임계값(후보 수 5, 최소 유사도 0.60, SAME 0.85, NEW 0.70, 후보 기간 30일) | 초기 추정값 | `app.classifier.*`. 실제 공급자로 `EvalLlmIT`를 돌린 기준선(`docs/EVALUATION.md`)을 보고 확정. **합격 기준(정밀도/재현율 목표)도 그때 정함** |
 | 5 | 관리자 최종 인증 방식(세션/JWT/OIDC), 비밀번호 정책, 로그인 잠금 | HTTP Basic | `security/SecurityConfig`, `admin-ui/src/lib/api.ts` |

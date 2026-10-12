@@ -90,6 +90,9 @@ class OpenAiFlowIntegrationTest extends IntegrationTestBase {
             exchange.close();
         });
         api.start();
+        registry.add("app.ai.pricing.contract-chat.input-per-million-usd", () -> "1.5");
+        registry.add("app.ai.pricing.contract-chat.output-per-million-usd", () -> "6");
+        registry.add("app.ai.pricing.contract-embedding.input-per-million-usd", () -> "0.5");
         registry.add("app.ai.provider", () -> "openai");
         registry.add("app.ai.openai.api-key", () -> "contract-test-key");
         registry.add("app.ai.openai.base-url", () -> "http://127.0.0.1:" + api.getAddress().getPort() + "/v1");
@@ -110,6 +113,9 @@ class OpenAiFlowIntegrationTest extends IntegrationTestBase {
         assertThat(count("SELECT count(*) FROM async_job WHERE status='SUCCESS'")).isEqualTo(7);
         assertThat(count("SELECT count(*) FROM news_article WHERE vector_dims(embedding)=1536")).isEqualTo(2);
         assertThat(count("SELECT count(*) FROM ai_log WHERE provider='openai' AND success")).isEqualTo(5);
+        // 30 * 1.5 / 1e6 + 40 * 6 / 1e6 per chat call, 20 * 0.5 / 1e6 per embedding
+        assertThat(count("SELECT count(*) FROM ai_log WHERE call_type <> 'EMBEDDING' AND estimated_cost_usd = 0.000285")).isEqualTo(3);
+        assertThat(count("SELECT count(*) FROM ai_log WHERE call_type = 'EMBEDDING' AND estimated_cost_usd = 0.000010")).isEqualTo(2);
         assertThat(analysisCalls.get()).isEqualTo(2);
         assertThat(embeddingCalls.get()).isEqualTo(2);
         assertThat(classifierCalls.get()).isEqualTo(1);

@@ -14,6 +14,7 @@
 | 모델 접근 | `gpt-4o-mini`, `text-embedding-3-small` 사용 가능 |
 | 키 보관 | 이 터미널의 환경 변수, 또는 Git 제외 대상 `backend/application-local.yml`. 문서·커밋·Notion·채팅에 붙여 넣지 않는다 |
 | 실제 모델 전용 빈 DB | `aicontent_live`. stub 벡터가 든 `aicontent`와 섞지 않는다 |
+| 단가(선택) | `app.ai.pricing`에 모델별 단가를 설정하면 호출마다 `ai_log.estimated_cost_usd`에 비용이 기록된다. 설정하지 않으면 NULL로 남는다(0이 아님). 값은 OpenAI 가격 페이지를 보고 `backend/application-local.yml`에 직접 넣는다(`application.yml`의 주석 예시 참고) |
 
 주의: `gpt-4o-mini` 대신 temperature를 받지 않는 추론 모델로 바꾸면 요청이 HTTP 400으로 실패한다.
 이번 검증은 기본 모델 그대로 한다.

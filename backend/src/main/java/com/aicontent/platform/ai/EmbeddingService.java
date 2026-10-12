@@ -14,11 +14,13 @@ public class EmbeddingService {
     private final EmbeddingClient client;
     private final AiLogRepository logs;
     private final AppProperties props;
+    private final AiCostCalculator costs;
 
-    public EmbeddingService(EmbeddingClient client, AiLogRepository logs, AppProperties props) {
+    public EmbeddingService(EmbeddingClient client, AiLogRepository logs, AppProperties props, AiCostCalculator costs) {
         this.client = client;
         this.logs = logs;
         this.props = props;
+        this.costs = costs;
     }
 
     public EmbeddingResult embed(String text, AiCallContext context) {
@@ -43,7 +45,8 @@ public class EmbeddingService {
     private void record(Long articleId, String model, Integer tokens, long started, boolean ok, String code, String msg) {
         try {
             logs.insert(new AiLogRepository.Entry(null, articleId, AiCallType.EMBEDDING, client.provider(), model, null, null, 1,
-                    tokens, null, (int) ((System.nanoTime() - started) / 1_000_000), ok, code, msg, null));
+                    tokens, null, costs.estimate(model, tokens, null), (int) ((System.nanoTime() - started) / 1_000_000),
+                    ok, code, msg, null));
         } catch (RuntimeException e) {
             log.warn("ai_log insert failed (ignored): {}", e.getMessage());
         }

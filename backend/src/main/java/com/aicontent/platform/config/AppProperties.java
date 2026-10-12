@@ -1,6 +1,8 @@
 package com.aicontent.platform.config;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -58,7 +60,12 @@ public record AppProperties(
             @DefaultValue("1536") int embeddingDimension,
             @DefaultValue("2") int analysisMaxAttempts,
             @DefaultValue("2") int classifierMaxAttempts,
-            @DefaultValue("8000") int maxAnalysisTextChars) {}
+            @DefaultValue("8000") int maxAnalysisTextChars,
+            /** Model name (or name prefix) -> price. Empty by default: prices change, so none is built in. */
+            @DefaultValue Map<String, ModelPrice> pricing) {}
+
+    /** USD per one million tokens. Embedding models set the input price only. */
+    public record ModelPrice(BigDecimal inputPerMillionUsd, BigDecimal outputPerMillionUsd) {}
 
     public record Classifier(
             @DefaultValue("5") int candidateLimit,

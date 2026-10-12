@@ -26,6 +26,11 @@ public class AiConfig {
     }
 
     @Bean
+    AiCostCalculator aiCostCalculator(AppProperties props) {
+        return new AiCostCalculator(props.ai().pricing());
+    }
+
+    @Bean
     EmbeddingClient embeddingClient(AppProperties props, ObjectMapper mapper, OpenAiProperties openai) {
         return switch (props.ai().provider().toLowerCase()) {
             case "stub" -> new StubEmbeddingClient(props.ai().embeddingDimension());

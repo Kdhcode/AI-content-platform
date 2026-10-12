@@ -50,6 +50,14 @@ app:
   ai:
     provider: ${AI_PROVIDER:none}       # none | stub | openai
     embedding-dimension: 1536
+    # Cost estimate for ai_log.estimated_cost_usd. No price is set here on purpose: prices change, so enter the
+    # current ones from the provider's pricing page in the untracked application-local.yml. Without a price the
+    # cost stays NULL (never 0). A key matches the exact model name or, failing that, the longest prefix
+    # (responses report dated names such as gpt-4o-mini-2024-07-18). Names containing a dot need "[...]".
+    #   pricing:
+    #     gpt-4o-mini: { input-per-million-usd: <USD>, output-per-million-usd: <USD> }
+    #     text-embedding-3-small: { input-per-million-usd: <USD> }      # embeddings: input only
+    #     "[gpt-4.1-mini]": { input-per-million-usd: <USD>, output-per-million-usd: <USD> }
     openai:
       api-key: ${OPENAI_API_KEY:}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}

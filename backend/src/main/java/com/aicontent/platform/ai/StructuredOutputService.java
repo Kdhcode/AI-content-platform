@@ -32,14 +32,16 @@ public class StructuredOutputService {
     private final Json json;
     private final AiLogRepository logs;
     private final AiJobRepository aiJobs;
+    private final AiCostCalculator costs;
 
     public StructuredOutputService(AiClient client, SchemaValidator validator, Json json, AiLogRepository logs,
-                                   AiJobRepository aiJobs) {
+                                   AiJobRepository aiJobs, AiCostCalculator costs) {
         this.client = client;
         this.validator = validator;
         this.json = json;
         this.logs = logs;
         this.aiJobs = aiJobs;
+        this.costs = costs;
     }
 
     public Result execute(Call call) {
@@ -65,7 +67,7 @@ public class StructuredOutputService {
                 completion = client.complete(request);
             } catch (AiException e) {
                 writeLog(new AiLogRepository.Entry(aiJobId, articleId, call.type(), client.provider(), null,
-                        prompt.key(), prompt.version(), attempt, null, null, elapsedMs(started), false, e.code(),
+                        prompt.key(), prompt.version(), attempt, null, null, null, elapsedMs(started), false, e.code(),
                         e.getMessage(), null));
                 throw e;
             }
@@ -79,7 +81,8 @@ public class StructuredOutputService {
             JsonNode value = parseAndValidate(prompt, completion.text(), errors);
             boolean ok = value != null && errors.isEmpty();
             writeLog(new AiLogRepository.Entry(aiJobId, articleId, call.type(), client.provider(), completion.model(),
-                    prompt.key(), prompt.version(), attempt, completion.inputTokens(), completion.outputTokens(), latency,
+                    prompt.key(), prompt.version(), attempt, completion.inputTokens(), completion.outputTokens(),
+                    costs.estimate(completion.model(), completion.inputTokens(), completion.outputTokens()), latency,
                     ok, ok ? null : "AI_OUTPUT_INVALID", ok ? null : String.join("; ", errors), completion.text()));
             if (ok) {
                 return new Result(value, completion.model(), attempt);
