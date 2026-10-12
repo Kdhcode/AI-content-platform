@@ -63,6 +63,94 @@
 
 선택: `.idea/` 프로젝트 파일이 Git에 추적되고 있다. 공유할 의도가 없으면 추적 해제를 검토한다.
 
+## 5. 구현 지시: Phase 1 보강 (2026-10-12, Claude Code 담당)
+
+범위 근거: 사용자가 Phase 2 대신 **Phase 1 보강**을 선택함(Notion `10. 개발 로드맵`의 동결 원칙 유지). 아래 3개는 `docs/OPEN_ITEMS.md` #7·#2·#10과 실제 OpenAI 검증 준비에 해당하며 새 Phase 기능이 아니다.
+작업 순서는 A → B → C. 기능마다 **별도 커밋**(RULES.md: 작은 단위). 각 기능 끝에서 `mvn test`, C는 추가로 `npm run typecheck`·`npm run build`. 결과는 4절 형식으로 기록.
+아래 SQL 3종은 2026-10-12 클라우드 PostgreSQL 16.4 + pgvector 0.8.0에서 V1 위에 실행해 동작을 확인했다(Java 코드는 미작성).
+
+### A. 락 대기 실패가 재시도 횟수를 소모하지 않게 (OPEN ITEM #7)
+
+문제: `IssueClassificationService.classify()`가 분류 락을 못 잡으면 `JobExecutionException("LOCK_TIMEOUT", …, retryable=true)`를 던지고, `JobWorker.fail()` → `AsyncJobRepository.markFailure()`가 `retry_count`를 올린다. 대량 수집 시 기사에는 아무 문제가 없는데 대기만으로 재시도 3회를 다 써서 FAILED가 된다.
+
+구현:
+1. `V2__job_defer_count.sql` (Flyway, V1은 수정하지 않음):
+   ```sql
+   ALTER TABLE async_job
+       ADD COLUMN defer_count INTEGER NOT NULL DEFAULT 0 CHECK (defer_count >= 0);
+   COMMENT ON COLUMN async_job.defer_count IS
+       'Times the job was put back without running (e.g. LOCK_TIMEOUT). Separate from retry_count, which counts real failures.';
+   ```
+2. `job/JobDeferredException`(새 클래스, `RuntimeException`): `errorCode`, `message`. 재시도 가능/불가 개념 없음.
+3. `AsyncJobRepository.defer(id, workerId, code, msg, delaySeconds, maxDefers)` — 확인된 SQL:
+   ```sql
+   UPDATE async_job SET
+       status        = CASE WHEN defer_count < :maxDefers THEN 'PENDING' ELSE 'FAILED' END,
+       defer_count   = CASE WHEN defer_count < :maxDefers THEN defer_count + 1 ELSE defer_count END,
+       available_at  = CASE WHEN defer_count < :maxDefers THEN now() + make_interval(secs => :delay) ELSE available_at END,
+       finished_at   = CASE WHEN defer_count < :maxDefers THEN NULL ELSE now() END,
+       error_code    = :code,
+       error_message = :msg,
+       locked_by     = NULL
+   WHERE id = :id AND status = 'RUNNING' AND locked_by = :w
+   RETURNING status
+   ```
+   반환이 비면 소유권을 잃은 것(기존 `markFailure`와 같은 처리). 결과가 FAILED면 `notifyFinalFailure` 호출.
+4. `JobWorker`: `JobDeferredException`을 `JobExecutionException`보다 먼저 잡아 `defer`로 보낸다.
+5. `AppProperties.Worker`에 `deferDelaySeconds`(기본 30), `maxDefers`(기본 20) 추가. `application.yml`에 키와 주석.
+6. `IssueClassificationService`: `LOCK_TIMEOUT`을 `JobDeferredException("LOCK_TIMEOUT", …)`로 바꾼다. 다른 오류 경로는 그대로.
+7. 관리자 작업 API(`JobView`, `/api/admin/jobs`)와 작업 화면에 `deferCount` 표시. `docs/API.md` 갱신.
+
+완료 기준(테스트로 확인):
+- 단위/통합: LOCK_TIMEOUT 후 `status=PENDING`, `retry_count` 불변, `defer_count`+1, `available_at` 미래.
+- `maxDefers` 도달 시 FAILED + 기사 상태가 기존 최종 실패 처리와 같게 바뀜.
+- 다른 워커가 소유한 작업은 `defer`가 아무것도 바꾸지 않음.
+- 기존 재시도 테스트(일시 오류는 `retry_count` 증가) 그대로 통과.
+- `DECISIONS.md` 3절에 결정 추가, `OPEN_ITEMS.md` #7을 "재큐 경로 구현, 락 단위 세분화는 미결"로 갱신.
+
+### B. AI 호출 비용 계산·기록 (OPEN ITEM #2의 "단가 계산 미구현")
+
+현재: `ai_log.estimated_cost_usd` 컬럼은 있으나 항상 NULL. 토큰은 기록됨.
+
+구현:
+1. 설정 `app.ai.pricing`: 모델별 `input-per-million-usd`, `output-per-million-usd`(임베딩은 input만). **코드·기본 설정에 단가를 넣지 않는다**(가격은 바뀌므로 사용자가 OpenAI 가격 페이지를 보고 `application-local.yml` 등에 직접 입력). 기본값은 빈 맵.
+2. `ai/AiCostCalculator`(새 클래스): `(model, inputTokens, outputTokens) -> BigDecimal or null`.
+   - 모델 이름 매칭: 정확히 일치 → 없으면 **가장 긴 접두사** 일치(응답 모델명이 `gpt-4o-mini-2024-07-18`처럼 날짜가 붙음). 그래도 없으면 null.
+   - 단가가 없거나 토큰이 null이면 **0이 아니라 null**(모르는 비용을 0으로 보이게 하지 않음).
+   - `cost = in × inPrice / 1e6 + out × outPrice / 1e6`, 소수 6자리 반올림(`NUMERIC(12,6)`).
+3. `AiLogRepository.Entry`에 비용 필드 추가하고 INSERT에 `estimated_cost_usd` 포함. `StructuredOutputService`·`EmbeddingService`에서 계산해 넣는다. 계산 실패가 AI 호출 결과를 바꾸면 안 된다(기존 `safely` 패턴).
+4. 단위 테스트: 정확 일치, 날짜 붙은 모델명 접두사 일치, 더 긴 접두사 우선, 단가 없음 → null, 토큰 null → null, 반올림.
+5. `docs/REAL_AI_SMOKE.md` 0절에 "단가를 설정하면 비용이 기록됨" 한 줄, `OPEN_ITEMS.md` #2 갱신.
+
+### C. 관리자 AI 사용량 화면 (OPEN ITEM #10 관찰용, 한도·차단 기능은 만들지 않음)
+
+목적: 실제 OpenAI 검증·평가 때 호출 수·실패·토큰·비용을 화면에서 확인. 실시간 제한이나 예산 차단은 이번 범위가 아니다.
+
+구현:
+1. `GET /api/admin/ai-usage?days=7` (OPERATOR+, `days` 1~90, 기본 7, 범위 밖은 400). 응답 `{success,data,error}` 공통 형식. 확인된 집계 SQL:
+   ```sql
+   SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS day, call_type, provider, model,
+          count(*) AS calls,
+          count(*) FILTER (WHERE NOT success) AS failures,
+          coalesce(sum(input_tokens), 0) AS input_tokens,
+          coalesce(sum(output_tokens), 0) AS output_tokens,
+          sum(estimated_cost_usd) AS cost_usd,
+          count(*) FILTER (WHERE estimated_cost_usd IS NULL
+                           AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)) AS unpriced_calls
+   FROM ai_log
+   WHERE created_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul')
+                        - make_interval(days => :days - 1)) AT TIME ZONE 'Asia/Seoul'
+   GROUP BY 1, 2, 3, 4
+   ORDER BY 1 DESC, 2, 4
+   ```
+   응답에 합계(`totals`)와 `unpricedCalls`를 함께 준다. 응답 원문(`response`)·오류 메시지는 포함하지 않는다.
+2. 관리자 UI `/ai-usage` 페이지 + 메뉴 항목: 기간 선택(1·7·30일), 일자×호출 유형×모델 표, 합계. 비용이 null이면 "단가 미설정"으로 표시하고 0으로 쓰지 않는다. stub 호출은 `provider` 열로 구분되게.
+3. 통합 테스트: 기간 경계(KST 자정), 권한(인증 없음 401), `days` 범위 검증, 비용 null 처리.
+4. `docs/API.md`에 엔드포인트 추가. 1440px·390px 화면 확인(기존 `verify-dashboard.cjs` 방식 참고).
+
+### 하지 않을 것
+Phase 2 기능(초안 생성·제목 추천 등), 예산 초과 시 자동 차단, 공급자별 레이트 리미터, 분류 락 세분화. 필요하면 OPEN ITEM으로 남긴다.
+
 ## 4. 구현 변경 내용과 실행한 검증
 
 작업자가 아래에 추가한다. 형식: 날짜 · 기준 커밋 · 실행 명령 · 결과(통과/실패/미실행).
@@ -82,3 +170,4 @@
 - 2026-10-12 · 실제 OpenAI 경로 코드 점검(실행 아님) · `ai_log`에 공급자·모델·성공·입출력 토큰·지연이 기록됨을 코드로 확인(`StructuredOutputService`, `EmbeddingService`). JSON 모드 요구(메시지에 'JSON' 포함) 충족. 429는 재시도 대상이라 결제 미설정·한도 소진도 3회 재시도 후 FAILED. `estimated_cost_usd`는 미기록(단가 계산 미구현, OPEN ITEM #2). 임베딩 실패 로그에는 모델명이 비어 있음(경미)
 - 2026-10-12 · `docs/REAL_AI_SMOKE.md`, `docs/sql/real_ai_smoke_check.sql` 추가 · 확인 SQL은 빈 스키마와 정상 시나리오 모의 데이터로 실행해 판정 8개가 모두 true가 되는 것까지 확인. 실제 API 호출은 **미실행**
 - 2026-10-12 · 평가 세트 분석 · SAME 13·NEW 10·묶음 2·모호 2. 완벽한 판단기 시뮬레이션에서 후보 단순화로 인한 강제 누락 0건. 하네스는 묶음 여부를 정답 라벨로 처리해 분석 모델의 `multiEvent` 판별을 재지 않음(별도 확인 필요). 합격 기준 초안을 `docs/EVALUATION.md`에 **미확정**으로 추가(오병합 0, 스키마 실패 ≤1, recall ≥10/13, REVIEW ≤8, 3회 반복)
+- 2026-10-12 · 5절 Phase 1 보강 지시서(A 락 대기 재큐, B AI 비용 계산, C AI 사용량 화면) 작성 · 포함된 SQL 3종(V2 마이그레이션, defer UPDATE, 사용량 집계)을 클라우드 PG 16.4 + pgvector 0.8.0에서 V1 위에 실행해 확인: defer 시 retry_count 불변·defer_count 증가·소유권 없으면 0행·상한 도달 시 FAILED, 집계는 KST 기간 필터와 단가 미설정 건수 정상. Java/TS 구현은 **미착수**(Claude Code 담당)
