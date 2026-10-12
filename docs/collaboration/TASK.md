@@ -56,7 +56,7 @@
    - [x] 2026-10-12 코드 보완: 시간 초과(또는 중단) 시 프로세스 트리 전체를 종료한다. Windows는 `taskkill /T /F /PID`, 그 외는 새 세션으로 띄운 뒤 `killpg`. 회귀 테스트 `test_timeout_kills_codex_descendants` 추가(가짜 codex가 손자 프로세스를 띄우고 시간 초과 후 생존 여부 확인). **Windows 실제 실행은 아래 확인 방법으로 여전히 확인 필요**
    - [ ] **미검증: Windows 시간 초과 후 자식 Codex 프로세스 종료.** 10-09에 확인하지 못했다. 이 세션에는 사용자 PC의 셸이 없고, 컴퓨터 조작으로는 터미널에 입력할 수 없어 Windows에서 실행할 수 없었다. 코드상 추정(가설): 시간 초과 시 `subprocess.run`은 직접 자식인 `cmd.exe`만 종료한다. Windows는 자식의 자식을 함께 종료하지 않으므로 `.cmd` 셰임이 띄운 Codex 프로세스가 남을 수 있다. 남으면 락이 풀린 뒤 다음 리뷰와 동시에 돌거나 임시 폴더 삭제가 실패할 수 있다. 확인 방법: `--timeout 5`로 실행하고 시간 초과 직후 작업 관리자에서 `codex`/`node` 프로세스가 남는지 본다. 남으면 `taskkill /T /F /PID <pid>`로 프로세스 트리를 종료하도록 수정한다
 3. **로컬 재시작 재현.** DB(`127.0.0.1:55432`, `docs/DB_SETUP.md`), 백엔드, 관리자 UI를 다시 띄워 health UP, 로그인, 기존 데이터 조회를 확인한다. `mvn test`와 `npm run build`·`typecheck` 결과는 명령과 기준 커밋을 함께 기록한다.
-4. **실제 OpenAI 소량 검증.** 키는 Git 밖에 두고, 실제 모델 전용 빈 DB를 쓴다(stub 벡터와 섞지 않음). 기사 1~3건이 분석·1536차원 임베딩·분류까지 성공하는지, `ai_log`에 공급자·모델·성공 여부·토큰이 기록되는지 확인한다.
+4. **실제 OpenAI 소량 검증.** 절차·실패 대응·기록란은 `docs/REAL_AI_SMOKE.md`, 결과 판정은 `docs/sql/real_ai_smoke_check.sql`(읽기 전용, 판정 8개가 모두 true면 통과). 키는 Git 밖에 두고, 실제 모델 전용 빈 DB를 쓴다(stub 벡터와 섞지 않음). 기사 1~3건이 분석·1536차원 임베딩·분류까지 성공하는지, `ai_log`에 공급자·모델·성공 여부·토큰이 기록되는지 확인한다.
 5. **평가 세트 품질 측정.** 실행 전에 합격 기준(정밀도·재현율 목표)부터 정한다. 결과는 오분류 사례, 모델·프롬프트 버전과 함께 `docs/EVALUATION.md`에 기록하고, 임계값(`app.classifier.*`)을 확정한다.
 6. **관리자 보정과 실패 복구 확인.** 병합·분리, 검수 확정, 중복 수집, API 오류 후 작업 재시도까지 확인한다.
 7. **Phase 1 완료 판정.** 결과를 Notion `13. 개발 일지`에 기록하고 Phase 2(NEWS/LIFE 초안 생성) 진입 여부를 결정한다.
@@ -78,3 +78,6 @@
 - 2026-10-12 · Maven 테스트, 관리자 UI build/typecheck · **미실행**. 클라우드 작업 환경에서 PostgreSQL 16.4 + pgvector 0.8.0은 띄웠으나 Maven Central·npm 레지스트리가 네트워크 정책으로 차단되어 의존성을 받지 못함. 사용자 PC에서 실행 필요
 - 2026-10-12 · 로컬 DB 기본 비밀번호 제거 · 설정·문서만 변경. 이 환경에서 Maven 의존성을 받을 수 없어 `mvn test`로 기동 확인은 **미실행**. 비밀 검사로 변경 diff·문맥 문서 확인(아래 커밋 기록)
 - 2026-10-12 · `--skip <sha> --reason <사유>` 추가: 다음 대기 커밋 1개만 리뷰 없이 처리 완료로 넘기고 `history_changes.log`에 기록. 삭제된 줄의 옛 기본값처럼 비밀 검사가 반드시 차단하는 커밋 때문에 감시가 멈추지 않게 하기 위함. 리포트를 만들지 않으므로 리뷰된 것으로 보이지 않음 · `python -m unittest discover -s tools -p "test_*.py" -v` · **33개 통과, 실패 0** (Linux, 가짜 codex)
+- 2026-10-12 · 기준 `7db8fe3` 계열 · 클라우드 Linux에서 PostgreSQL 16.4 + pgvector 0.8.0을 소스 빌드해 새 DB에 V1 적용 → `verify_schema.sql`·`verify_queries.sql` · **둘 다 통과**(ALL SCHEMA/QUERY ASSERTIONS PASSED). `vector(1536)`·`ix_issue_embedding_hnsw` 확인. 사용자 PC DB와 다른 독립 환경
+- 2026-10-12 · 실제 OpenAI 경로 코드 점검(실행 아님) · `ai_log`에 공급자·모델·성공·입출력 토큰·지연이 기록됨을 코드로 확인(`StructuredOutputService`, `EmbeddingService`). JSON 모드 요구(메시지에 'JSON' 포함) 충족. 429는 재시도 대상이라 결제 미설정·한도 소진도 3회 재시도 후 FAILED. `estimated_cost_usd`는 미기록(단가 계산 미구현, OPEN ITEM #2). 임베딩 실패 로그에는 모델명이 비어 있음(경미)
+- 2026-10-12 · `docs/REAL_AI_SMOKE.md`, `docs/sql/real_ai_smoke_check.sql` 추가 · 확인 SQL은 빈 스키마와 정상 시나리오 모의 데이터로 실행해 판정 8개가 모두 true가 되는 것까지 확인. 실제 API 호출은 **미실행**
