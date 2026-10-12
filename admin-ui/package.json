@@ -8,7 +8,8 @@
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "verify:flow": "node scripts/verify-flow.cjs",
-    "verify:dashboard": "node scripts/verify-dashboard.cjs"
+    "verify:dashboard": "node scripts/verify-dashboard.cjs",
+    "verify:ai-usage": "node scripts/verify-ai-usage.cjs"
   },
   "dependencies": {
     "next": "14.2.15",

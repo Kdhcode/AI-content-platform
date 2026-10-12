@@ -87,6 +87,16 @@ export type Job = {
   finishedAt: string | null;
 };
 
+export type AiUsageRow = {
+  day: string; callType: string; provider: string | null; model: string | null; calls: number; failures: number;
+  inputTokens: number; outputTokens: number; costUsd: number | null; unpricedCalls: number;
+};
+export type AiUsage = {
+  days: number; rows: AiUsageRow[];
+  totals: { calls: number; failures: number; inputTokens: number; outputTokens: number; costUsd: number | null;
+    unpricedCalls: number };
+};
+
 export type NewsSource = {
   id: number; name: string; type: string; baseUrl: string | null; enabled: boolean; status: string;
   collectionIntervalSeconds: number; lastAttemptAt: string | null; lastSuccessAt: string | null;

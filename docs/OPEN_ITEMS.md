@@ -13,7 +13,7 @@
 | 7 | 분류 처리량(전역 락) | 정확성 우선 직렬 처리. 락 대기 300초·TTL 300초(`app.classifier.lock-wait-seconds`, `app.lock.ttl-seconds`). **2026-10-12:** 재큐 경로 구현 — `LOCK_TIMEOUT`은 `retry_count`를 쓰지 않고 `defer_count`만 올려 30초 뒤 다시 실행, 20회 초과 시 FAILED(`app.worker.defer-delay-seconds`, `app.worker.max-defers`). 락 단위 세분화는 미결 | 수집량이 늘면 후보 클러스터/카테고리 단위 락 또는 파티셔닝 검토 |
 | 8 | 개인정보/로그 보존 정책(`ai_log.response` 원문 보관 기간) | 무기한, 20,000자 절단 | 보존 기간 확정 후 정리 배치 추가 |
 | 9 | 이슈 종료/오래된 이슈 정리 정책(자동 CLOSED 시점) | 멤버 0명일 때만 CLOSED | 정책 확정 후 스케줄러 추가 |
-| 10 | AI 비용 한도·호출 속도 제한 | 없음(워커 동시성 4가 사실상 한도) | `app.worker.concurrency`, 공급자별 레이트 리미터는 `AiClient` 구현 안에 |
+| 10 | AI 비용 한도·호출 속도 제한 | 없음(워커 동시성 4가 사실상 한도). **2026-10-12:** 관찰용 화면만 추가(`GET /api/admin/ai-usage`, 관리자 UI `/ai-usage`: 일자·호출 유형·모델별 호출 수·실패·토큰·비용). 한도·자동 차단은 미구현 | `app.worker.concurrency`, 공급자별 레이트 리미터는 `AiClient` 구현 안에 |
 
 ## 이번 단계에서 의도적으로 하지 않은 것
 회원가입/일반 사용자 로그인, 좋아요/북마크, TV/지역 정보, 발행, SEO, 통계, Python, MSA, Kafka/RabbitMQ — 지시서의 금지 목록.

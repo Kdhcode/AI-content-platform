@@ -129,6 +129,8 @@ $env:VERIFY_SOURCE_NAME = 'bbc-world' # 또는 yonhap-latest
 npm run verify:flow
 # 화면·실제 DB 집계·모바일·캡처 검증(기사 상태를 변경하지 않음):
 npm run verify:dashboard
+# AI 사용량 화면(1440px·390px)과 API 합계 일치 확인(조회만 함):
+npm run verify:ai-usage
 ```
 
 기본값은 실제 임베딩 모델을 요구하므로 stub 서버에서 실행하면 실패한다.

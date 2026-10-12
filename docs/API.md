@@ -113,6 +113,18 @@ PENDING만 취소. RUNNING 작업은 끝까지 실행됩니다. 응답 `JobView`
 
 ---
 
+## AI 사용량
+
+### `GET /ai-usage` (OPERATOR+)
+쿼리: `days`(1~90, 기본 7. 범위 밖이거나 숫자가 아니면 400 `VALIDATION_ERROR`). 오늘을 포함한 최근 `days`일을 한국 시간(KST) 자정 기준으로 집계합니다.
+응답 `data`: `days`, `rows[]`, `totals`.
+- `rows[]`: `day`(KST 날짜 `YYYY-MM-DD`), `callType`(ARTICLE_ANALYSIS·EMBEDDING·ISSUE_CLASSIFY), `provider`, `model`, `calls`, `failures`, `inputTokens`, `outputTokens`, `costUsd`, `unpricedCalls`. 정렬은 `day` 내림차순, `callType`, `model`.
+- `totals`: `calls, failures, inputTokens, outputTokens, costUsd, unpricedCalls`.
+- `costUsd`는 `ai_log.estimated_cost_usd`의 합이며, 비용이 기록된 호출이 하나도 없으면 0이 아니라 `null`입니다. `unpricedCalls`는 토큰은 있는데 단가가 없어 비용을 계산하지 못한 호출 수입니다(`app.ai.pricing` 미설정).
+- 모델 응답 원문과 오류 메시지는 포함하지 않습니다. 조회 전용이며 한도·차단 기능은 없습니다.
+
+---
+
 ## 소스
 
 ### `GET /sources` (OPERATOR+)

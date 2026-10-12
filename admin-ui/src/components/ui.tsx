@@ -47,6 +47,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {link("/articles", "기사", "▥")}
           {link("/sources", "뉴스 소스", "◎")}
           {link("/jobs", "작업", "⇄")}
+          {link("/ai-usage", "AI 사용량", "◔")}
         </nav>
         <div className="sidebar-note"><span className="status-dot" /> Phase 1 · 뉴스 이슈 엔진
           <p>수집에서 검수까지,<br />뉴스의 흐름을 한곳에서.</p></div>
@@ -54,7 +55,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <button aria-label="로그아웃" title="로그아웃" onClick={() => { clearCredentials(); router.replace("/login"); }}>↗</button></div>
       </aside>
       <div className="workspace-content">
-        <header className="topbar"><span>워크스페이스 <span className="crumb-slash">/</span> <strong>{path === "/" ? "대시보드" : path.startsWith("/sources") ? "뉴스 소스" : path.startsWith("/articles") ? "기사 관리" : path.startsWith("/jobs") ? "작업 관리" : "이슈 관리"}</strong></span>
+        <header className="topbar"><span>워크스페이스 <span className="crumb-slash">/</span> <strong>{path === "/" ? "대시보드" : path.startsWith("/sources") ? "뉴스 소스" : path.startsWith("/articles") ? "기사 관리" : path.startsWith("/jobs") ? "작업 관리" : path.startsWith("/ai-usage") ? "AI 사용량" : "이슈 관리"}</strong></span>
           <span className="topbar-tag">NEWS INTELLIGENCE <span className="status-dot" /></span></header>
         <main className="workspace-main">{children}</main>
       </div>
