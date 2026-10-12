@@ -81,3 +81,4 @@
 - 2026-10-12 · 기준 `7db8fe3` 계열 · 클라우드 Linux에서 PostgreSQL 16.4 + pgvector 0.8.0을 소스 빌드해 새 DB에 V1 적용 → `verify_schema.sql`·`verify_queries.sql` · **둘 다 통과**(ALL SCHEMA/QUERY ASSERTIONS PASSED). `vector(1536)`·`ix_issue_embedding_hnsw` 확인. 사용자 PC DB와 다른 독립 환경
 - 2026-10-12 · 실제 OpenAI 경로 코드 점검(실행 아님) · `ai_log`에 공급자·모델·성공·입출력 토큰·지연이 기록됨을 코드로 확인(`StructuredOutputService`, `EmbeddingService`). JSON 모드 요구(메시지에 'JSON' 포함) 충족. 429는 재시도 대상이라 결제 미설정·한도 소진도 3회 재시도 후 FAILED. `estimated_cost_usd`는 미기록(단가 계산 미구현, OPEN ITEM #2). 임베딩 실패 로그에는 모델명이 비어 있음(경미)
 - 2026-10-12 · `docs/REAL_AI_SMOKE.md`, `docs/sql/real_ai_smoke_check.sql` 추가 · 확인 SQL은 빈 스키마와 정상 시나리오 모의 데이터로 실행해 판정 8개가 모두 true가 되는 것까지 확인. 실제 API 호출은 **미실행**
+- 2026-10-12 · 평가 세트 분석 · SAME 13·NEW 10·묶음 2·모호 2. 완벽한 판단기 시뮬레이션에서 후보 단순화로 인한 강제 누락 0건. 하네스는 묶음 여부를 정답 라벨로 처리해 분석 모델의 `multiEvent` 판별을 재지 않음(별도 확인 필요). 합격 기준 초안을 `docs/EVALUATION.md`에 **미확정**으로 추가(오병합 0, 스키마 실패 ≤1, recall ≥10/13, REVIEW ≤8, 3회 반복)
