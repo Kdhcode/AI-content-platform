@@ -12,6 +12,7 @@ import com.aicontent.platform.config.AppProperties;
 import com.aicontent.platform.issue.DecisionPolicy.Decision;
 import com.aicontent.platform.issue.DecisionPolicy.Method;
 import com.aicontent.platform.issue.DecisionPolicy.Outcome;
+import com.aicontent.platform.job.JobDeferredException;
 import com.aicontent.platform.job.JobExecutionException;
 import com.aicontent.platform.lock.DistributedLock;
 import com.aicontent.platform.news.NewsArticleRepository;
@@ -86,7 +87,8 @@ public class IssueClassificationService {
         var handle = lock.acquire(LOCK_KEY, Duration.ofSeconds(props.lock().ttlSeconds()),
                 Duration.ofSeconds(props.classifier().lockWaitSeconds()));
         if (handle.isEmpty()) {
-            throw new JobExecutionException("LOCK_TIMEOUT", "could not obtain " + LOCK_KEY + " lock", true);
+            // Nothing is wrong with the article: put the job back without consuming a retry.
+            throw new JobDeferredException("LOCK_TIMEOUT", "could not obtain " + LOCK_KEY + " lock");
         }
         try (var ignored = handle.get()) {
             return classifyLocked(article, json.parse(article.analysisJson()), asyncJobId);

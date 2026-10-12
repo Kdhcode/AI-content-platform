@@ -152,6 +152,8 @@ public class JobWorker {
                 if (!repository.markSuccess(job.id(), workerId, resultJson)) {
                     log.warn("job {} finished but is no longer owned by {} (recovered by another worker?)", job.id(), workerId);
                 }
+            } catch (JobDeferredException e) {
+                defer(job, handler, e.errorCode(), e.getMessage());
             } catch (JobExecutionException e) {
                 fail(job, handler, e.errorCode(), e.getMessage(), e.retryable());
             } catch (Exception e) {
@@ -164,8 +166,22 @@ public class JobWorker {
         }
     }
 
+    private void defer(AsyncJob job, JobHandler handler, String code, String message) {
+        String msg = truncate(message);
+        Optional<AsyncJobStatus> status = repository.defer(job.id(), workerId, code, msg,
+                config.deferDelaySeconds(), config.maxDefers());
+        if (status.isEmpty()) {
+            log.warn("job {} deferred ({}) but is no longer owned by {}", job.id(), code, workerId);
+            return;
+        }
+        log.info("job {} ({}) deferred code={} -> {}", job.id(), job.jobType(), code, status.get());
+        if (status.get() == AsyncJobStatus.FAILED) {
+            notifyFinalFailure(job, code, msg, handler);
+        }
+    }
+
     private void fail(AsyncJob job, JobHandler handler, String code, String message, boolean retryable) {
-        String msg = message == null ? "" : message.length() > MAX_ERROR_MESSAGE ? message.substring(0, MAX_ERROR_MESSAGE) : message;
+        String msg = truncate(message);
         Optional<AsyncJobStatus> status = repository.markFailure(job.id(), workerId, code, msg, retryable,
                 config.retryBaseDelaySeconds(), config.retryMaxDelaySeconds());
         if (status.isEmpty()) {
@@ -176,6 +192,10 @@ public class JobWorker {
         if (status.get() == AsyncJobStatus.FAILED) {
             notifyFinalFailure(job, code, msg, handler);
         }
+    }
+
+    private static String truncate(String message) {
+        return message == null ? "" : message.length() > MAX_ERROR_MESSAGE ? message.substring(0, MAX_ERROR_MESSAGE) : message;
     }
 
     private void notifyFinalFailure(AsyncJob job, String code, String message) {

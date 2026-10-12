@@ -29,6 +29,9 @@ public record AppProperties(
             @DefaultValue("3") int defaultMaxRetries,
             @DefaultValue("5") long retryBaseDelaySeconds,
             @DefaultValue("600") long retryMaxDelaySeconds,
+            /** Wait before a deferred job (e.g. LOCK_TIMEOUT) is due again; deferrals do not consume retries. */
+            @DefaultValue("30") long deferDelaySeconds,
+            @DefaultValue("20") int maxDefers,
             @DefaultValue("20") long shutdownWaitSeconds) {}
 
     public record News(

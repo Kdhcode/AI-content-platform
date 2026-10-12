@@ -24,7 +24,8 @@
 |---|---|
 | claim: `WITH next AS (SELECT … FOR UPDATE SKIP LOCKED) UPDATE … RETURNING` | 여러 워커/스레드가 같은 작업을 잡을 수 없음. 로컬 PG에서 2세션 동시 claim 실험으로 확인 |
 | 모든 상태 전이는 `status='RUNNING' AND locked_by=:worker` 조건 | 유실 판정된 워커가 새 소유자의 결과를 덮어쓰지 못함 |
-| 재시도: 기본 3회, 대기 `min(600s, 5s·2^retry_count)`, 재시도 불가 오류는 즉시 FAILED | 일시 오류(소스 타임아웃/네트워크/429/5xx, 분류 락 타임아웃, 공급자가 retryable로 표시한 AI 오류)만 재시도. 검증 실패·설정 오류·4xx는 반복해도 같은 결과 |
+| 재시도: 기본 3회, 대기 `min(600s, 5s·2^retry_count)`, 재시도 불가 오류는 즉시 FAILED | 일시 오류(소스 타임아웃/네트워크/429/5xx, 공급자가 retryable로 표시한 AI 오류)만 재시도. 검증 실패·설정 오류·4xx는 반복해도 같은 결과 |
+| **2026-10-12 추가:** 분류 락 대기 실패(`LOCK_TIMEOUT`)는 실패가 아니라 재큐(`JobDeferredException` → `AsyncJobRepository.defer`). `retry_count`는 그대로 두고 `defer_count`(V2)만 올리며, 30초 뒤 다시 실행(`app.worker.defer-delay-seconds`). 20회(`app.worker.max-defers`)를 넘으면 FAILED로 끝내고 기존 최종 실패 처리(`onFinalFailure`)를 그대로 탐 | 기사에는 문제가 없는데 대량 수집 때 대기만으로 재시도 3회를 다 써서 FAILED가 되던 문제. 상한을 둔 이유는 락이 풀리지 않는 장애에서 작업이 끝없이 도는 것을 막기 위함 |
 | 하트비트 5초, 300초 무응답이면 `WORKER_LOST`로 재큐(재시도 소진 시 FAILED). 서버 시작 시에도 1회 복구 | 재시작/크래시 복구 요구 |
 | `dedupe_key` 부분 유니크(PENDING/RUNNING만) | 같은 기사에 분석 작업이 중복 쌓이지 않음. 끝난 뒤에는 재요청(재분석) 가능 |
 | 작업 체인: COLLECT_NEWS → ANALYZE_ARTICLE → EMBED_ARTICLE → CLASSIFY_ARTICLE, 각 단계가 다음 작업을 등록 | 단계별 재시도·관측 가능. 핸들러는 멱등 |

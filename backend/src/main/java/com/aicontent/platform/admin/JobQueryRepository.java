@@ -38,13 +38,14 @@ public class JobQueryRepository {
         long total = jdbc.sql("SELECT count(*)" + from).params(q.params()).query(Long.class).single();
         List<JobView> items = jdbc.sql("""
                 SELECT j.id, j.job_type, j.status, CAST(j.payload AS text) AS payload, CAST(j.result AS text) AS result,
-                       j.retry_count, j.max_retries, j.error_code, j.error_message, j.requested_by, j.requested_at,
+                       j.retry_count, j.max_retries, j.defer_count, j.error_code, j.error_message, j.requested_by, j.requested_at,
                        j.started_at, j.finished_at, j.correlation_id""" + from
                         + " ORDER BY " + page.orderBy() + " LIMIT :limit OFFSET :offset")
                 .params(q.params()).param("limit", page.size()).param("offset", page.offset())
                 .query((rs, n) -> new JobView(rs.getLong("id"), rs.getString("job_type"), rs.getString("status"),
                         json.parseOrNull(rs.getString("payload")), json.parseOrNull(rs.getString("result")),
-                        rs.getInt("retry_count"), rs.getInt("max_retries"), rs.getString("error_code"),
+                        rs.getInt("retry_count"), rs.getInt("max_retries"), rs.getInt("defer_count"),
+                        rs.getString("error_code"),
                         rs.getString("error_message"), rs.getString("requested_by"), Sql.odt(rs, "requested_at"),
                         Sql.odt(rs, "started_at"), Sql.odt(rs, "finished_at"), rs.getString("correlation_id")))
                 .list();

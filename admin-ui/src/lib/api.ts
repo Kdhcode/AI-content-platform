@@ -83,7 +83,7 @@ export type IssueDetail = IssueListItem & {
 };
 export type Job = {
   id: number; jobType: string; status: string; payload: Record<string, unknown>; result: Record<string, unknown> | null;
-  retryCount: number; maxRetries: number; errorCode: string | null; errorMessage: string | null; requestedAt: string;
+  retryCount: number; maxRetries: number; deferCount: number; errorCode: string | null; errorMessage: string | null; requestedAt: string;
   finishedAt: string | null;
 };
 

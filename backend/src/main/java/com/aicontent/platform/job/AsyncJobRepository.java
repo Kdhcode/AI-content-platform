@@ -22,7 +22,7 @@ public class AsyncJobRepository {
 
     private static final List<String> COLUMN_LIST = List.of(
             "id", "job_type", "status", "payload", "result", "requested_by", "requested_at", "available_at",
-            "started_at", "finished_at", "heartbeat_at", "locked_by", "retry_count", "max_retries",
+            "started_at", "finished_at", "heartbeat_at", "locked_by", "retry_count", "max_retries", "defer_count",
             "error_code", "error_message", "correlation_id", "dedupe_key", "created_at", "updated_at");
     private static final String COLUMNS = String.join(", ", COLUMN_LIST);
     private static final String COLUMNS_J = COLUMN_LIST.stream().map(c -> "j." + c).collect(Collectors.joining(", "));
@@ -163,6 +163,35 @@ public class AsyncJobRepository {
                 .optional();
     }
 
+    /**
+     * Puts a job back without running it (e.g. LOCK_TIMEOUT): {@code retry_count} is untouched, {@code defer_count}
+     * grows. Once {@code maxDefers} deferrals are used the job becomes FAILED instead.
+     *
+     * @return the new status, or empty if this worker no longer owns the job
+     */
+    public Optional<AsyncJobStatus> defer(long id, String workerId, String errorCode, String errorMessage,
+                                          long delaySeconds, int maxDefers) {
+        return jdbc.sql("""
+                        UPDATE async_job SET
+                            status        = CASE WHEN defer_count < :maxDefers THEN 'PENDING' ELSE 'FAILED' END,
+                            defer_count   = CASE WHEN defer_count < :maxDefers THEN defer_count + 1 ELSE defer_count END,
+                            available_at  = CASE WHEN defer_count < :maxDefers THEN now() + make_interval(secs => :delay) ELSE available_at END,
+                            finished_at   = CASE WHEN defer_count < :maxDefers THEN NULL ELSE now() END,
+                            error_code    = :code,
+                            error_message = :msg,
+                            locked_by     = NULL
+                        WHERE id = :id AND status = 'RUNNING' AND locked_by = :w
+                        RETURNING status""")
+                .param("id", id)
+                .param("w", workerId)
+                .param("code", errorCode)
+                .param("msg", errorMessage)
+                .param("delay", delaySeconds)
+                .param("maxDefers", maxDefers)
+                .query((rs, i) -> AsyncJobStatus.valueOf(rs.getString("status")))
+                .optional();
+    }
+
     /** Re-queues RUNNING jobs whose heartbeat expired (worker crash / restart); FAILED when no retries are left. */
     public List<RecoveredJob> recoverStale(long staleAfterSeconds) {
         return jdbc.sql("""
@@ -223,6 +252,7 @@ public class AsyncJobRepository {
                 rs.getString("locked_by"),
                 rs.getInt("retry_count"),
                 rs.getInt("max_retries"),
+                rs.getInt("defer_count"),
                 rs.getString("error_code"),
                 rs.getString("error_message"),
                 rs.getString("correlation_id"),

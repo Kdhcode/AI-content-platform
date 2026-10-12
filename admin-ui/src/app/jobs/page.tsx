@@ -40,7 +40,7 @@ export default function JobsPage() {
       </div>
       <ErrorText error={error} />
       <table>
-        <thead><tr><th>ID</th><th>유형</th><th>상태</th><th>대상</th><th>재시도</th><th>오류</th><th>등록</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>유형</th><th>상태</th><th>대상</th><th>재시도</th><th>대기 재큐</th><th>오류</th><th>등록</th><th></th></tr></thead>
         <tbody>
           {data?.items.map((j) => (
             <tr key={j.id}>
@@ -49,6 +49,7 @@ export default function JobsPage() {
               <td><Badge value={j.status} /></td>
               <td className="muted">{JSON.stringify(j.payload)}</td>
               <td>{j.retryCount}/{j.maxRetries}</td>
+              <td>{j.deferCount}</td>
               <td>{j.errorCode && <><strong>{j.errorCode}</strong><div className="muted">{j.errorMessage}</div></>}</td>
               <td>{fmt(j.requestedAt)}</td>
               <td>
@@ -57,7 +58,7 @@ export default function JobsPage() {
               </td>
             </tr>
           ))}
-          {data && data.items.length === 0 && <tr><td colSpan={8} className="muted">작업이 없습니다.</td></tr>}
+          {data && data.items.length === 0 && <tr><td colSpan={9} className="muted">작업이 없습니다.</td></tr>}
         </tbody>
       </table>
       {data && <Pager page={data.page} totalPages={data.totalPages} total={data.totalElements} onPage={setPage} />}

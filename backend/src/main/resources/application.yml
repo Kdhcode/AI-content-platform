@@ -42,6 +42,8 @@ logging:
 app:
   worker:
     enabled: true
+    defer-delay-seconds: 30   # wait before a deferred job (e.g. LOCK_TIMEOUT) is due again
+    max-defers: 20            # deferrals allowed before FAILED; they never consume retry_count
   news:
     scheduler-enabled: true
     sources: []            # use the live profile for real RSS sources

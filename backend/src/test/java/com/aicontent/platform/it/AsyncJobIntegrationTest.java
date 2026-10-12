@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aicontent.platform.job.AsyncJobRepository;
 import com.aicontent.platform.job.AsyncJobService;
+import com.aicontent.platform.job.AsyncJobStatus;
 import com.aicontent.platform.job.JobType;
 import java.util.Map;
 import java.util.Set;
@@ -70,6 +71,31 @@ class AsyncJobIntegrationTest extends IntegrationTestBase {
         assertThat(recovered.get(0).status().name()).isEqualTo("PENDING");
         assertThat(jdbc.sql("SELECT error_code FROM async_job").query(String.class).single()).isEqualTo("WORKER_LOST");
         assertThat(worker.runPending(5)).isEqualTo(1);       // it runs again (and fails for the unknown source)
+    }
+
+    @Test
+    void deferPutsTheJobBackWithoutTouchingRetryCountAndOnlyForItsOwner() {
+        var job = jobs.enqueue(JobType.COLLECT_NEWS, Map.of("sourceId", 999), "t", null, null).job();
+        assertThat(repository.claimNext("w-owner", Set.of("COLLECT_NEWS"), 1)).hasSize(1);
+        String state = "SELECT status || '/' || retry_count || '/' || defer_count || '/' || coalesce(locked_by, '-') FROM async_job";
+
+        // another worker owns the job: nothing changes
+        assertThat(repository.defer(job.id(), "w-other", "LOCK_TIMEOUT", "busy", 30, 2)).isEmpty();
+        assertThat(jdbc.sql(state).query(String.class).single()).isEqualTo("RUNNING/0/0/w-owner");
+
+        assertThat(repository.defer(job.id(), "w-owner", "LOCK_TIMEOUT", "busy", 30, 2)).contains(AsyncJobStatus.PENDING);
+        assertThat(jdbc.sql(state).query(String.class).single()).isEqualTo("PENDING/0/1/-");
+        assertThat(count("SELECT count(*) FROM async_job WHERE available_at > now() + interval '20 seconds' AND finished_at IS NULL"))
+                .isEqualTo(1);
+
+        // second deferral is still allowed, the third one exceeds maxDefers=2 and fails the job
+        for (AsyncJobStatus expected : new AsyncJobStatus[] {AsyncJobStatus.PENDING, AsyncJobStatus.FAILED}) {
+            jdbc.sql("UPDATE async_job SET available_at = now()").update();
+            assertThat(repository.claimNext("w-owner", Set.of("COLLECT_NEWS"), 1)).hasSize(1);
+            assertThat(repository.defer(job.id(), "w-owner", "LOCK_TIMEOUT", "busy", 30, 2)).contains(expected);
+        }
+        assertThat(jdbc.sql(state).query(String.class).single()).isEqualTo("FAILED/0/2/-");
+        assertThat(count("SELECT count(*) FROM async_job WHERE finished_at IS NOT NULL AND error_code = 'LOCK_TIMEOUT'")).isEqualTo(1);
     }
 
     @Test

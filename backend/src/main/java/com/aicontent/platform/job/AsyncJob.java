@@ -18,6 +18,7 @@ public record AsyncJob(
         String lockedBy,
         int retryCount,
         int maxRetries,
+        int deferCount,
         String errorCode,
         String errorMessage,
         String correlationId,

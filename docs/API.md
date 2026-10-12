@@ -55,7 +55,7 @@
 
 ### `POST /articles/{id}/reanalyze` — 재분석 (OPERATOR+) · **비동기 202**
 본문 없음. `ANALYZE_ARTICLE` 작업을 등록하고 이후 임베딩·분류가 이어집니다(이미 연결된 기사는 분류 결과가 *기록만* 됨).
-응답 `JobView`: `id, jobType, status, payload, result, retryCount, maxRetries, errorCode, errorMessage, requestedBy, requestedAt, startedAt, finishedAt, correlationId`.
+응답 `JobView`: `id, jobType, status, payload, result, retryCount, maxRetries, deferCount, errorCode, errorMessage, requestedBy, requestedAt, startedAt, finishedAt, correlationId`.
 오류: 404 `ARTICLE_NOT_FOUND`, 409 `ARTICLE_NOT_ANALYZABLE`(DUPLICATE).
 
 ### `POST /articles/{id}/move` — 다른 이슈로 이동 (OPERATOR+) · 동기
@@ -102,6 +102,8 @@
 쿼리: `status`(PENDING·RUNNING·SUCCESS·FAILED·CANCELLED), `type`(COLLECT_NEWS·ANALYZE_ARTICLE·EMBED_ARTICLE·CLASSIFY_ARTICLE), `articleId`, `page`, `size`, `sort`(`id`·`requestedAt`·`finishedAt`; 기본 `id desc`). 응답 `items[]`는 `JobView`.
 
 ### `GET /jobs/{id}` (OPERATOR+) — `JobView`. 오류 404 `JOB_NOT_FOUND`.
+
+`deferCount`는 작업을 실행하지 못하고 되돌린 횟수입니다(현재는 분류 락 대기 실패 `LOCK_TIMEOUT`). `retryCount`와 별개이며 재시도 횟수를 쓰지 않습니다. `app.worker.max-defers`(기본 20)를 넘으면 FAILED가 됩니다.
 
 ### `POST /jobs/{id}/retry` (SYSTEM_ADMIN) · 동기
 FAILED → PENDING(재시도 횟수 추가 부여). 응답 `JobView`. 오류: 404 `JOB_NOT_FOUND`, 409 `JOB_NOT_RETRYABLE`(FAILED가 아니거나, 같은 대상의 작업이 이미 대기/실행 중).
