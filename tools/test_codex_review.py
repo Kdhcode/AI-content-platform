@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import textwrap
 import unittest
 from unittest import mock
@@ -28,9 +29,33 @@ FAKE_CODEX = textwrap.dedent('''\
         sys.exit(1)
     if mode == 'sleep':
         time.sleep(30)
+    if mode == 'sleep_with_child':
+        # Like the Windows npm shim: the process that really works is a descendant.
+        import subprocess
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+        with open(os.environ['FAKE_CODEX_CHILD_PID'], 'w') as f:
+            f.write(str(child.pid))
+        time.sleep(30)
     with open(out, 'w', encoding='utf-8') as f:
         f.write('' if mode == 'empty' else 'fake review body')
     ''')
+
+
+def pid_alive(pid):
+    if os.name == 'nt':
+        out = subprocess.run(['tasklist', '/FI', 'PID eq ' + str(pid), '/NH'],
+                             capture_output=True, text=True).stdout
+        return str(pid) in out
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    # a killed child of an already-reaped parent may linger as a zombie until init reaps it
+    try:
+        with open('/proc/' + str(pid) + '/stat') as f:
+            return f.read().split(')')[-1].split()[0] != 'Z'
+    except OSError:
+        return False
 
 
 def run(cmd, cwd):
@@ -397,6 +422,19 @@ class ReviewToolTest(unittest.TestCase):
             cr.main(['--repo', str(self.repo), '--timeout', '2'])
         self.assertFalse(self.report(sha).exists())
         self.assertFalse(self.lock().exists())
+
+    def test_timeout_kills_codex_descendants(self):
+        self.commit('a.txt', 'a\n', 'A')
+        pid_file = Path(self.tmp.name) / 'child.pid'
+        os.environ['FAKE_CODEX_MODE'] = 'sleep_with_child'
+        os.environ['FAKE_CODEX_CHILD_PID'] = str(pid_file)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            cr.main(['--repo', str(self.repo), '--timeout', '3'])
+        pid = int(pid_file.read_text())
+        deadline = time.time() + 5
+        while time.time() < deadline and pid_alive(pid):
+            time.sleep(0.1)
+        self.assertFalse(pid_alive(pid), 'codex descendant survived the timeout')
 
     def test_second_instance_refused_while_locked(self):
         self.lock().parent.mkdir(parents=True, exist_ok=True)

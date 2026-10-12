@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -267,6 +268,41 @@ def codex_command(codex, result_file):
     return command
 
 
+def kill_process_tree(proc):
+    """Kill codex and everything it started.
+
+    subprocess.run(timeout=...) only kills the direct child. On Windows that is cmd.exe running
+    the npm .cmd shim, and the node/codex process under it would survive, keep running past the
+    lock and hold the temp directory open. Kill the whole tree instead.
+    """
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)  # started with start_new_session=True
+        except ProcessLookupError:
+            pass
+    proc.kill()
+
+
+def run_codex(command, prompt, cwd, log, timeout):
+    extra = {} if os.name == 'nt' else {'start_new_session': True}
+    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=log, stderr=log, cwd=cwd,
+                            text=True, encoding='utf-8', **extra)
+    try:
+        proc.communicate(prompt, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_process_tree(proc)
+        proc.wait()
+        raise
+    except BaseException:
+        kill_process_tree(proc)
+        proc.wait()
+        raise
+    return proc.returncode
+
+
 def review(repo, sha, force=False, dry_run=False, timeout=CODEX_TIMEOUT_SECONDS):
     """Review one commit. Returns True when the commit counts as reviewed."""
     out = reviews_dir(repo)
@@ -313,10 +349,9 @@ def review(repo, sha, force=False, dry_run=False, timeout=CODEX_TIMEOUT_SECONDS)
         result_file = Path(tmp) / 'review.md'
         print('Reviewing:', sha[:12], flush=True)
         with (out / (sha + '.log')).open('w', encoding='utf-8') as log:
-            result = subprocess.run(codex_command(codex, result_file), input=prompt, text=True,
-                                    encoding='utf-8', cwd=tmp, stdout=log, stderr=log, timeout=timeout)
+            returncode = run_codex(codex_command(codex, result_file), prompt, tmp, log, timeout)
         body = result_file.read_text(encoding='utf-8').strip() if result_file.exists() else ''
-        if result.returncode or not body:
+        if returncode or not body:
             raise RuntimeError('Review failed for ' + sha[:12] + '; inspect the local .log file. Not marked complete.')
         write_atomic(report, head + '## 리뷰\n\n' + body + '\n')
     print('Saved:', report, flush=True)

@@ -53,6 +53,7 @@
      - [ ] **결정 필요: 로컬 DB 기본 비밀번호.** 기본값까지 검사하면서 `application.yml:7`·`application-test.yml:6`의 `${DB_PASSWORD:…}`와 `docker-compose.yml:8`이 탐지된다. 이 줄이나 그 주변(diff 문맥 3줄)을 고치는 커밋은 리뷰가 차단된다. 선택지는 (a) 기본값을 지우고 환경 변수를 필수로 하기, (b) 로컬 전용 값이라는 확인 후 해당 줄에 `# codex-review: allow-secret` 표시하기
    - [ ] **사용자 PC에서 실제 Codex CLI로 1회 실행**: 새 제한 옵션을 설치된 codex 버전이 받아들이는지, 리뷰가 정상 생성되는지 확인. 실패하면 `.local/collaboration/reviews/<sha>.log`에서 어떤 옵션이 거부됐는지 본다
    - [ ] `e23323a`를 `--commit e23323a`로 리뷰
+   - [x] 2026-10-12 코드 보완: 시간 초과(또는 중단) 시 프로세스 트리 전체를 종료한다. Windows는 `taskkill /T /F /PID`, 그 외는 새 세션으로 띄운 뒤 `killpg`. 회귀 테스트 `test_timeout_kills_codex_descendants` 추가(가짜 codex가 손자 프로세스를 띄우고 시간 초과 후 생존 여부 확인). **Windows 실제 실행은 아래 확인 방법으로 여전히 확인 필요**
    - [ ] **미검증: Windows 시간 초과 후 자식 Codex 프로세스 종료.** 10-09에 확인하지 못했다. 이 세션에는 사용자 PC의 셸이 없고, 컴퓨터 조작으로는 터미널에 입력할 수 없어 Windows에서 실행할 수 없었다. 코드상 추정(가설): 시간 초과 시 `subprocess.run`은 직접 자식인 `cmd.exe`만 종료한다. Windows는 자식의 자식을 함께 종료하지 않으므로 `.cmd` 셰임이 띄운 Codex 프로세스가 남을 수 있다. 남으면 락이 풀린 뒤 다음 리뷰와 동시에 돌거나 임시 폴더 삭제가 실패할 수 있다. 확인 방법: `--timeout 5`로 실행하고 시간 초과 직후 작업 관리자에서 `codex`/`node` 프로세스가 남는지 본다. 남으면 `taskkill /T /F /PID <pid>`로 프로세스 트리를 종료하도록 수정한다
 3. **로컬 재시작 재현.** DB(`127.0.0.1:55432`, `docs/DB_SETUP.md`), 백엔드, 관리자 UI를 다시 띄워 health UP, 로그인, 기존 데이터 조회를 확인한다. `mvn test`와 `npm run build`·`typecheck` 결과는 명령과 기준 커밋을 함께 기록한다.
 4. **실제 OpenAI 소량 검증.** 키는 Git 밖에 두고, 실제 모델 전용 빈 DB를 쓴다(stub 벡터와 섞지 않음). 기사 1~3건이 분석·1536차원 임베딩·분류까지 성공하는지, `ai_log`에 공급자·모델·성공 여부·토큰이 기록되는지 확인한다.
@@ -73,3 +74,5 @@
 - 2026-10-09 · 기준 `f2c985c` + `f2c985c` 리뷰 반영 커밋 · `python -m unittest discover -s tools -p "test_*.py" -v` · **31개 통과, 실패 0** (기존 21개와 회귀 10개. Linux, Python 3.13, Git 2.43, 가짜 codex 사용. 실제 Codex CLI·AI 호출 없음). 같은 테스트를 수정 전 `f2c985c` 코드로 돌리면 31개 중 12개가 실패한다(실패 10, 오류 2. 오류 2개는 새로 추가한 이력 변경 기록 함수가 없어서 생김). 대상은 값 뒤 주석, 따옴표 안 공백, `${…:기본값}`, 이력 밖 상태 커밋 3종, 상태 정리 1종, 코드 참조 오탐이다
 - 2026-10-09 · 같은 기준 · 비밀 검사 재실행 · 이력 5개 중 `27d2606`에서 3건(`application.yml:7`, `application-test.yml:6`, `docker-compose.yml:8`. 기본값 검사로 2건이 새로 탐지됨). 나머지 커밋 0건. 이번 변경의 diff와 문맥 문서 0건(테스트 고정값 1줄에 `allow-secret` 표시)
 - 2026-10-09 · Windows 시간 초과 후 자식 프로세스 종료 · **미검증** (3-2 참조)
+- 2026-10-12 · 기준 `7db8fe3` + 시간 초과 프로세스 트리 종료 커밋 · `python -m unittest discover -s tools -p "test_*.py" -v` · **32개 통과, 실패 0** (Linux, Python 3.13, 가짜 codex. 실제 Codex CLI·Windows 실행 없음). 새 테스트를 수정 전 코드로 돌리면 실패함(손자 프로세스 생존)
+- 2026-10-12 · Maven 테스트, 관리자 UI build/typecheck · **미실행**. 클라우드 작업 환경에서 PostgreSQL 16.4 + pgvector 0.8.0은 띄웠으나 Maven Central·npm 레지스트리가 네트워크 정책으로 차단되어 의존성을 받지 못함. 사용자 PC에서 실행 필요
