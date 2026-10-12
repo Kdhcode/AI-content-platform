@@ -5,7 +5,7 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: aicontent
-      POSTGRES_PASSWORD: aicontent
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 환경 변수를 설정하세요}
       POSTGRES_DB: aicontent
     ports:
       - "5432:5432"

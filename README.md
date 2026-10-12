@@ -36,7 +36,10 @@
 관리자 첫 화면은 실제 DB 현황을 보여주는 대시보드입니다. 기사·이슈·작업·RSS 소스 관리와 검수 화면으로 이동할 수 있습니다.
 현재 Windows 로컬 DB의 생성 과정과 접속 설정은 [docs/DB_SETUP.md](docs/DB_SETUP.md)에 있습니다.
 
+DB 비밀번호는 기본값이 없습니다. 실행 전에 `DB_PASSWORD`를 환경 변수로 지정하세요(값은 문서·Git에 남기지 않음). 비밀번호 없이 접속하는 로컬 trust DB에서도 설정 해석을 위해 임의 값을 지정해야 합니다.
+
 ```bash
+export DB_PASSWORD='<로컬 DB 비밀번호>'
 docker compose up -d
 cd backend && ADMIN_USERNAME=admin ADMIN_PASSWORD='change-me' AI_PROVIDER=stub mvn spring-boot:run
 cd ../admin-ui && cp .env.example .env.local && npm install && npm run dev     # http://localhost:3000

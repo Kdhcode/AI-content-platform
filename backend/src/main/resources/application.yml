@@ -4,7 +4,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/aicontent}
     username: ${DB_USER:aicontent}
-    password: ${DB_PASSWORD:aicontent}
+    password: ${DB_PASSWORD}   # 기본값 없음: 환경 변수로만 지정 (로컬 trust DB는 아무 값이나 가능)
   flyway:
     enabled: true
   data:

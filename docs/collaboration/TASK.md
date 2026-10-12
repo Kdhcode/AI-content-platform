@@ -50,7 +50,7 @@
      - [x] [중간·확인] 상태 커밋이 첫 번째 부모 이력 밖에 있는 경우 → 존재 여부가 아니라 HEAD의 first-parent 이력에 들어 있는지 확인한다. 들어 있지 않으면 HEAD만 리뷰하고 `.local/collaboration/reviews/history_changes.log`에 시각·이전 커밋·HEAD·사유를 남긴다. 사유는 '이력 밖' 또는 '객체 없음'
      - [x] 회귀 테스트 10개 추가, 전체 31개 통과 (4절)
      - [x] 오탐 정리: 문자열 연결(`'KEY=' + 변수`)은 값으로 보지 않는다. 속성 접근(`props.apiKey`), `;`로 끝나는 코드, 숫자 없는 변수명(`password`, `apiKey`)도 코드 참조로 본다. 비밀 단어가 들어 있어도 숫자가 있는 값(`Pr0dSecret42`)은 비밀로 본다
-     - [ ] **결정 필요: 로컬 DB 기본 비밀번호.** 기본값까지 검사하면서 `application.yml:7`·`application-test.yml:6`의 `${DB_PASSWORD:…}`와 `docker-compose.yml:8`이 탐지된다. 이 줄이나 그 주변(diff 문맥 3줄)을 고치는 커밋은 리뷰가 차단된다. 선택지는 (a) 기본값을 지우고 환경 변수를 필수로 하기, (b) 로컬 전용 값이라는 확인 후 해당 줄에 `# codex-review: allow-secret` 표시하기
+     - [x] 2026-10-12 결정 (a): 기본값을 지우고 `DB_PASSWORD` 환경 변수를 필수로 함(`application.yml`, `application-test.yml`, `docker-compose.yml`, README·VERIFY 실행 안내). 이전 결정 필요 내용: 기본값까지 검사하면서 `application.yml:7`·`application-test.yml:6`의 `${DB_PASSWORD:…}`와 `docker-compose.yml:8`이 탐지된다. 이 줄이나 그 주변(diff 문맥 3줄)을 고치는 커밋은 리뷰가 차단된다. 선택지는 (a) 기본값을 지우고 환경 변수를 필수로 하기, (b) 로컬 전용 값이라는 확인 후 해당 줄에 `# codex-review: allow-secret` 표시하기
    - [ ] **사용자 PC에서 실제 Codex CLI로 1회 실행**: 새 제한 옵션을 설치된 codex 버전이 받아들이는지, 리뷰가 정상 생성되는지 확인. 실패하면 `.local/collaboration/reviews/<sha>.log`에서 어떤 옵션이 거부됐는지 본다
    - [ ] `e23323a`를 `--commit e23323a`로 리뷰
    - [x] 2026-10-12 코드 보완: 시간 초과(또는 중단) 시 프로세스 트리 전체를 종료한다. Windows는 `taskkill /T /F /PID`, 그 외는 새 세션으로 띄운 뒤 `killpg`. 회귀 테스트 `test_timeout_kills_codex_descendants` 추가(가짜 codex가 손자 프로세스를 띄우고 시간 초과 후 생존 여부 확인). **Windows 실제 실행은 아래 확인 방법으로 여전히 확인 필요**
@@ -76,4 +76,5 @@
 - 2026-10-09 · Windows 시간 초과 후 자식 프로세스 종료 · **미검증** (3-2 참조)
 - 2026-10-12 · 기준 `7db8fe3` + 시간 초과 프로세스 트리 종료 커밋 · `python -m unittest discover -s tools -p "test_*.py" -v` · **32개 통과, 실패 0** (Linux, Python 3.13, 가짜 codex. 실제 Codex CLI·Windows 실행 없음). 새 테스트를 수정 전 코드로 돌리면 실패함(손자 프로세스 생존)
 - 2026-10-12 · Maven 테스트, 관리자 UI build/typecheck · **미실행**. 클라우드 작업 환경에서 PostgreSQL 16.4 + pgvector 0.8.0은 띄웠으나 Maven Central·npm 레지스트리가 네트워크 정책으로 차단되어 의존성을 받지 못함. 사용자 PC에서 실행 필요
+- 2026-10-12 · 로컬 DB 기본 비밀번호 제거 · 설정·문서만 변경. 이 환경에서 Maven 의존성을 받을 수 없어 `mvn test`로 기동 확인은 **미실행**. 비밀 검사로 변경 diff·문맥 문서 확인(아래 커밋 기록)
 - 2026-10-12 · `--skip <sha> --reason <사유>` 추가: 다음 대기 커밋 1개만 리뷰 없이 처리 완료로 넘기고 `history_changes.log`에 기록. 삭제된 줄의 옛 기본값처럼 비밀 검사가 반드시 차단하는 커밋 때문에 감시가 멈추지 않게 하기 위함. 리포트를 만들지 않으므로 리뷰된 것으로 보이지 않음 · `python -m unittest discover -s tools -p "test_*.py" -v` · **33개 통과, 실패 0** (Linux, 가짜 codex)

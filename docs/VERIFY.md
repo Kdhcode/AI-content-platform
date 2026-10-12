@@ -53,6 +53,7 @@ PostgreSQL 바이너리는 [PostgreSQL 공식 Windows 다운로드 안내](https
 프로젝트 루트에서 DB를 준비하고 각 서버는 별도 터미널에서 실행한다.
 
 ```powershell
+$env:DB_PASSWORD = '<로컬 DB 비밀번호>'   # 기본값 없음. docker compose와 mvn 모두 이 값을 사용
 docker compose up -d
 cd backend
 mvn test
