@@ -15,6 +15,8 @@ public final class OpenAiClient implements AiClient {
 
     @Override public String provider() { return "openai"; }
 
+    @Override public String model() { return props.chatModel(); }
+
     @Override public AiCompletion complete(AiRequest request) {
         var body = mapper.createObjectNode();
         body.put("model", props.chatModel());

@@ -20,6 +20,8 @@ public final class OpenAiEmbeddingClient implements EmbeddingClient {
 
     @Override public String provider() { return "openai"; }
 
+    @Override public String model() { return props.embeddingModel(); }
+
     @Override public EmbeddingResult embed(String text) {
         var body = mapper.createObjectNode();
         body.put("model", props.embeddingModel());

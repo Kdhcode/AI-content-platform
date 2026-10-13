@@ -73,7 +73,7 @@ public class StructuredOutputService {
             try {
                 completion = client.complete(request);
             } catch (AiException e) {
-                writeLog(new AiLogRepository.Entry(aiJobId, articleId, call.type(), client.provider(), null,
+                writeLog(new AiLogRepository.Entry(aiJobId, articleId, call.type(), client.provider(), client.model(),
                         prompt.key(), prompt.version(), attempt, null, null, null, elapsedMs(started), false, e.code(),
                         e.getMessage(), null));
                 throw e;

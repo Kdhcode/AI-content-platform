@@ -9,5 +9,10 @@ public interface AiClient {
 
     String provider();
 
+    /** Model this client requests, recorded on failed calls (no response, so no reported model). Null when unknown. */
+    default String model() {
+        return null;
+    }
+
     AiCompletion complete(AiRequest request) throws AiException;
 }

@@ -31,20 +31,25 @@ public class EmbeddingService {
         limiter.checkBeforeCall(AiCallType.EMBEDDING);
         long started = System.nanoTime();
         Long articleId = context == null ? null : context.articleId();
+        EmbeddingResult result;
         try {
-            EmbeddingResult result = client.embed(text);
-            int expected = props.ai().embeddingDimension();
-            if (result.vector() == null || result.vector().length != expected) {
-                int actual = result.vector() == null ? 0 : result.vector().length;
-                throw new AiException("EMBEDDING_DIMENSION_MISMATCH",
-                        "embedding has " + actual + " dimensions, schema expects " + expected, false);
-            }
-            record(articleId, result.model(), result.inputTokens(), started, true, null, null);
-            return result;
+            result = client.embed(text);
         } catch (AiException e) {
-            record(articleId, null, null, started, false, e.code(), e.getMessage());
+            // no response: record the model that was requested
+            record(articleId, client.model(), null, started, false, e.code(), e.getMessage());
             throw e;
         }
+        int expected = props.ai().embeddingDimension();
+        if (result.vector() == null || result.vector().length != expected) {
+            int actual = result.vector() == null ? 0 : result.vector().length;
+            AiException e = new AiException("EMBEDDING_DIMENSION_MISMATCH",
+                    "embedding has " + actual + " dimensions, schema expects " + expected, false);
+            // the provider answered (and may have billed tokens): keep its model and token count
+            record(articleId, result.model(), result.inputTokens(), started, false, e.code(), e.getMessage());
+            throw e;
+        }
+        record(articleId, result.model(), result.inputTokens(), started, true, null, null);
+        return result;
     }
 
     private void record(Long articleId, String model, Integer tokens, long started, boolean ok, String code, String msg) {
