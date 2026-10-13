@@ -153,7 +153,12 @@ public class JobWorker {
                     log.warn("job {} finished but is no longer owned by {} (recovered by another worker?)", job.id(), workerId);
                 }
             } catch (JobDeferredException e) {
-                defer(job, handler, e.errorCode(), e.getMessage());
+                long delay = e.delaySeconds() == null ? config.deferDelaySeconds() : Math.max(1, e.delaySeconds());
+                if (e.counted()) {
+                    defer(job, handler, e.errorCode(), e.getMessage(), delay);
+                } else {
+                    postpone(job, e.errorCode(), e.getMessage(), delay);
+                }
             } catch (JobExecutionException e) {
                 fail(job, handler, e.errorCode(), e.getMessage(), e.retryable());
             } catch (Exception e) {
@@ -166,10 +171,10 @@ public class JobWorker {
         }
     }
 
-    private void defer(AsyncJob job, JobHandler handler, String code, String message) {
+    private void defer(AsyncJob job, JobHandler handler, String code, String message, long delaySeconds) {
         String msg = truncate(message);
         Optional<AsyncJobStatus> status = repository.defer(job.id(), workerId, code, msg,
-                config.deferDelaySeconds(), config.maxDefers());
+                delaySeconds, config.maxDefers());
         if (status.isEmpty()) {
             log.warn("job {} deferred ({}) but is no longer owned by {}", job.id(), code, workerId);
             return;
@@ -177,6 +182,15 @@ public class JobWorker {
         log.info("job {} ({}) deferred code={} -> {}", job.id(), job.jobType(), code, status.get());
         if (status.get() == AsyncJobStatus.FAILED) {
             notifyFinalFailure(job, code, msg, handler);
+        }
+    }
+
+    /** Waits without counting a deferral or a retry (operator-chosen limits such as an AI budget). */
+    private void postpone(AsyncJob job, String code, String message, long delaySeconds) {
+        if (repository.postpone(job.id(), workerId, code, truncate(message), delaySeconds)) {
+            log.info("job {} ({}) postponed code={} for {}s", job.id(), job.jobType(), code, delaySeconds);
+        } else {
+            log.warn("job {} postponed ({}) but is no longer owned by {}", job.id(), code, workerId);
         }
     }
 

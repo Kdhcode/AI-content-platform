@@ -1,5 +1,6 @@
 package com.aicontent.platform.admin;
 
+import com.aicontent.platform.ai.AiUsageLimiter;
 import com.aicontent.platform.common.ApiResponse;
 import com.aicontent.platform.common.BusinessException;
 import com.aicontent.platform.common.ErrorCode;
@@ -13,8 +14,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Read-only AI usage per KST day, call type and model (observation only: no limit or budget is enforced).
- * Raw model responses and error messages are never returned. An unknown cost is null, not 0.
+ * Read-only AI usage per KST day, call type and model, plus the configured {@code app.ai.limits} and today's usage
+ * against them (limits are enforced by {@link AiUsageLimiter}, not here). Raw model responses and error messages are
+ * never returned. An unknown cost is null, not 0.
  */
 @RestController
 @RequestMapping("/api/admin/ai-usage")
@@ -30,12 +32,14 @@ public class AiUsageAdminController {
     public record Totals(long calls, long failures, long inputTokens, long outputTokens, BigDecimal costUsd,
                          long unpricedCalls) {}
 
-    public record Usage(int days, List<Row> rows, Totals totals) {}
+    public record Usage(int days, List<Row> rows, Totals totals, AiUsageLimiter.Status limits) {}
 
     private final JdbcClient jdbc;
+    private final AiUsageLimiter limiter;
 
-    public AiUsageAdminController(JdbcClient jdbc) {
+    public AiUsageAdminController(JdbcClient jdbc, AiUsageLimiter limiter) {
         this.jdbc = jdbc;
+        this.limiter = limiter;
     }
 
     @GetMapping
@@ -64,7 +68,7 @@ public class AiUsageAdminController {
                         rs.getLong("input_tokens"), rs.getLong("output_tokens"), rs.getBigDecimal("cost_usd"),
                         rs.getLong("unpriced_calls")))
                 .list();
-        return ApiResponse.ok(new Usage(days, rows, totals(rows)));
+        return ApiResponse.ok(new Usage(days, rows, totals(rows), limiter.status()));
     }
 
     private static Totals totals(List<Row> rows) {

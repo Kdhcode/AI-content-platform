@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api, qs, type AiUsage } from "@/lib/api";
+import { api, qs, type AiLimits, type AiUsage } from "@/lib/api";
 import { Badge, ErrorText, PageHeading, Shell } from "@/components/ui";
 
 const PERIODS = [1, 7, 30];
@@ -10,6 +10,36 @@ const num = (n: number) => n.toLocaleString("ko-KR");
 function Cost({ value, unpriced }: { value: number | null; unpriced: number }) {
   if (value === null) return <span className="muted">단가 미설정</span>;
   return <>${value.toFixed(6)}{unpriced > 0 && <div className="muted">단가 미설정 {num(unpriced)}건 제외</div>}</>;
+}
+
+const BLOCKED: Record<string, string> = {
+  AI_DAILY_BUDGET_REACHED: "오늘 예산에 도달해 AI 작업이 내일까지 대기합니다.",
+  AI_DAILY_CALL_LIMIT_REACHED: "오늘 호출 한도에 도달해 AI 작업이 내일까지 대기합니다.",
+  AI_RATE_LIMITED: "분당 호출 한도에 도달해 AI 작업이 잠시 대기합니다.",
+};
+
+/** Configured limits (app.ai.limits) and today's usage. Uses its own classes so the totals cards stay as they are. */
+function Limits({ limits }: { limits: AiLimits }) {
+  const off = limits.dailyBudgetUsd === null && limits.dailyMaxCalls === null && limits.maxCallsPerMinute === null;
+  if (off) {
+    return <div className="card"><strong>호출 한도</strong> <span className="muted">설정된 한도 없음 (app.ai.limits)</span></div>;
+  }
+  const item = (label: string, used: string, limit: string | null) => (
+    <span>{label} <strong>{used}</strong>{limit === null ? <span className="muted"> / 한도 없음</span> : ` / ${limit}`}</span>
+  );
+  return (
+    <div className="card">
+      <div className="row">
+        <strong>호출 한도</strong>
+        {item("오늘 비용", `$${limits.costToday.toFixed(6)}`, limits.dailyBudgetUsd === null ? null : `$${limits.dailyBudgetUsd}`)}
+        {item("오늘 호출", num(limits.callsToday), limits.dailyMaxCalls === null ? null : num(limits.dailyMaxCalls))}
+        {item("최근 1분", num(limits.callsLastMinute), limits.maxCallsPerMinute === null ? null : num(limits.maxCallsPerMinute))}
+      </div>
+      {limits.blockedBy
+        ? <div className="error">{BLOCKED[limits.blockedBy] ?? limits.blockedBy} 작업은 실패로 바뀌지 않습니다.</div>
+        : <div className="muted">한도에 도달하면 AI 작업은 실패하지 않고 대기합니다. 하루 기준: {limits.timeZone}. 단가가 없는 호출은 예산에 0으로 계산됩니다.</div>}
+    </div>
+  );
 }
 
 export default function AiUsagePage() {
@@ -28,7 +58,7 @@ export default function AiUsagePage() {
   const totals = data?.totals;
   return (
     <Shell>
-      <PageHeading eyebrow="AI USAGE" title="AI 사용량" description="호출 수·실패·토큰·비용을 일자와 모델별로 확인합니다. 한도나 차단 기능은 없습니다." />
+      <PageHeading eyebrow="AI USAGE" title="AI 사용량" description="호출 수·실패·토큰·비용을 일자와 모델별로 확인합니다. 호출 한도는 설정(app.ai.limits)으로만 바꿀 수 있습니다." />
       <div className="row">
         <select aria-label="기간" value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {PERIODS.map((d) => <option key={d} value={d}>{d === 1 ? "오늘" : `최근 ${d}일`}</option>)}
@@ -37,6 +67,7 @@ export default function AiUsagePage() {
         <span className="muted">일자는 한국 시간 기준 · 비용은 설정한 단가로 계산한 추정치</span>
       </div>
       <ErrorText error={error} />
+      {data?.limits && <Limits limits={data.limits} />}
       {totals && (
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-top">호출</div><div className="stat-value">{num(totals.calls)}<small>건</small></div><p>실패 {num(totals.failures)}건</p></div>

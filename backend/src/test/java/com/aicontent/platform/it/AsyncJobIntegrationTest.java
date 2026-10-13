@@ -99,6 +99,26 @@ class AsyncJobIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void postponeWaitsWithoutCountingAnythingAndOnlyForItsOwner() {
+        var job = jobs.enqueue(JobType.COLLECT_NEWS, Map.of("sourceId", 999), "t", null, null).job();
+        String state = "SELECT status || '/' || retry_count || '/' || defer_count || '/' || coalesce(locked_by, '-') FROM async_job";
+
+        // far more often than max-defers (20) or max-retries (3): never FAILED
+        for (int i = 0; i < 25; i++) {
+            jdbc.sql("UPDATE async_job SET available_at = now()").update();
+            assertThat(repository.claimNext("w-owner", Set.of("COLLECT_NEWS"), 1)).hasSize(1);
+            assertThat(repository.postpone(job.id(), "w-other", "AI_RATE_LIMITED", "limit", 60)).isFalse();
+            assertThat(repository.postpone(job.id(), "w-owner", "AI_RATE_LIMITED", "limit", 60)).isTrue();
+        }
+        assertThat(jdbc.sql(state).query(String.class).single()).isEqualTo("PENDING/0/0/-");
+        assertThat(count("""
+                SELECT count(*) FROM async_job WHERE error_code = 'AI_RATE_LIMITED' AND finished_at IS NULL
+                  AND available_at > now() + interval '50 seconds'""")).isEqualTo(1);
+        // not running any more: postpone has nothing to act on
+        assertThat(repository.postpone(job.id(), "w-owner", "AI_RATE_LIMITED", "limit", 60)).isFalse();
+    }
+
+    @Test
     void twoWorkersNeverRunTheSameJobTwice() throws Exception {
         for (int i = 0; i < 40; i++) {
             jobs.enqueue(JobType.COLLECT_NEWS, Map.of("sourceId", 900 + i), "t", null, null);

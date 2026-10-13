@@ -34,6 +34,26 @@ public class AiLogRepository {
                 .update();
     }
 
+    /** AI usage for limit checks: calls and cost since the start of today in {@code timeZone}, calls in the last minute. */
+    public record UsageSnapshot(long callsToday, BigDecimal costToday, long callsLastMinute, long secondsUntilNextDay) {}
+
+    public UsageSnapshot usageSnapshot(String timeZone) {
+        return jdbc.sql("""
+                WITH b AS (
+                    SELECT (date_trunc('day', now() AT TIME ZONE :tz) AT TIME ZONE :tz) AS day_start,
+                           ((date_trunc('day', now() AT TIME ZONE :tz) + interval '1 day') AT TIME ZONE :tz) AS next_day_start)
+                SELECT count(l.id) FILTER (WHERE l.created_at >= b.day_start) AS calls_today,
+                       coalesce(sum(l.estimated_cost_usd) FILTER (WHERE l.created_at >= b.day_start), 0) AS cost_today,
+                       count(l.id) FILTER (WHERE l.created_at > now() - interval '60 seconds') AS calls_last_minute,
+                       CAST(ceil(extract(epoch FROM (b.next_day_start - now()))) AS bigint) AS seconds_until_next_day
+                FROM b LEFT JOIN ai_log l ON l.created_at >= LEAST(b.day_start, now() - interval '60 seconds')
+                GROUP BY b.day_start, b.next_day_start""")
+                .param("tz", timeZone)
+                .query((rs, n) -> new UsageSnapshot(rs.getLong("calls_today"), rs.getBigDecimal("cost_today"),
+                        rs.getLong("calls_last_minute"), rs.getLong("seconds_until_next_day")))
+                .single();
+    }
+
     /**
      * Clears {@code response} (raw model output) of at most {@code batchSize} rows older than {@code days}. Tokens, cost,
      * model and success stay, so usage and cost history are unaffected.

@@ -14,6 +14,7 @@
 | 모델 접근 | `gpt-4o-mini`, `text-embedding-3-small` 사용 가능 |
 | 키 보관 | 이 터미널의 환경 변수, 또는 Git 제외 대상 `backend/application-local.yml`. 문서·커밋·Notion·채팅에 붙여 넣지 않는다 |
 | 실제 모델 전용 빈 DB | `aicontent_live`. stub 벡터가 든 `aicontent`와 섞지 않는다 |
+| 호출 상한(선택) | 실수로 많이 호출되지 않게 `$env:AI_DAILY_MAX_CALLS = '30'`처럼 하루 호출 수를 제한할 수 있다(기사 3건이면 분석·임베딩·분류 합쳐 10건 안팎). 한도에 닿으면 작업은 실패하지 않고 다음 날까지 대기하며, 관리자 **AI 사용량** 화면에 표시된다. OpenAI 계정의 사용 한도와는 별개다 |
 | 단가(선택) | `app.ai.pricing`에 모델별 단가를 설정하면 호출마다 `ai_log.estimated_cost_usd`에 비용이 기록된다. 설정하지 않으면 NULL로 남는다(0이 아님). 값은 OpenAI 가격 페이지를 보고 `backend/application-local.yml`에 직접 넣는다(`application.yml`의 주석 예시 참고) |
 
 주의: `gpt-4o-mini` 대신 temperature를 받지 않는 추론 모델로 바꾸면 요청이 HTTP 400으로 실패한다.

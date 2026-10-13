@@ -54,6 +54,20 @@ class AiUsageApiIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void limitsAreOffByDefault() throws Exception {
+        log("EMBEDDING", "stub", "stub-embedding", null, null, null, true, "now()");
+        mvc.perform(get("/api/admin/ai-usage").with(httpBasic("op", "op-pw")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.limits.dailyBudgetUsd").value(nullValue()))
+                .andExpect(jsonPath("$.data.limits.dailyMaxCalls").value(nullValue()))
+                .andExpect(jsonPath("$.data.limits.maxCallsPerMinute").value(nullValue()))
+                .andExpect(jsonPath("$.data.limits.timeZone").value("Asia/Seoul"))
+                .andExpect(jsonPath("$.data.limits.callsToday").value(1))
+                .andExpect(jsonPath("$.data.limits.callsLastMinute").value(1))
+                .andExpect(jsonPath("$.data.limits.blockedBy").value(nullValue()));
+    }
+
+    @Test
     void periodStartsAtKoreanMidnight() throws Exception {
         log("ARTICLE_ANALYSIS", "openai", "m", 10, 5, "0.100000", true, KST_MIDNIGHT);
         log("ARTICLE_ANALYSIS", "openai", "m", 10, 5, "0.100000", true, KST_MIDNIGHT + " - interval '1 second'");

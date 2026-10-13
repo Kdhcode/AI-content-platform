@@ -64,7 +64,30 @@ public record AppProperties(
             @DefaultValue("2") int classifierMaxAttempts,
             @DefaultValue("8000") int maxAnalysisTextChars,
             /** Model name (or name prefix) -> price. Empty by default: prices change, so none is built in. */
-            @DefaultValue Map<String, ModelPrice> pricing) {}
+            @DefaultValue Map<String, ModelPrice> pricing,
+            /** Budget and rate limits (OPEN ITEM #10). Every limit is off by default. */
+            @DefaultValue AiLimits limits) {}
+
+    /**
+     * Checked before every AI call (analysis, embedding, classification, including schema-retry attempts). When a limit
+     * is reached the job waits instead of failing: until the next day for daily limits, about a minute for the rate
+     * limit. Counts come from ai_log, so they are shared by all instances; calls already in flight can overshoot by up
+     * to {@code app.worker.concurrency}.
+     */
+    public record AiLimits(
+            /** USD per day, summed from ai_log.estimated_cost_usd. Unset = no budget. Unpriced calls count as 0. */
+            BigDecimal dailyBudgetUsd,
+            /** AI calls per day (failed calls count too). 0 = no limit. */
+            @DefaultValue("0") int dailyMaxCalls,
+            /** AI calls in any 60-second window. 0 = no limit. */
+            @DefaultValue("0") int maxCallsPerMinute,
+            /** Where "a day" starts and ends (IANA zone). */
+            @DefaultValue("Asia/Seoul") String timeZone) {
+
+        public boolean anyEnabled() {
+            return dailyBudgetUsd != null || dailyMaxCalls > 0 || maxCallsPerMinute > 0;
+        }
+    }
 
     /** USD per one million tokens. Embedding models set the input price only. */
     public record ModelPrice(BigDecimal inputPerMillionUsd, BigDecimal outputPerMillionUsd) {}

@@ -26,6 +26,7 @@
 | 모든 상태 전이는 `status='RUNNING' AND locked_by=:worker` 조건 | 유실 판정된 워커가 새 소유자의 결과를 덮어쓰지 못함 |
 | 재시도: 기본 3회, 대기 `min(600s, 5s·2^retry_count)`, 재시도 불가 오류는 즉시 FAILED | 일시 오류(소스 타임아웃/네트워크/429/5xx, 공급자가 retryable로 표시한 AI 오류)만 재시도. 검증 실패·설정 오류·4xx는 반복해도 같은 결과 |
 | **2026-10-12 추가:** 분류 락 대기 실패(`LOCK_TIMEOUT`)는 실패가 아니라 재큐(`JobDeferredException` → `AsyncJobRepository.defer`). `retry_count`는 그대로 두고 `defer_count`(V2)만 올리며, 30초 뒤 다시 실행(`app.worker.defer-delay-seconds`). 20회(`app.worker.max-defers`)를 넘으면 FAILED로 끝내고 기존 최종 실패 처리(`onFinalFailure`)를 그대로 탐 | 기사에는 문제가 없는데 대량 수집 때 대기만으로 재시도 3회를 다 써서 FAILED가 되던 문제. 상한을 둔 이유는 락이 풀리지 않는 장애에서 작업이 끝없이 도는 것을 막기 위함 |
+| **2026-10-13 추가:** 운영자가 정한 한도로 인한 대기는 `AsyncJobRepository.postpone`. `JobDeferredException(code, msg, delaySeconds, counted=false)`이면 `retry_count`도 `defer_count`도 올리지 않고 `available_at`만 미룸(오류 코드에 이유를 남김) | AI 예산·호출 한도는 의도한 멈춤이라 하루 종일 걸릴 수 있음. `max-defers`로 세면 한도가 걸린 날 대기 중인 작업이 모두 FAILED가 됨. 무한 대기가 싫으면 관리자가 작업을 취소할 수 있음 |
 | 하트비트 5초, 300초 무응답이면 `WORKER_LOST`로 재큐(재시도 소진 시 FAILED). 서버 시작 시에도 1회 복구 | 재시작/크래시 복구 요구 |
 | `dedupe_key` 부분 유니크(PENDING/RUNNING만) | 같은 기사에 분석 작업이 중복 쌓이지 않음. 끝난 뒤에는 재요청(재분석) 가능 |
 | 작업 체인: COLLECT_NEWS → ANALYZE_ARTICLE → EMBED_ARTICLE → CLASSIFY_ARTICLE, 각 단계가 다음 작업을 등록 | 단계별 재시도·관측 가능. 핸들러는 멱등 |
@@ -56,6 +57,7 @@
 | **2026-10-12 추가:** 호출 비용은 `AiCostCalculator`가 `app.ai.pricing`(모델별 100만 토큰당 USD)으로 계산해 `ai_log.estimated_cost_usd`에 기록. 단가는 코드·기본 설정에 넣지 않음. 모델명은 정확히 일치 → 가장 긴 접두사 순으로 찾고, 단가나 토큰 수를 모르면 0이 아니라 NULL | 가격은 바뀌므로 저장소에 고정하지 않음. 응답 모델명에는 날짜가 붙음(`gpt-4o-mini-2024-07-18`). 모르는 비용을 0으로 보이게 하지 않기 위함 |
 | 모든 AI 호출은 DB 트랜잭션 밖에서 | 호출 실패/롤백과 무관하게 `ai_log`가 남도록 |
 | **2026-10-13 추가:** `ai_log.response`(모델 응답 원문) 보존 정리 배치 `AiLogRetentionService`. `app.retention.ai-log-response-days`보다 오래된 행의 원문만 NULL로 비우고 행·토큰·비용·모델·성공 여부는 남김. 기본 0(무기한, 아무것도 지우지 않음). 1시간마다, 1,000행 단위 짧은 UPDATE를 실행당 최대 100번 | 보존 기간은 정책 결정이라 기본값으로 정하지 않음(OPEN ITEM #8). 사용량·비용 이력은 원문과 달리 운영에 계속 필요함. 큰 한 번의 UPDATE로 테이블을 오래 잠그지 않기 위함 |
+| **2026-10-13 추가:** AI 호출 한도 `AiUsageLimiter`(`app.ai.limits`): 하루 예산(USD), 하루 호출 수, 분당 호출 수. 모든 AI 호출(분석·임베딩·분류, 스키마 재시도 포함) 직전에 `ai_log`로 오늘 사용량을 세어 한도에 닿으면 호출하지 않고 작업을 대기시킴(하루 한도: 다음 날 0시+5초까지, 분당: 60초). 하루 기준은 `time-zone`(기본 Asia/Seoul). 모두 기본 꺼짐. 예산 0 이하·음수 한도·잘못된 시간대는 기동 실패. 예산만 켜고 단가가 없으면 경고 로그 | 한도 값은 예산 결정이라 기본값으로 정하지 않음(OPEN ITEM #10). `ai_log` 기준이라 서버가 여러 대여도, 재시작해도 같은 값을 봄. 실패가 아니라 대기라 한도를 풀거나 날이 바뀌면 그대로 이어짐. 이미 실행 중인 호출은 막지 않으므로 최대 워커 동시성만큼 넘칠 수 있음(소프트 한도). 한도가 꺼져 있으면 조회도 하지 않음 |
 
 ## 6. ISSUE 판단
 | 결정 | 이유 |

@@ -91,10 +91,16 @@ export type AiUsageRow = {
   day: string; callType: string; provider: string | null; model: string | null; calls: number; failures: number;
   inputTokens: number; outputTokens: number; costUsd: number | null; unpricedCalls: number;
 };
+/** app.ai.limits and today's usage against them. A limit that is off is null. */
+export type AiLimits = {
+  dailyBudgetUsd: number | null; dailyMaxCalls: number | null; maxCallsPerMinute: number | null; timeZone: string;
+  callsToday: number; costToday: number; callsLastMinute: number; blockedBy: string | null;
+};
 export type AiUsage = {
   days: number; rows: AiUsageRow[];
   totals: { calls: number; failures: number; inputTokens: number; outputTokens: number; costUsd: number | null;
     unpricedCalls: number };
+  limits: AiLimits;
 };
 
 export type NewsSource = {

@@ -192,6 +192,30 @@ public class AsyncJobRepository {
                 .optional();
     }
 
+    /**
+     * Puts a job back to wait without counting anything ({@code retry_count} and {@code defer_count} unchanged), e.g.
+     * while an AI budget or rate limit holds. The error code/message say why it is waiting.
+     *
+     * @return true if this worker still owned the job
+     */
+    public boolean postpone(long id, String workerId, String errorCode, String errorMessage, long delaySeconds) {
+        return jdbc.sql("""
+                        UPDATE async_job SET
+                            status        = 'PENDING',
+                            available_at  = now() + make_interval(secs => :delay),
+                            finished_at   = NULL,
+                            error_code    = :code,
+                            error_message = :msg,
+                            locked_by     = NULL
+                        WHERE id = :id AND status = 'RUNNING' AND locked_by = :w""")
+                .param("id", id)
+                .param("w", workerId)
+                .param("code", errorCode)
+                .param("msg", errorMessage)
+                .param("delay", delaySeconds)
+                .update() == 1;
+    }
+
     /** Re-queues RUNNING jobs whose heartbeat expired (worker crash / restart); FAILED when no retries are left. */
     public List<RecoveredJob> recoverStale(long staleAfterSeconds) {
         return jdbc.sql("""

@@ -15,15 +15,20 @@ public class EmbeddingService {
     private final AiLogRepository logs;
     private final AppProperties props;
     private final AiCostCalculator costs;
+    private final AiUsageLimiter limiter;
 
-    public EmbeddingService(EmbeddingClient client, AiLogRepository logs, AppProperties props, AiCostCalculator costs) {
+    public EmbeddingService(EmbeddingClient client, AiLogRepository logs, AppProperties props, AiCostCalculator costs,
+                            AiUsageLimiter limiter) {
         this.client = client;
         this.logs = logs;
         this.props = props;
         this.costs = costs;
+        this.limiter = limiter;
     }
 
+    /** @throws com.aicontent.platform.job.JobDeferredException when an {@code app.ai.limits} limit is reached (no call made) */
     public EmbeddingResult embed(String text, AiCallContext context) {
+        limiter.checkBeforeCall(AiCallType.EMBEDDING);
         long started = System.nanoTime();
         Long articleId = context == null ? null : context.articleId();
         try {

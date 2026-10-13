@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
  * Every attempt, successful or not, is written to ai_log. Callers never see unvalidated model text.
  *
  * <p>Must not run inside a database transaction: the log rows have to survive a rollback of the caller's work.
+ *
+ * <p>Before each attempt {@link AiUsageLimiter} checks {@code app.ai.limits}; a reached limit propagates as a
+ * {@code JobDeferredException} so the job waits instead of failing.
  */
 @Service
 public class StructuredOutputService {
@@ -33,15 +36,17 @@ public class StructuredOutputService {
     private final AiLogRepository logs;
     private final AiJobRepository aiJobs;
     private final AiCostCalculator costs;
+    private final AiUsageLimiter limiter;
 
     public StructuredOutputService(AiClient client, SchemaValidator validator, Json json, AiLogRepository logs,
-                                   AiJobRepository aiJobs, AiCostCalculator costs) {
+                                   AiJobRepository aiJobs, AiCostCalculator costs, AiUsageLimiter limiter) {
         this.client = client;
         this.validator = validator;
         this.json = json;
         this.logs = logs;
         this.aiJobs = aiJobs;
         this.costs = costs;
+        this.limiter = limiter;
     }
 
     public Result execute(Call call) {
@@ -61,6 +66,8 @@ public class StructuredOutputService {
                     + String.join("\n", lastErrors) + "\n위 오류를 고쳐 스키마를 정확히 따르는 JSON 객체 하나만 다시 출력하라.";
             AiRequest request = new AiRequest(call.type(), prompt.system(), user, prompt.schema(),
                     prompt.temperature(), call.variables());
+            // every attempt is a paid call, so every attempt is checked (throws JobDeferredException when a limit is reached)
+            limiter.checkBeforeCall(call.type());
             long started = System.nanoTime();
             AiCompletion completion;
             try {

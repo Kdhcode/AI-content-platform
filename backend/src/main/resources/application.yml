@@ -58,6 +58,15 @@ app:
     #     gpt-4o-mini: { input-per-million-usd: <USD>, output-per-million-usd: <USD> }
     #     text-embedding-3-small: { input-per-million-usd: <USD> }      # embeddings: input only
     #     "[gpt-4.1-mini]": { input-per-million-usd: <USD>, output-per-million-usd: <USD> }
+    # Budget and rate limits (OPEN ITEM #10), checked before every AI call. All off by default. When one is reached the
+    # job waits instead of failing (daily limits: until the next day in time-zone; per-minute: about 60s), without
+    # using retries or deferrals. Soft limits: calls already running finish (overshoot up to app.worker.concurrency).
+    limits:
+      # daily-budget-usd: 1.00                           # USD per day from ai_log.estimated_cost_usd; needs app.ai.pricing.
+      #                                                   # Unset = no budget (or env APP_AI_LIMITS_DAILY_BUDGET_USD)
+      daily-max-calls: ${AI_DAILY_MAX_CALLS:0}             # 0 = no limit; failed calls count too
+      max-calls-per-minute: ${AI_MAX_CALLS_PER_MINUTE:0}   # 0 = no limit
+      time-zone: Asia/Seoul
     openai:
       api-key: ${OPENAI_API_KEY:}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
