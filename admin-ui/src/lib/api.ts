@@ -76,7 +76,7 @@ export type IssueListItem = {
   publisherCount: number; firstPublishedAt: string | null; lastUpdatedAt: string | null; mergedIntoIssueId: number | null;
 };
 export type IssueDetail = IssueListItem & {
-  summarySource: string; keyFacts: string[]; entities: { name: string; type: string }[]; mergedFromIssueIds: number[];
+  titleSource: string; summarySource: string; keyFacts: string[]; entities: { name: string; type: string }[]; mergedFromIssueIds: number[];
   articles: { articleId: number; title: string; publisherName: string; publishedAt: string | null;
     classificationMethod: string; llmDecision: string | null; llmConfidence: number | null; llmReason: string | null;
     similarity: number | null; manuallyCorrected: boolean }[];

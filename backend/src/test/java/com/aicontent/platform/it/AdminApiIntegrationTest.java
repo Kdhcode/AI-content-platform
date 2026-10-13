@@ -54,7 +54,7 @@ class AdminApiIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.data.counts.successfulJobs").value(10))
                 .andExpect(jsonPath("$.data.counts.failedJobs").value(0))
                 .andExpect(jsonPath("$.data.pipeline.length()").value(4))
-                .andExpect(jsonPath("$.data.system.schemaVersion").value("2"))
+                .andExpect(jsonPath("$.data.system.schemaVersion").value("3"))
                 .andExpect(jsonPath("$.data.system.vectorVersion").isNotEmpty())
                 .andExpect(jsonPath("$.data.system.aiProvider").value("stub"))
                 .andExpect(jsonPath("$.data.system.password").doesNotExist())

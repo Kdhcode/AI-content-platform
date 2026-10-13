@@ -29,7 +29,7 @@ public class IssueQueryRepository {
                               String classificationMethod, String llmDecision, Double llmConfidence, String llmReason,
                               Double similarity, boolean manuallyCorrected) {}
 
-    public record Detail(long id, String title, String summary, String summarySource, String category, String status,
+    public record Detail(long id, String title, String titleSource, String summary, String summarySource, String category, String status,
                          JsonNode keyFacts, JsonNode entities, int articleCount, int publisherCount,
                          OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, Long mergedIntoIssueId,
                          List<Long> mergedFromIssueIds, OffsetDateTime createdAt, List<ArticleItem> articles) {}
@@ -70,18 +70,18 @@ public class IssueQueryRepository {
 
     public Optional<Detail> detail(long id) {
         Optional<Detail> base = jdbc.sql("""
-                SELECT id, title, summary, summary_source, category, status, CAST(key_facts AS text) AS key_facts,
+                SELECT id, title, title_source, summary, summary_source, category, status, CAST(key_facts AS text) AS key_facts,
                        CAST(entities AS text) AS entities, article_count, publisher_count, first_published_at,
                        last_updated_at, merged_into_issue_id, created_at
                 FROM issue WHERE id = :id""").param("id", id)
-                .query((rs, n) -> new Detail(rs.getLong("id"), rs.getString("title"), rs.getString("summary"),
+                .query((rs, n) -> new Detail(rs.getLong("id"), rs.getString("title"), rs.getString("title_source"), rs.getString("summary"),
                         rs.getString("summary_source"), rs.getString("category"), rs.getString("status"),
                         json.parse(rs.getString("key_facts")), json.parse(rs.getString("entities")),
                         rs.getInt("article_count"), rs.getInt("publisher_count"), Sql.odt(rs, "first_published_at"),
                         Sql.odt(rs, "last_updated_at"), Sql.longOrNull(rs, "merged_into_issue_id"), List.of(),
                         Sql.odt(rs, "created_at"), List.of()))
                 .optional();
-        return base.map(d -> new Detail(d.id(), d.title(), d.summary(), d.summarySource(), d.category(), d.status(),
+        return base.map(d -> new Detail(d.id(), d.title(), d.titleSource(), d.summary(), d.summarySource(), d.category(), d.status(),
                 d.keyFacts(), d.entities(), d.articleCount(), d.publisherCount(), d.firstPublishedAt(),
                 d.lastUpdatedAt(), d.mergedIntoIssueId(), mergedFrom(id), d.createdAt(), articles(id)));
     }

@@ -64,7 +64,7 @@ export default function IssueDetailPage() {
               <span className="muted">기사 {d.articleCount} · 언론사 {d.publisherCount} · {fmt(d.firstPublishedAt)} ~ {fmt(d.lastUpdatedAt)}</span></div>
             <div className="row"><input type="text" style={{ flex: 1 }} value={title} onChange={(e) => setTitle(e.target.value)} disabled={!editable} /></div>
             <textarea value={summary} onChange={(e) => setSummary(e.target.value)} disabled={!editable} />
-            <div className="muted">요약 출처: {d.summarySource}{d.summarySource === "MANUAL" && " (자동 갱신 안 함)"}</div>
+            <div className="muted">제목 출처: {d.titleSource}{d.titleSource === "MANUAL" ? " (자동 갱신 안 함)" : " (가장 이른 기사 제목을 따름)"} · 요약 출처: {d.summarySource}{d.summarySource === "MANUAL" && " (자동 갱신 안 함)"}</div>
             <div className="row" style={{ marginTop: 8 }}>
               <input type="text" placeholder="변경 사유(선택, 감사 로그에 기록)" value={reason} onChange={(e) => setReason(e.target.value)} style={{ minWidth: 280 }} />
               <button className="primary" disabled={busy || !editable} onClick={save}>제목/요약 저장</button>

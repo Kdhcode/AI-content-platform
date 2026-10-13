@@ -93,6 +93,37 @@ class IssueManagementIntegrationTest extends IntegrationTestBase {
                 .isEqualTo("관리자가 쓴 요약/MANUAL");
     }
 
+    private static final String TITLE_1 = "가상시 A동 상가 화재 발생 주민 대피";   // article 1, 09:00
+    private static final String TITLE_2 = "가상시 A동 상가 화재 발생 소방 출동";   // article 2, 10:00
+
+    private String titleAndSource(long issueId) {
+        return jdbc.sql("SELECT title || '/' || title_source FROM issue WHERE id = :i").param("i", issueId).query(String.class).single();
+    }
+
+    @Test
+    void autoTitleFollowsTheEarliestArticleAfterASplit() {
+        assertThat(titleAndSource(1)).isEqualTo(TITLE_1 + "/AUTO");
+
+        var result = management.split(1, List.of(1L), null, "admin", null, null);   // the article that gave the title leaves
+
+        assertThat(titleAndSource(1)).isEqualTo(TITLE_2 + "/AUTO");
+        assertThat(titleAndSource(result.newIssueId())).isEqualTo(TITLE_1 + "/AUTO");
+    }
+
+    @Test
+    void adminTitleIsNeverReplaced() {
+        management.update(1, new IssueManagementService.IssuePatch("관리자 제목", null, null, null), "admin", null, null);
+        management.split(1, List.of(1L), null, "admin", null, null);
+        assertThat(titleAndSource(1)).isEqualTo("관리자 제목/MANUAL");
+    }
+
+    @Test
+    void titleGivenWhenSplittingIsKept() {
+        var result = management.split(1, List.of(2L), "분리 제목", "admin", null, null);
+        management.move(1, result.newIssueId(), "admin", null, null);   // an earlier article joins: still the admin's title
+        assertThat(titleAndSource(result.newIssueId())).isEqualTo("분리 제목/MANUAL");
+    }
+
     @Test
     void mergedIssuesCannotBeEditedAndMergedStatusCannotBeSetByHand() {
         management.merge(1, List.of(2L), "admin", null, null);

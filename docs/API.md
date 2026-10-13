@@ -72,12 +72,12 @@
 응답 `items[]`: `id, title, summary, category, status, articleCount, publisherCount, firstPublishedAt, lastUpdatedAt, mergedIntoIssueId`.
 
 ### `GET /issues/{id}` — 상세 (OPERATOR+)
-응답: 목록 필드 + `summarySource`(AUTO|MANUAL), `keyFacts[]`, `entities[]`, `mergedFromIssueIds[]`, `createdAt`, `articles[]`(기사 id/제목/언론사/발행시각, 연결 방식, LLM 판단·신뢰도·사유, 유사도, 수동 수정 여부).
+응답: 목록 필드 + `titleSource`(AUTO|MANUAL, 2026-10-13), `summarySource`(AUTO|MANUAL), `keyFacts[]`, `entities[]`, `mergedFromIssueIds[]`, `createdAt`, `articles[]`(기사 id/제목/언론사/발행시각, 연결 방식, LLM 판단·신뢰도·사유, 유사도, 수동 수정 여부).
 오류: 404 `ISSUE_NOT_FOUND`.
 
 ### `PATCH /issues/{id}` — 수정 (OPERATOR+) · 동기
 본문(전부 선택, 보낸 필드만 변경): `{ "title": "≤300자", "summary": "≤5000자", "category": "≤50자", "status": "ACTIVE|REVIEW|CLOSED|EXCLUDED", "reason": "≤500자" }`.
-- `summary`를 보내면 `summarySource=MANUAL`이 되어 이후 자동 갱신하지 않음.
+- `summary`를 보내면 `summarySource=MANUAL`이 되어 이후 자동 갱신하지 않음. `title`도 같음(`titleSource=MANUAL`). AUTO 제목은 멤버십이 바뀔 때 가장 이른 기사 제목으로 맞춰짐.
 - `REVIEW → ACTIVE`는 검수 확정: 소속 기사들의 `classificationStatus`가 `CLASSIFIED`로 바뀜.
 - `status=MERGED`는 직접 지정 불가(병합 API 사용).
 응답: 수정 후 이슈 상세.

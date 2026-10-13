@@ -57,7 +57,7 @@ PC를 재부팅하면 자동 시작되는 서비스가 아니므로 아래 시�
 
 앱 DB에서 다음을 확인했다.
 
-- `flyway_schema_history`: 버전 `1`, 설명 `phase1 schema`, 적용 성공 `true`. (10-07 기준. 10-12에 V2 `job defer count`가 추가되어 지금은 최신 버전이 `2`이며, 대시보드의 "적용된 스키마"도 V2로 보여야 한다)
+- `flyway_schema_history`: 버전 `1`, 설명 `phase1 schema`, 적용 성공 `true`. (10-07 기준. 10-12에 V2 `job defer count`, 10-13에 V3 `issue title source`가 추가되어 지금은 최신 버전이 `3`이며, 대시보드의 "적용된 스키마"도 V3로 보여야 한다)
 - 업무 테이블 11개와 Flyway 이력 테이블 1개, 총 12개.
 - `news_article.embedding`과 `issue.embedding`: 실제 `vector(1536)` 컬럼.
 - `ix_issue_embedding_hnsw`: 실제 HNSW 벡터 검색 인덱스.

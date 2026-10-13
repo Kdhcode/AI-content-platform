@@ -8,8 +8,8 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * Single place that keeps an issue's derived data (counts, time range, centroid embedding, key facts, entities)
- * consistent with its members. Every membership change (classify, merge, split, move) ends with {@link #refresh}.
+ * Single place that keeps an issue's derived data (counts, time range, centroid embedding, key facts, entities, AUTO
+ * title) consistent with its members. Every membership change (classify, merge, split, move) ends with {@link #refresh}.
  * Call it inside the same transaction as the membership change.
  */
 @Service
@@ -25,6 +25,7 @@ public class IssueAggregateService {
 
     public void refresh(long issueId) {
         issues.recomputeAggregates(issueId);
+        issues.refreshAutoTitle(issueId);
         List<IssueContentMerger.MemberAnalysis> members = new ArrayList<>();
         String firstSummary = null;
         for (String text : issues.memberAnalyses(issueId)) {

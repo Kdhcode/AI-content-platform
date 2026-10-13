@@ -18,7 +18,7 @@
 | 위치 | 내용 |
 |---|---|
 | `backend/` | Spring Boot 3.3 / Java 21 모듈러 모놀리스. 패키지: `news`(수집·중복 제거), `ai`(공급자 추상화·프롬프트·검증), `issue`(분류·집계·관리), `job`(ASYNC_JOB 워커), `admin`(REST), `security`, `lock`, `audit`, `common`, `config` |
-| `backend/src/main/resources/db/migration` | Flyway 스키마 `V1__phase1_schema.sql` (PostgreSQL + pgvector), `V2__job_defer_count.sql` (락 대기 재큐 횟수) |
+| `backend/src/main/resources/db/migration` | Flyway 스키마 `V1__phase1_schema.sql` (PostgreSQL + pgvector), `V2__job_defer_count.sql` (락 대기 재큐 횟수), `V3__issue_title_source.sql` (제목 AUTO/MANUAL) |
 | `backend/src/main/resources/prompts` | 버전 관리되는 프롬프트(`article-analysis/v1`, `issue-classifier/v1`: system/user/schema/meta) |
 | `backend/src/test` | 단위·통합 테스트, 검증 SQL(`resources/sql`), 고정 평가 세트(`resources/eval`) |
 | `admin-ui/` | Next.js + TypeScript 최소 관리자 화면(이슈/기사/작업) |

@@ -1,7 +1,7 @@
 -- Runs the application's key SQL statements (copied from the repositories, :name -> psql variables) against a real
 -- PostgreSQL schema. The only deviation: vector(1536) columns are float8[] when pgvector is not installed, so
 -- avg(embedding), <=> and CAST(... AS vector) statements are NOT covered here (they need the docker-compose DB).
--- Usage: psql -d <db with V1 applied> -f verify_queries.sql
+-- Usage: psql -d <db with all Flyway migrations applied (V1..V3)> -f verify_queries.sql
 \set ON_ERROR_STOP on
 \set QUIET on
 
@@ -146,20 +146,47 @@ SELECT assert_eq('member analyses count', (SELECT count(*)::text FROM (
   WHERE ia.issue_id = 1 AND ia.is_primary AND a.analysis_json IS NOT NULL
   ORDER BY COALESCE(a.published_at, a.collected_at), a.id) q), '3');
 
--- IssueRepository.updateFields: NULL keeps, summary marks MANUAL, status change
+-- IssueRepository.updateFields: NULL keeps, summary/title mark MANUAL, status change
 \set title null
 \set summary '''관리자 요약'''
 \set category null
 \set status null
-UPDATE issue SET title = COALESCE(:title, title), summary = COALESCE(:summary, summary),
+UPDATE issue SET title = COALESCE(:title, title),
+    title_source = CASE WHEN CAST(:title AS text) IS NULL THEN title_source ELSE 'MANUAL' END,
+    summary = COALESCE(:summary, summary),
     summary_source = CASE WHEN CAST(:summary AS text) IS NULL THEN summary_source ELSE 'MANUAL' END,
     category = COALESCE(:category, category), status = COALESCE(:status, status) WHERE id = 1;
 SELECT assert_eq('manual summary', (SELECT title || '/' || summary || '/' || summary_source || '/' || status FROM issue WHERE id = 1), '이슈1/관리자 요약/MANUAL/ACTIVE');
 \set summary null
-UPDATE issue SET title = COALESCE(:title, title), summary = COALESCE(:summary, summary),
+UPDATE issue SET title = COALESCE(:title, title),
+    title_source = CASE WHEN CAST(:title AS text) IS NULL THEN title_source ELSE 'MANUAL' END,
+    summary = COALESCE(:summary, summary),
     summary_source = CASE WHEN CAST(:summary AS text) IS NULL THEN summary_source ELSE 'MANUAL' END,
     category = COALESCE(:category, category), status = COALESCE(:status, status) WHERE id = 1;
 SELECT assert_eq('null patch keeps MANUAL', (SELECT summary || '/' || summary_source FROM issue WHERE id = 1), '관리자 요약/MANUAL');
+SELECT assert_eq('title untouched stays AUTO', (SELECT title_source FROM issue WHERE id = 1), 'AUTO');
+-- IssueRepository.refreshAutoTitle: AUTO title follows the earliest primary member (or stays when there is none)
+UPDATE issue i SET title = t.title
+FROM (SELECT a.title FROM issue_article ia JOIN news_article a ON a.id = ia.article_id
+      WHERE ia.issue_id = 1 AND ia.is_primary
+      ORDER BY COALESCE(a.published_at, a.collected_at), a.id LIMIT 1) t
+WHERE i.id = 1 AND i.title_source = 'AUTO' AND i.title IS DISTINCT FROM t.title;
+SELECT assert_eq('auto title = earliest member', (SELECT title FROM issue WHERE id = 1),
+  coalesce((SELECT a.title FROM issue_article ia JOIN news_article a ON a.id = ia.article_id WHERE ia.issue_id = 1 AND ia.is_primary
+   ORDER BY COALESCE(a.published_at, a.collected_at), a.id LIMIT 1), (SELECT title FROM issue WHERE id = 1)));
+\set title '''관리자 이슈 제목'''
+UPDATE issue SET title = COALESCE(:title, title),
+    title_source = CASE WHEN CAST(:title AS text) IS NULL THEN title_source ELSE 'MANUAL' END,
+    summary = COALESCE(:summary, summary),
+    summary_source = CASE WHEN CAST(:summary AS text) IS NULL THEN summary_source ELSE 'MANUAL' END,
+    category = COALESCE(:category, category), status = COALESCE(:status, status) WHERE id = 1;
+UPDATE issue i SET title = t.title
+FROM (SELECT a.title FROM issue_article ia JOIN news_article a ON a.id = ia.article_id
+      WHERE ia.issue_id = 1 AND ia.is_primary
+      ORDER BY COALESCE(a.published_at, a.collected_at), a.id LIMIT 1) t
+WHERE i.id = 1 AND i.title_source = 'AUTO' AND i.title IS DISTINCT FROM t.title;
+SELECT assert_eq('manual title survives refresh', (SELECT title || '/' || title_source FROM issue WHERE id = 1), '관리자 이슈 제목/MANUAL');
+\set title null
 
 -- IssueRepository.moveAllMembers + markMerged (CHECK ck_issue_merged_ref requires both)
 UPDATE issue_article SET issue_id = 2, classification_method = 'SPLIT', manually_corrected = TRUE WHERE article_id = 3 AND issue_id = 1 AND is_primary;

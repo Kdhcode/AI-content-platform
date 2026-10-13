@@ -179,10 +179,32 @@ public class IssueRepository {
                 .param("summary", summary).param("id", id).update();
     }
 
-    /** Null arguments leave the column unchanged. A given summary becomes MANUAL so automation never overwrites it. */
+    /**
+     * AUTO titles follow the earliest member article (same order as {@link #memberAnalyses}); MANUAL titles are never
+     * touched. Writes only when the title actually changes, so updated_at (read as activity by auto-close) stays put.
+     * An issue without members keeps its title.
+     */
+    public void refreshAutoTitle(long id) {
+        jdbc.sql("""
+                UPDATE issue i SET title = t.title
+                FROM (SELECT a.title FROM issue_article ia JOIN news_article a ON a.id = ia.article_id
+                      WHERE ia.issue_id = :id AND ia.is_primary
+                      ORDER BY COALESCE(a.published_at, a.collected_at), a.id LIMIT 1) t
+                WHERE i.id = :id AND i.title_source = 'AUTO' AND i.title IS DISTINCT FROM t.title""")
+                .param("id", id).update();
+    }
+
+    /** A title chosen by an admin (e.g. when splitting) is never replaced automatically. */
+    public void markTitleManual(long id) {
+        jdbc.sql("UPDATE issue SET title_source = 'MANUAL' WHERE id = :id AND title_source <> 'MANUAL'")
+                .param("id", id).update();
+    }
+
+    /** Null arguments leave the column unchanged. A given title or summary becomes MANUAL so automation never overwrites it. */
     public void updateFields(long id, String title, String summary, String category, String status) {
         jdbc.sql("""
                 UPDATE issue SET title = COALESCE(:title, title),
+                    title_source = CASE WHEN CAST(:title AS text) IS NULL THEN title_source ELSE 'MANUAL' END,
                     summary = COALESCE(:summary, summary),
                     summary_source = CASE WHEN CAST(:summary AS text) IS NULL THEN summary_source ELSE 'MANUAL' END,
                     category = COALESCE(:category, category),

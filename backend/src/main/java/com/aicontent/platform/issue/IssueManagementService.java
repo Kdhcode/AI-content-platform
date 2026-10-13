@@ -110,6 +110,9 @@ public class IssueManagementService {
         var row = articles.findRow(firstMoved).orElseThrow(() -> new BusinessException(ErrorCode.ARTICLE_NOT_FOUND));
         String title = newTitle == null || newTitle.isBlank() ? row.title() : newTitle.trim();
         long newId = issues.create(title, null, row.category(), "ACTIVE");
+        if (newTitle != null && !newTitle.isBlank()) {
+            issues.markTitleManual(newId);   // the admin chose it: keep it when members change later
+        }
         for (long a : toMove) {
             issues.repointArticle(a, sourceId, newId, "SPLIT");
         }
