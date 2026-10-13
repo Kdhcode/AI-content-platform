@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { api, clearCredentials, setCredentials } from "@/lib/api";
+import { api, ApiFailure, clearCredentials, setCredentials } from "@/lib/api";
 import { ErrorText } from "@/components/ui";
 
 export default function LoginPage() {
@@ -21,7 +21,9 @@ export default function LoginPage() {
       router.replace("/");
     } catch (err) {
       clearCredentials();
-      setError(err);
+      setError(err instanceof ApiFailure && err.status === 401
+        ? new Error("아이디 또는 비밀번호를 확인해 주세요. 기존 관리자 계정의 비밀번호로 로그인해야 합니다.")
+        : err);
     } finally {
       setBusy(false);
     }

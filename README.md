@@ -46,6 +46,10 @@ cd ../admin-ui && cp .env.example .env.local && npm install && npm run dev     #
 ```
 뉴스 소스는 `app.news.sources`(또는 `news_source` 테이블)에 추가합니다. 설정 키와 테스트 실행은 [docs/VERIFY.md](docs/VERIFY.md)를 보세요.
 
+관리자 인증은 DB의 `app_user`와 `user_role`을 사용하는 HTTP Basic 방식입니다. `ADMIN_USERNAME`과 `ADMIN_PASSWORD`는 해당 아이디가 없을 때 최초 계정을 생성하는 설정이며, 기존 계정의 비밀번호를 변경하지 않습니다. 기존 DB에서는 기존 관리자 비밀번호로 `/login`에 로그인하세요.
+
+로그인 정보는 현재 탭의 `sessionStorage`에 저장되고, 각 `/api/admin/*` 요청에 인증 헤더로 첨부됩니다. Next.js가 `BACKEND_URL`의 백엔드로 요청을 프록시합니다. 새 탭이나 다른 호스트(`localhost`와 `127.0.0.1` 포함)에서는 다시 로그인해야 합니다. 인증 정보가 없거나 유효하지 않으면 로그인 화면으로 이동합니다. 비밀번호나 인증 헤더를 로그 또는 Git에 남기지 마세요.
+
 ## 주요 설정(`application.yml`, 환경 변수)
 `DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub|openai), `OPENAI_API_KEY/OPENAI_CHAT_MODEL/OPENAI_EMBEDDING_MODEL`, `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전), `app.ai.pricing`(모델별 단가, 비용 기록용).
 

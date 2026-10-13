@@ -13,7 +13,7 @@ export class ApiFailure extends Error {
 const KEY = "admin-basic-auth";
 
 export function setCredentials(username: string, password: string) {
-  sessionStorage.setItem(KEY, btoa(unescape(encodeURIComponent(`${username}:${password}`))));
+  sessionStorage.setItem(KEY, btoa(unescape(encodeURIComponent(`${username.trim()}:${password}`))));
 }
 export function clearCredentials() {
   sessionStorage.removeItem(KEY);
@@ -24,6 +24,10 @@ export function hasCredentials(): boolean {
 
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const token = sessionStorage.getItem(KEY);
+  if (!token) {
+    if (window.location.pathname !== "/login") window.location.replace("/login");
+    throw new ApiFailure(401, "UNAUTHORIZED", "로그인이 필요합니다. 관리자 계정으로 로그인해 주세요.");
+  }
   const res = await fetch(path, {
     method: init.method ?? "GET",
     headers: {
@@ -38,9 +42,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   } catch {
     // non-JSON body (proxy error page etc.)
   }
-  if (res.status === 401) {
+  if (res.status === 401 && sessionStorage.getItem(KEY) === token) {
     clearCredentials();
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") window.location.href = "/login";
+    if (window.location.pathname !== "/login") window.location.replace("/login");
   }
   if (!res.ok || !envelope || !envelope.success) {
     throw new ApiFailure(res.status, envelope?.error?.code ?? "HTTP_" + res.status, envelope?.error?.message ?? res.statusText);
