@@ -215,3 +215,7 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 2026-10-13 · 같은 기준 · `npm run typecheck`·`npm run build` **미실행**(npm 레지스트리 403). TypeScript 6.0.3 구문 검사 통과, React/Next 최소 shim으로 바뀐 페이지 타입 검사: 원본 페이지에도 똑같이 나는 shim 한계 1건 외 오류 0. `verify:ai-usage` **미실행**
 - 2026-10-13 · 같은 기준 · `tools/codex_review.py`의 비밀 검사(`scan_secrets` + 문맥 문서)를 코드 커밋 4개에 실행 · 탐지 0건, diff 크기 모두 제한(180,000자) 이하
 - 2026-10-13 · 6절 2차(이슈 제목 V3, 묶음 판별 평가, 락 범위) · 같은 클라우드 환경. V3 마이그레이션을 V1·V2가 적용된 새 DB에 실행해 백필 5가지 경우(자동/관리자 수정/분리 후 남은 옛 제목/분리 시 입력/상태만 수정) 확인, 제목 갱신 SQL이 두 번째 실행에서 0행(불필요한 `updated_at` 변경 없음)인 것 확인. V1~V3 위에서 `verify_schema.sql`·`verify_queries.sql`(제목 규칙 사본 추가) **둘 다 통과**. `javac` 비교 새 오류 0(라이브러리 부재 제외), TypeScript 구문 검사 통과, 비밀 검사 0건. `mvn test`·`npm run build` **미실행**(같은 이유)
+- 2026-10-13 · 기준 `0cfe5ee`(브랜치 `claude/ops-policy`: `191bc8b` 위에 `.local/patches/2026-10-13/` 패치 9개를 `git am`으로 적용, 충돌 없음) · 사용자 PC(Windows 10, Temurin 25, Maven 3.9.9, 로컬 PostgreSQL 16 `127.0.0.1:55432/aicontent_test`, `DB_PASSWORD`는 세션 전용 임의 값) · `mvn test` · **143개 통과, 실패 0, 오류 0, 건너뜀 0** (예상 143개와 일치. V3 마이그레이션이 테스트 DB에 적용됨)
+- 2026-10-13 · 같은 기준 · 사용자 PC(Node 24.19.0) · `npm run typecheck` · **통과** / `npm run build` · **통과**
+- 2026-10-13 · 같은 기준 · `npm run verify:ai-usage`·`verify:dashboard`·`verify:flow`, 실제 OpenAI 호출, `python -m unittest discover -s tools` · **미실행** (이번 지시 범위 밖). 한도 표시가 추가된 `/ai-usage` 화면과 이슈 상세 화면은 브라우저로 **미확인**
+- 2026-10-13 · `claude/ops-policy`를 GitHub에 push(`git push -u main claude/ops-policy`. 이 저장소의 원격 이름은 `origin`이 아니라 `main`). `main` 브랜치에는 병합하지 않음
