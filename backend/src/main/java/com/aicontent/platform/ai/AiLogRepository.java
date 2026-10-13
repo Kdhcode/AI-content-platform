@@ -34,6 +34,26 @@ public class AiLogRepository {
                 .update();
     }
 
+    /**
+     * Clears {@code response} (raw model output) of at most {@code batchSize} rows older than {@code days}. Tokens, cost,
+     * model and success stay, so usage and cost history are unaffected.
+     *
+     * @return number of rows cleared (less than {@code batchSize} means nothing more is due)
+     */
+    public int clearResponsesOlderThan(int days, int batchSize) {
+        return jdbc.sql("""
+                UPDATE ai_log SET response = NULL
+                WHERE id IN (
+                    SELECT id FROM ai_log
+                    WHERE response IS NOT NULL AND created_at < now() - make_interval(days => :days)
+                    ORDER BY id
+                    LIMIT :batch
+                    FOR UPDATE SKIP LOCKED)""")
+                .param("days", days)
+                .param("batch", batchSize)
+                .update();
+    }
+
     private static String cut(String s, int max) {
         return s == null || s.length() <= max ? s : s.substring(0, max);
     }

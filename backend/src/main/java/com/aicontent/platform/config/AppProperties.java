@@ -19,7 +19,8 @@ public record AppProperties(
         @DefaultValue Classifier classifier,
         @DefaultValue Prompts prompts,
         @DefaultValue Admin admin,
-        @DefaultValue Lock lock) {
+        @DefaultValue Lock lock,
+        @DefaultValue Retention retention) {
 
     public record Worker(
             @DefaultValue("true") boolean enabled,
@@ -88,4 +89,16 @@ public record AppProperties(
             /** true => Redis lock; false => in-JVM lock (correct for a single instance only). */
             @DefaultValue("false") boolean redisEnabled,
             @DefaultValue("300") long ttlSeconds) {}
+
+    /**
+     * Data retention (OPEN ITEM #8). The retention period itself is a policy decision, so nothing is removed by
+     * default: 0 means "keep forever".
+     */
+    public record Retention(
+            /** Days to keep ai_log.response (raw model output). Older rows keep their metadata; only the text is cleared. */
+            @DefaultValue("0") int aiLogResponseDays,
+            /** Rows cleared per statement; a run repeats statements until nothing is left (bounded per run). */
+            @DefaultValue("1000") int batchSize,
+            /** Delay between runs (read by the @Scheduled placeholder). */
+            @DefaultValue("3600000") long intervalMs) {}
 }

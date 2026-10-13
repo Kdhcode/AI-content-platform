@@ -11,7 +11,7 @@
 | 5 | 관리자 최종 인증 방식(세션/JWT/OIDC), 비밀번호 정책, 로그인 잠금 | HTTP Basic | `security/SecurityConfig`, `admin-ui/src/lib/api.ts` |
 | 6 | 배포 환경(컨테이너/오케스트레이션), 시크릿 관리, DB·Redis 호스팅 | `docker-compose.yml`은 로컬 개발·테스트용 | 배포 방식 확정 후 Dockerfile/CI 추가 |
 | 7 | 분류 처리량(전역 락) | 정확성 우선 직렬 처리. 락 대기 300초·TTL 300초(`app.classifier.lock-wait-seconds`, `app.lock.ttl-seconds`). **2026-10-12:** 재큐 경로 구현 — `LOCK_TIMEOUT`은 `retry_count`를 쓰지 않고 `defer_count`만 올려 30초 뒤 다시 실행, 20회 초과 시 FAILED(`app.worker.defer-delay-seconds`, `app.worker.max-defers`). 락 단위 세분화는 미결 | 수집량이 늘면 후보 클러스터/카테고리 단위 락 또는 파티셔닝 검토 |
-| 8 | 개인정보/로그 보존 정책(`ai_log.response` 원문 보관 기간) | 무기한, 20,000자 절단 | 보존 기간 확정 후 정리 배치 추가 |
+| 8 | 개인정보/로그 보존 정책(`ai_log.response` 원문 보관 기간) | 무기한, 20,000자 절단. **2026-10-13:** 정리 배치 구현(`AiLogRetentionService`). 기본 꺼짐(0일 = 무기한), 켜면 기간이 지난 행의 원문만 비우고 토큰·비용 기록은 남김. 행 자체 삭제, `error_message`·기사 본문(`analysis_text`) 보존 기간은 미구현 | 보존 기간을 정해 `app.retention.ai-log-response-days`(환경 변수 `AI_LOG_RESPONSE_RETENTION_DAYS`)에 입력 |
 | 9 | 이슈 종료/오래된 이슈 정리 정책(자동 CLOSED 시점) | 멤버 0명일 때만 CLOSED | 정책 확정 후 스케줄러 추가 |
 | 10 | AI 비용 한도·호출 속도 제한 | 없음(워커 동시성 4가 사실상 한도). **2026-10-12:** 관찰용 화면만 추가(`GET /api/admin/ai-usage`, 관리자 UI `/ai-usage`: 일자·호출 유형·모델별 호출 수·실패·토큰·비용). 한도·자동 차단은 미구현 | `app.worker.concurrency`, 공급자별 레이트 리미터는 `AiClient` 구현 안에 |
 

@@ -67,6 +67,12 @@ app:
       max-completion-tokens: ${OPENAI_MAX_COMPLETION_TOKENS:4096}
   lock:
     redis-enabled: ${LOCK_REDIS_ENABLED:false}
+  retention:
+    # Days to keep ai_log.response (raw model output). 0 = keep forever. The period is a policy decision (OPEN ITEM #8),
+    # so nothing is cleared by default. Only the text is cleared; tokens, cost and model stay for the usage screen.
+    ai-log-response-days: ${AI_LOG_RESPONSE_RETENTION_DAYS:0}
+    batch-size: 1000
+    interval-ms: 3600000
   admin:
     bootstrap-username: ${ADMIN_USERNAME:}
     bootstrap-password: ${ADMIN_PASSWORD:}
