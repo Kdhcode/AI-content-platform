@@ -90,6 +90,11 @@ app:
     auto-close-after-days: ${ISSUE_AUTO_CLOSE_AFTER_DAYS:0}
     batch-size: 100
     interval-ms: 3600000
+  classifier:
+    # GLOBAL: one classification lock (no duplicate issue for a brand-new event, serial classification).
+    # CATEGORY: one lock per analysed category, so categories classify in parallel; same-event articles analysed into
+    # different categories may then create two issues (merge in the admin UI). OPEN ITEM #7.
+    lock-scope: ${CLASSIFIER_LOCK_SCOPE:GLOBAL}
   admin:
     bootstrap-username: ${ADMIN_USERNAME:}
     bootstrap-password: ${ADMIN_PASSWORD:}

@@ -99,7 +99,14 @@ public record AppProperties(
             @DefaultValue("ACTIVE") List<String> candidateIssueStatuses,
             @DefaultValue("0.85") double sameIssueMinConfidence,
             @DefaultValue("0.70") double newIssueMinConfidence,
-            @DefaultValue("300") long lockWaitSeconds) {}
+            @DefaultValue("300") long lockWaitSeconds,
+            /**
+             * What the classification lock covers (OPEN ITEM #7). GLOBAL (default): one lock for everything, so two
+             * articles about a brand-new event can never both create an issue. CATEGORY: one lock per analysed category,
+             * so categories classify in parallel; two same-event articles analysed into different categories may then
+             * create two issues (REVIEW/merge recovers it).
+             */
+            @DefaultValue("GLOBAL") String lockScope) {}
 
     public record Prompts(
             @DefaultValue("v1") String articleAnalysisVersion,

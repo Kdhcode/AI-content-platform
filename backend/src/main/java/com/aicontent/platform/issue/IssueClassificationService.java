@@ -32,7 +32,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <ul>
  *   <li>The whole step runs under one lock ({@value #LOCK_KEY}), otherwise two articles about a brand-new event
- *       could both find no candidate and create two issues. Throughput is traded for correctness (documented).</li>
+ *       could both find no candidate and create two issues. Throughput is traded for correctness (documented).
+ *       {@code app.classifier.lock-scope=CATEGORY} narrows it to one lock per analysed category (opt-in).</li>
  *   <li>The LLM call happens outside any database transaction; only the final apply step is transactional.</li>
  *   <li>REVIEW creates a provisional issue (status REVIEW) so no article is left unlinked; the admin merges or
  *       confirms it.</li>
@@ -56,6 +57,7 @@ public class IssueClassificationService {
     private final TransactionTemplate tx;
     private final Json json;
     private final AppProperties props;
+    private final LockScope lockScope;
 
     public IssueClassificationService(NewsArticleRepository articles, IssueCandidateFinder finder, IssueRepository issues,
                                       IssueAggregateService aggregates, ClassificationRunRepository runs,
@@ -72,6 +74,26 @@ public class IssueClassificationService {
         this.tx = tx;
         this.json = json;
         this.props = props;
+        this.lockScope = parseLockScope(props.classifier().lockScope());
+    }
+
+    enum LockScope { GLOBAL, CATEGORY }
+
+    /** {@value #LOCK_KEY} for GLOBAL; {@value #LOCK_KEY}{@code :<CATEGORY>} for CATEGORY (no category -> NONE). */
+    static String lockKey(LockScope scope, String category) {
+        if (scope == LockScope.GLOBAL) {
+            return LOCK_KEY;
+        }
+        String c = category == null || category.isBlank() ? "NONE" : category.trim().toUpperCase(java.util.Locale.ROOT);
+        return LOCK_KEY + ":" + c;
+    }
+
+    static LockScope parseLockScope(String value) {
+        try {
+            return LockScope.valueOf(value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("app.classifier.lock-scope must be GLOBAL or CATEGORY, was '" + value + "'");
+        }
     }
 
     public Map<String, Object> classify(long articleId, long asyncJobId) {
@@ -84,14 +106,16 @@ public class IssueClassificationService {
             throw new JobExecutionException("ARTICLE_NOT_READY",
                     "article " + articleId + " needs analysis and embedding before classification", false);
         }
-        var handle = lock.acquire(LOCK_KEY, Duration.ofSeconds(props.lock().ttlSeconds()),
+        JsonNode analysis = json.parse(article.analysisJson());
+        String key = lockKey(lockScope, analysis.path("category").asText(null));
+        var handle = lock.acquire(key, Duration.ofSeconds(props.lock().ttlSeconds()),
                 Duration.ofSeconds(props.classifier().lockWaitSeconds()));
         if (handle.isEmpty()) {
             // Nothing is wrong with the article: put the job back without consuming a retry.
-            throw new JobDeferredException("LOCK_TIMEOUT", "could not obtain " + LOCK_KEY + " lock");
+            throw new JobDeferredException("LOCK_TIMEOUT", "could not obtain " + key + " lock");
         }
         try (var ignored = handle.get()) {
-            return classifyLocked(article, json.parse(article.analysisJson()), asyncJobId);
+            return classifyLocked(article, analysis, asyncJobId);
         }
     }
 
