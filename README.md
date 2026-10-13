@@ -1,7 +1,7 @@
 # AI 정보 콘텐츠 플랫폼 — Phase 1: 뉴스 ISSUE 엔진
 
 뉴스를 수집해 AI로 분석하고, **같은 사건의 기사를 하나의 ISSUE로 묶고**, 관리자가 검수·병합·분리·수정하는 백엔드 + 최소 관리자 UI입니다.
-(Phase 1 범위 밖: 일반 사용자 계정, 좋아요/북마크, TV, 발행, SEO, 통계)
+(Phase 1 범위 밖: 일반 사용자 계정, 좋아요/북마크, TV, 발행, SEO, 통계. 추가 구현: 로그인 없이 읽는 일반 사용자 뉴스룸)
 
 ```
 수집(COLLECT_NEWS) → URL/제목 중복 제거 → NEWS_ARTICLE 저장
@@ -21,7 +21,7 @@
 | `backend/src/main/resources/db/migration` | Flyway 스키마 `V1__phase1_schema.sql` (PostgreSQL + pgvector), `V2__job_defer_count.sql` (락 대기 재큐 횟수), `V3__issue_title_source.sql` (제목 AUTO/MANUAL) |
 | `backend/src/main/resources/prompts` | 버전 관리되는 프롬프트(`article-analysis/v1`, `issue-classifier/v1`: system/user/schema/meta) |
 | `backend/src/test` | 단위·통합 테스트, 검증 SQL(`resources/sql`), 고정 평가 세트(`resources/eval`) |
-| `admin-ui/` | Next.js + TypeScript 최소 관리자 화면(이슈/기사/작업) |
+| `admin-ui/` | Next.js + TypeScript 관리자 화면과 일반 사용자 뉴스룸(`/news`) |
 | `docker-compose.yml` | 로컬 PostgreSQL(pgvector) + Redis |
 | `docs/` | [DECISIONS](docs/DECISIONS.md) 설계 결정 · [OPEN_ITEMS](docs/OPEN_ITEMS.md) 미확정 · [API](docs/API.md) · [VERIFY](docs/VERIFY.md) 검증/실행 · [EVALUATION](docs/EVALUATION.md) 평가 |
 
@@ -34,6 +34,7 @@
 ## 빠른 시작
 
 관리자 첫 화면은 실제 DB 현황을 보여주는 대시보드입니다. 기사·이슈·작업·RSS 소스 관리와 검수 화면으로 이동할 수 있습니다.
+일반 사용자 화면은 **http://localhost:3000/news** 입니다. 로그인 없이 이슈 검색·카테고리 필터·페이지 이동·이슈 상세·언론사 원문 열기를 이용할 수 있습니다. 관리자 화면은 기존 `/` 경로이며 `/login`에서 로그인합니다.
 현재 Windows 로컬 DB의 생성 과정과 접속 설정은 [docs/DB_SETUP.md](docs/DB_SETUP.md)에 있습니다.
 
 DB 비밀번호는 기본값이 없습니다. 실행 전에 `DB_PASSWORD`를 환경 변수로 지정하세요(값은 문서·Git에 남기지 않음). 비밀번호 없이 접속하는 로컬 trust DB에서도 설정 해석을 위해 임의 값을 지정해야 합니다.
@@ -49,6 +50,8 @@ cd ../admin-ui && cp .env.example .env.local && npm install && npm run dev     #
 관리자 인증은 DB의 `app_user`와 `user_role`을 사용하는 HTTP Basic 방식입니다. `ADMIN_USERNAME`과 `ADMIN_PASSWORD`는 해당 아이디가 없을 때 최초 계정을 생성하는 설정이며, 기존 계정의 비밀번호를 변경하지 않습니다. 기존 DB에서는 기존 관리자 비밀번호로 `/login`에 로그인하세요.
 
 로그인 정보는 현재 탭의 `sessionStorage`에 저장되고, 각 `/api/admin/*` 요청에 인증 헤더로 첨부됩니다. Next.js가 `BACKEND_URL`의 백엔드로 요청을 프록시합니다. 새 탭이나 다른 호스트(`localhost`와 `127.0.0.1` 포함)에서는 다시 로그인해야 합니다. 인증 정보가 없거나 유효하지 않으면 로그인 화면으로 이동합니다. 비밀번호나 인증 헤더를 로그 또는 Git에 남기지 마세요.
+
+일반 사용자 뉴스룸은 인증 정보를 보내지 않는 별도 클라이언트와 읽기 전용 API(`GET /api/public/issues`, `GET /api/public/issues/{id}`, `GET /api/public/categories`)를 사용합니다. `ACTIVE`·`CLOSED` 이슈만 공개하며 검수 대기·제외·병합 이슈, 내부 AI 판단·작업·감사 데이터는 응답에 포함하지 않습니다. 현재 스텁 AI로 생성된 요약도 있어 참고용으로 읽고 원문을 확인해야 합니다. 별도 발행 승인 절차는 아직 없습니다.
 
 ## 주요 설정(`application.yml`, 환경 변수)
 `DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub|openai), `OPENAI_API_KEY/OPENAI_CHAT_MODEL/OPENAI_EMBEDDING_MODEL`, `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전), `app.ai.pricing`(모델별 단가, 비용 기록용).

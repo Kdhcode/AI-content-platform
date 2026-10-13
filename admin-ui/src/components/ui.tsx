@@ -48,6 +48,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {link("/sources", "뉴스 소스", "◎")}
           {link("/jobs", "작업", "⇄")}
           {link("/ai-usage", "AI 사용량", "◔")}
+          <Link href="/news"><span className="nav-icon" aria-hidden="true">↗</span>일반 사용자 화면</Link>
         </nav>
         <div className="sidebar-note"><span className="status-dot" /> Phase 1 · 뉴스 이슈 엔진
           <p>수집에서 검수까지,<br />뉴스의 흐름을 한곳에서.</p></div>

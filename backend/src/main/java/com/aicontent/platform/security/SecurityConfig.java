@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .accessDeniedHandler((req, res, ex) -> writeError(mapper, res, ErrorCode.FORBIDDEN)))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/issues", "/api/public/issues/*", "/api/public/categories").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/admin/jobs/*/retry", "/api/admin/jobs/*/cancel",
                                 "/api/admin/sources/*/collect").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("OPERATOR", "SYSTEM_ADMIN")

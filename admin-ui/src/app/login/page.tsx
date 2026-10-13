@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { api, ApiFailure, clearCredentials, setCredentials } from "@/lib/api";
 import { ErrorText } from "@/components/ui";
@@ -39,7 +40,7 @@ export default function LoginPage() {
         <div className="row"><input id="password" type="password" placeholder="비밀번호" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></div>
         <button className="primary" disabled={busy || !username || !password}>로그인</button>
         <ErrorText error={error} />
-      </form><p className="login-note">허가된 관리자 계정으로 이용할 수 있습니다.</p>
+      </form><p className="login-note">허가된 관리자 계정으로 이용할 수 있습니다.</p><p className="login-note"><Link href="/news">일반 사용자 뉴스룸 보기 →</Link></p>
     </main></div>
   );
 }
