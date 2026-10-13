@@ -73,6 +73,14 @@ app:
     ai-log-response-days: ${AI_LOG_RESPONSE_RETENTION_DAYS:0}
     batch-size: 1000
     interval-ms: 3600000
+  issue-lifecycle:
+    # ACTIVE issues with no new article and no change for this many days become CLOSED (audit log ISSUE_AUTO_CLOSE).
+    # 0 = never. When an issue is "over" is a policy decision (OPEN ITEM #9). REVIEW issues are never auto-closed.
+    # A closed issue is no longer a classification candidate, so keep this >= app.classifier.candidate-window-days (30)
+    # unless follow-up articles should start new issues sooner.
+    auto-close-after-days: ${ISSUE_AUTO_CLOSE_AFTER_DAYS:0}
+    batch-size: 100
+    interval-ms: 3600000
   admin:
     bootstrap-username: ${ADMIN_USERNAME:}
     bootstrap-password: ${ADMIN_PASSWORD:}

@@ -1,5 +1,7 @@
 package com.aicontent.platform.issue;
 
+import com.aicontent.platform.common.Sql;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -94,6 +96,34 @@ public class IssueRepository {
         jdbc.sql("""
                 UPDATE issue SET status = 'MERGED', merged_into_issue_id = :target WHERE id = :source""")
                 .param("source", sourceIssueId).param("target", targetIssueId).update();
+    }
+
+    public record ClosedIssue(long id, String title, OffsetDateTime lastActivityAt) {}
+
+    /**
+     * Closes up to {@code limit} ACTIVE issues whose last activity is older than {@code days}. Last activity is the
+     * later of the newest member article time ({@code last_updated_at}, or creation when there is none) and the last
+     * change of the issue row ({@code updated_at}: membership refresh, admin edit). Rows locked by someone else (an
+     * admin action or a classification applying to that issue) are skipped and picked up by a later run.
+     */
+    public List<ClosedIssue> closeInactive(int days, int limit) {
+        return jdbc.sql("""
+                WITH stale AS (
+                    SELECT id, GREATEST(COALESCE(last_updated_at, created_at), updated_at) AS last_activity_at
+                    FROM issue
+                    WHERE status = 'ACTIVE'
+                      AND GREATEST(COALESCE(last_updated_at, created_at), updated_at) < now() - make_interval(days => :days)
+                    ORDER BY id
+                    LIMIT :limit
+                    FOR UPDATE SKIP LOCKED)
+                UPDATE issue i SET status = 'CLOSED'
+                FROM stale
+                WHERE i.id = stale.id AND i.status = 'ACTIVE'
+                RETURNING i.id, i.title, stale.last_activity_at""")
+                .param("days", days)
+                .param("limit", limit)
+                .query((rs, n) -> new ClosedIssue(rs.getLong("id"), rs.getString("title"), Sql.odt(rs, "last_activity_at")))
+                .list();
     }
 
     public void updateStatus(long id, String status) {

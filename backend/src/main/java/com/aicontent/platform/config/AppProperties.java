@@ -20,7 +20,8 @@ public record AppProperties(
         @DefaultValue Prompts prompts,
         @DefaultValue Admin admin,
         @DefaultValue Lock lock,
-        @DefaultValue Retention retention) {
+        @DefaultValue Retention retention,
+        @DefaultValue IssueLifecycle issueLifecycle) {
 
     public record Worker(
             @DefaultValue("true") boolean enabled,
@@ -99,6 +100,20 @@ public record AppProperties(
             @DefaultValue("0") int aiLogResponseDays,
             /** Rows cleared per statement; a run repeats statements until nothing is left (bounded per run). */
             @DefaultValue("1000") int batchSize,
+            /** Delay between runs (read by the @Scheduled placeholder). */
+            @DefaultValue("3600000") long intervalMs) {}
+
+    /**
+     * Automatic closing of inactive issues (OPEN ITEM #9). When to close is a policy decision, so it is off by default.
+     */
+    public record IssueLifecycle(
+            /**
+             * ACTIVE issues with no new article and no change for this many days become CLOSED. 0 = never (default).
+             * REVIEW issues are never closed automatically: they wait for an admin.
+             */
+            @DefaultValue("0") int autoCloseAfterDays,
+            /** Issues closed per transaction; a run repeats batches (bounded per run). */
+            @DefaultValue("100") int batchSize,
             /** Delay between runs (read by the @Scheduled placeholder). */
             @DefaultValue("3600000") long intervalMs) {}
 }
