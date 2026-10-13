@@ -18,7 +18,7 @@
 | 위치 | 내용 |
 |---|---|
 | `backend/` | Spring Boot 3.3 / Java 21 모듈러 모놀리스. 패키지: `news`(수집·중복 제거), `ai`(공급자 추상화·프롬프트·검증), `issue`(분류·집계·관리), `job`(ASYNC_JOB 워커), `admin`(REST), `security`, `lock`, `audit`, `common`, `config` |
-| `backend/src/main/resources/db/migration` | Flyway 스키마 `V1__phase1_schema.sql` (PostgreSQL + pgvector) |
+| `backend/src/main/resources/db/migration` | Flyway 스키마 `V1__phase1_schema.sql` (PostgreSQL + pgvector), `V2__job_defer_count.sql` (락 대기 재큐 횟수) |
 | `backend/src/main/resources/prompts` | 버전 관리되는 프롬프트(`article-analysis/v1`, `issue-classifier/v1`: system/user/schema/meta) |
 | `backend/src/test` | 단위·통합 테스트, 검증 SQL(`resources/sql`), 고정 평가 세트(`resources/eval`) |
 | `admin-ui/` | Next.js + TypeScript 최소 관리자 화면(이슈/기사/작업) |
@@ -47,4 +47,12 @@ cd ../admin-ui && cp .env.example .env.local && npm install && npm run dev     #
 뉴스 소스는 `app.news.sources`(또는 `news_source` 테이블)에 추가합니다. 설정 키와 테스트 실행은 [docs/VERIFY.md](docs/VERIFY.md)를 보세요.
 
 ## 주요 설정(`application.yml`, 환경 변수)
-`DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub|openai), `OPENAI_API_KEY/OPENAI_CHAT_MODEL/OPENAI_EMBEDDING_MODEL`, `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전).
+`DB_URL/DB_USER/DB_PASSWORD`, `REDIS_HOST/REDIS_PORT`, `AI_PROVIDER`(none|stub|openai), `OPENAI_API_KEY/OPENAI_CHAT_MODEL/OPENAI_EMBEDDING_MODEL`, `LOCK_REDIS_ENABLED`, `ADMIN_USERNAME/ADMIN_PASSWORD`(초기 SYSTEM_ADMIN, 비우면 계정 없음), `app.worker.*`(동시성·재시도·하트비트), `app.news.*`, `app.classifier.*`(후보 수·임계값), `app.prompts.*`(프롬프트 버전), `app.ai.pricing`(모델별 단가, 비용 기록용).
+
+운영 정책 설정(모두 **기본 꺼짐**, 값은 정책 결정 후 입력 — `docs/OPEN_ITEMS.md` #8~#10):
+
+| 환경 변수 / 설정 키 | 효과 |
+|---|---|
+| `AI_LOG_RESPONSE_RETENTION_DAYS` / `app.retention.ai-log-response-days` | 이 일수보다 오래된 `ai_log`의 모델 응답 원문만 비움(토큰·비용 기록은 유지) |
+| `ISSUE_AUTO_CLOSE_AFTER_DAYS` / `app.issue-lifecycle.auto-close-after-days` | 이 일수 동안 활동 없는 ACTIVE 이슈를 CLOSED로(감사 로그 `ISSUE_AUTO_CLOSE`). REVIEW는 제외 |
+| `AI_DAILY_MAX_CALLS`, `AI_MAX_CALLS_PER_MINUTE`, `app.ai.limits.daily-budget-usd` | AI 호출 한도. 닿으면 작업이 실패하지 않고 대기(하루 한도는 다음 날까지). 예산은 `app.ai.pricing`이 있어야 동작 |

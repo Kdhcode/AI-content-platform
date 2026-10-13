@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-09 19:40 KST · 기준 커밋 `f2c985c` + 이번 커밋(`f2c985c` 리뷰 반영, push 전) (`main`, GitHub `Kdhcode/AI-content-platform`)
+최종 갱신: 2026-10-13 KST · 기준 커밋 `191bc8b` + 이번 커밋 5개(아래 6절, 패치로 전달·PC 검증 전) (`main`, GitHub `Kdhcode/AI-content-platform`)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -151,6 +151,27 @@
 ### 하지 않을 것
 Phase 2 기능(초안 생성·제목 추천 등), 예산 초과 시 자동 차단, 공급자별 레이트 리미터, 분류 락 세분화. 필요하면 OPEN ITEM으로 남긴다.
 
+## 6. 구현: 운영 정책 기능 (2026-10-13, 클라우드 작성 · PC 검증 대기)
+
+범위 근거: 사용자가 "사용자 결정·API 키·PC 실행이 필요 없는 것"을 만들라고 요청(10-13). OPEN ITEM #8·#9·#10의 **동작 장치**만 만들고,
+정책 값(보존 일수, 종료 기준 일수, 예산·호출 한도)은 정하지 않았다. 세 기능 모두 **기본 꺼짐**이라 설정하지 않으면 기존 동작과 같다.
+Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
+
+| 커밋 | 내용 |
+|---|---|
+| `feat(retention)` | `AiLogRetentionService`: `app.retention.ai-log-response-days`보다 오래된 `ai_log.response`만 NULL. 행·토큰·비용 유지. 1시간마다 1,000행 단위 |
+| `feat(issue)` | `IssueAutoCloseService`: `app.issue-lifecycle.auto-close-after-days` 동안 활동 없는 ACTIVE 이슈 → CLOSED + 감사 로그 `ISSUE_AUTO_CLOSE`(actor `system`). REVIEW 제외, `SKIP LOCKED` |
+| `feat(ai)` | `AiUsageLimiter`: `app.ai.limits`(하루 예산·하루 호출 수·분당 호출 수). 닿으면 작업이 실패하지 않고 대기(`AsyncJobRepository.postpone`, 재시도·재큐 횟수 미사용). 사용량 API·화면에 한도 표시 |
+| `fix(ai)` | 실패한 AI 호출의 `ai_log.model`이 NULL이던 문제(공급자 오류 → 요청 모델, 차원 오류 → 응답 모델·토큰) |
+| `docs` | README 설정표, VERIFY·DB_SETUP의 V2 반영, 이 절 |
+
+**PC에서 할 일** (클라우드에서는 Maven Central·npm 레지스트리가 막혀 Java 컴파일과 프런트 빌드를 하지 못했다):
+1. 패치 적용: `git am <패치들>` (기준 `191bc8b`, 순서대로)
+2. `mvn test` — 예상 **131개**(기존 109 + 새 22: `AiLogRetentionServiceTest` 4, `AiLogRetentionIntegrationTest` 1, `IssueAutoCloseIntegrationTest` 2, `MaintenanceDefaultsIntegrationTest` 1, `AiUsageLimiterTest` 8, `AiLimitIntegrationTest` 1, `AsyncJobIntegrationTest` +1, `AiUsageApiIntegrationTest` +1, `EmbeddingServiceLogTest` 3). 컴파일 오류가 나면 이 절의 기록과 함께 알려준다
+3. `npm run typecheck`, `npm run build`
+4. 서버를 띄운 상태에서 `npm run verify:ai-usage` (한도 패널은 `.stat-value`·표를 쓰지 않아 기존 검증 항목은 그대로여야 함). 한도 패널 화면 확인은 `AI_DAILY_MAX_CALLS=2` 같은 값을 넣고 1회
+5. 결과를 4절 형식으로 기록
+
 ## 4. 구현 변경 내용과 실행한 검증
 
 작업자가 아래에 추가한다. 형식: 날짜 · 기준 커밋 · 실행 명령 · 결과(통과/실패/미실행).
@@ -182,3 +203,8 @@ Phase 2 기능(초안 생성·제목 추천 등), 예산 초과 시 자동 차�
 - 2026-10-12 · 같은 기준 · 사용자 PC(Node 24.19.0) · `npm run typecheck` · **통과** / `npm run build` · **통과**(`/ai-usage` 포함 10개 경로)
 - 2026-10-12 · 같은 기준 · `npm run verify:ai-usage`(새 스크립트, Chrome headless) · **PASS** — 1440px·390px, 기간 1·7·30일 전환, 화면 합계와 API 합계 일치, "단가 미설정" 표시 행 수 일치, 390px 가로 넘침 없음, 브라우저 오류·API 실패 0. 임시 빈 DB(`aicontent_uicheck`)에 stub 백엔드와 관리자 UI를 띄우고 `ai_log`에 손으로 넣은 예시 7행으로 확인했으며, 끝난 뒤 임시 DB는 삭제함. 예시 행의 토큰·비용은 임의 값이고 실제 OpenAI 호출이 아님. 캡처: `.local/screenshots/ai-usage-desktop.png`, `ai-usage-mobile.png`(Git 제외). 390px에서 표는 기존 목록 화면처럼 가로 스크롤되고 일자 칸이 두 줄로 접힘(미수정)
 - 2026-10-12 · 5절 A의 작업 화면 "대기 재큐" 열 · 브라우저 **미확인** (이번 화면 확인은 `/ai-usage`만)
+
+- 2026-10-13 · 6절 기능 구현(기준 `191bc8b` + 커밋 5개) · 클라우드 Linux(OpenJDK 21.0.12, PostgreSQL 16.15 + pgvector 0.8.0 소스 빌드). 새 SQL 6종(응답 원문 정리, 비활동 이슈 종료, 사용량 스냅샷, `postpone`, 테스트 고정 데이터 2종)을 실제 PG에서 실행해 확인: 정리는 배치 2·2·1 후 종료, 최근 원문과 토큰·비용 유지 / 종료는 오래된 ACTIVE 2건만, 최근 수정·최근 기사·REVIEW 유지, **다른 세션이 행 잠금 중인 이슈는 건너뛰고 잠금이 풀린 뒤 다음 실행에서 종료** / 스냅샷은 서버 시간대를 UTC로 두고도 KST 자정 포함·전날 제외, 단가 없는 호출 비용 제외, 최근 1분 경계, 다음 날까지 초 / `postpone`은 소유자만, 횟수 불변
+- 2026-10-13 · 같은 기준 · `mvn test` **미실행**(Maven Central 403). 대신 의존성 없이 `javac`로 HEAD와 작업본의 진단을 비교: 새 진단은 모두 라이브러리 부재(Spring·JUnit·AssertJ)에서 나온 것이고 구문 오류·프로젝트 클래스 참조 오류는 0. 라이브러리 타입이 걸린 호출(`JdbcClient`, `TransactionTemplate`, AssertJ 등)은 이 방법으로 확인되지 않음
+- 2026-10-13 · 같은 기준 · `npm run typecheck`·`npm run build` **미실행**(npm 레지스트리 403). TypeScript 6.0.3 구문 검사 통과, React/Next 최소 shim으로 바뀐 페이지 타입 검사: 원본 페이지에도 똑같이 나는 shim 한계 1건 외 오류 0. `verify:ai-usage` **미실행**
+- 2026-10-13 · 같은 기준 · `tools/codex_review.py`의 비밀 검사(`scan_secrets` + 문맥 문서)를 코드 커밋 4개에 실행 · 탐지 0건, diff 크기 모두 제한(180,000자) 이하
