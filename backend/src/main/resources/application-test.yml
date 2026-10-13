@@ -4,6 +4,10 @@ spring:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/aicontent_test}
     username: ${DB_USER:aicontent}
     password: ${DB_PASSWORD}   # 기본값 없음: 환경 변수로만 지정 (로컬 trust DB는 아무 값이나 가능)
+    hikari:
+      # ~10 differently configured test contexts stay cached at once; the default pool of 10 each would use up
+      # PostgreSQL's max_connections (100), more so while a dev server is connected to the same instance
+      maximum-pool-size: 5
 app:
   worker:
     enabled: false          # tests drive JobWorker.runPending(...) synchronously
