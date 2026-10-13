@@ -16,6 +16,10 @@ import java.util.stream.Collectors;
  * NEW, multiEvent -> REVIEW, judge -> {@link DecisionPolicy}) and applies each decision to an in-memory issue list.
  * Candidate retrieval is simplified to "the {@code candidateLimit} most recently updated issues"; embedding recall is
  * a separate evaluation that needs a real embedding provider (OPEN ITEM).
+ *
+ * <p>By default the bundle flag comes from the gold label (classification measured in isolation). Passing the
+ * analysis model's predictions ({@link #run(List, Map)}) measures the two steps together: a bundle the model missed
+ * goes to the judge like any article and can surface as BUNDLE_NOT_REVIEWED.
  */
 public class EvalRunner {
 
@@ -51,6 +55,14 @@ public class EvalRunner {
     }
 
     public List<CaseResult> run(List<EvalCase> cases) {
+        return run(cases, null);
+    }
+
+    /**
+     * @param predictedMultiEvent case id -> multiEvent from the analysis model; null = use the gold label. A case
+     *                            without a prediction (analysis failed) falls back to the gold label.
+     */
+    public List<CaseResult> run(List<EvalCase> cases, Map<String, Boolean> predictedMultiEvent) {
         List<EvalCase> ordered = cases.stream().sorted(Comparator.comparing(EvalCase::publishedAt).thenComparing(EvalCase::id)).toList();
         List<SimIssue> issues = new ArrayList<>();
         Map<String, Boolean> seenGroups = new LinkedHashMap<>();
@@ -64,8 +76,10 @@ public class EvalRunner {
             CaseResult.Gold gold = c.multiEvent() ? CaseResult.Gold.BUNDLE
                     : seenGroups.containsKey(c.eventGroup()) ? CaseResult.Gold.SAME : CaseResult.Gold.NEW;
 
+            boolean multiEvent = predictedMultiEvent == null || !predictedMultiEvent.containsKey(c.id())
+                    ? c.multiEvent() : predictedMultiEvent.get(c.id());
             Outcome outcome;
-            if (c.multiEvent()) {
+            if (multiEvent) {
                 outcome = DecisionPolicy.multiEvent();
             } else if (candidates.isEmpty()) {
                 outcome = DecisionPolicy.noCandidate();

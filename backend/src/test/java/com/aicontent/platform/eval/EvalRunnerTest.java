@@ -51,6 +51,29 @@ class EvalRunnerTest {
     }
 
     @Test
+    void predictedFlagsReplaceGoldLabels() {
+        var cases = List.of(
+                c("a", "2000-01-01T00:00:00Z", "G1", false),
+                c("x", "2000-01-02T00:00:00Z", "BUNDLE", true),     // bundle the analysis model missed
+                c("b", "2000-01-03T00:00:00Z", "G2", false));       // single article flagged as bundle
+        var judge = scripted(Map.of(
+                "x", new RawDecision(Decision.SAME_ISSUE, 0.95, 1L, "looks like a"),
+                "b", new RawDecision(Decision.NEW_ISSUE, 0.90, null, "new event")));   // only asked in the gold-label run
+
+        var results = new EvalRunner(judge, T, 5).run(cases, Map.of("a", false, "x", false, "b", true));
+
+        assertEquals(Gold.BUNDLE, results.get(1).gold());
+        assertEquals(Decision.SAME_ISSUE, results.get(1).decision());
+        assertEquals(Method.MULTI_EVENT, results.get(2).method());
+        var errors = EvalMetrics.compute(results).errorTypes();
+        assertEquals(1, errors.get("BUNDLE_NOT_REVIEWED"));
+        assertEquals(1, errors.get("REVIEW_COULD_BE_NEW"));
+
+        // without predictions the gold label is used, as before
+        assertEquals(Decision.REVIEW, new EvalRunner(judge, T, 5).run(cases).get(1).decision());
+    }
+
+    @Test
     void guardDowngradesLowConfidenceSame() {
         var cases = List.of(c("a", "2000-01-01T00:00:00Z", "G1", false), c("b", "2000-01-02T00:00:00Z", "G1", false));
         var judge = scripted(Map.of("b", new RawDecision(Decision.SAME_ISSUE, 0.80, 1L, "unsure")));

@@ -20,6 +20,8 @@
 ```bash
 cd backend
 mvn -Dtest=EvalLlmIT -Deval.run=true -Dspring.profiles.active=test -Dapp.ai.provider=<공급자> test
+# 묶음 기사 판별 + 예측값을 쓴 분류까지 (호출이 사례당 1번 더 늘어남)
+mvn -Dtest=EvalLlmIT -Deval.run=true -Deval.analysis=true -Dspring.profiles.active=test -Dapp.ai.provider=<공급자> test
 ```
 `stub` 제공자로 돌리면 하네스가 동작하는지만 확인됩니다(스텁은 모델이 아님). 출력 예: `N=27 precision=… recall=… wrongAutoSameRate=… reviewRate=… adminEditRate=… errors={…}` 와 사례별 결과.
 
@@ -69,9 +71,11 @@ recall만 낮으면 `GUARD_DOWNGRADE` 사례의 신뢰도 분포를 보고 SAME 
 임계값을 바꾸면 3회 측정을 다시 한다.
 
 ### 이 세트가 재지 않는 것
-- **묶음 기사 판별:** 하네스는 정답 라벨의 `multiEvent`를 그대로 쓰므로 `BUNDLE_NOT_REVIEWED`는 항상 0이다.
-  운영에서는 기사 분석 모델이 `multiEvent`를 판단하므로, 실제 모델로 E23·E24를 분석해 `multiEvent=true`가 나오는지
-  따로 확인해야 한다.
+- **묶음 기사 판별:** 기본 실행은 정답 라벨의 `multiEvent`를 그대로 쓰므로 `BUNDLE_NOT_REVIEWED`는 항상 0이다.
+  **2026-10-13 추가:** `-Deval.analysis=true`를 붙이면 운영과 같은 기사 분석 프롬프트(`ArticleAnalysisService.promptVariables`)로
+  27건을 분석해 `multiEvent`를 측정하고(묶음 맞춤/놓침/오경보/분석 실패), 그 예측값으로 분류까지 다시 돌린다.
+  놓친 묶음은 판단 모델로 가서 `BUNDLE_NOT_REVIEWED`로, 오경보는 `REVIEW_COULD_BE_*`로 잡힌다. 세트에 본문이 없어
+  요약과 핵심 사실을 본문 대신 넣으므로 실제 기사보다 정보가 적다(결과는 하한선). 묶음이 2건뿐이라 놓침 1건이 50%p다.
 - **임베딩 후보 검색 재현율:** 위의 단순화 때문에 측정하지 않는다(기존 OPEN ITEM).
 
 ### 실행 시 참고

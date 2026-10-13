@@ -18,6 +18,9 @@ import org.springframework.test.context.ActiveProfiles;
  *
  * <pre>mvn -Dtest=EvalLlmIT -Deval.run=true -Dspring.profiles.active=test -Dapp.ai.provider=&lt;provider&gt; test</pre>
  *
+ * Add {@code -Deval.analysis=true} to also run the article-analysis prompt on every case and measure bundle detection
+ * ({@code multiEvent}) plus the end-to-end metrics with the predicted flags (one extra call per case).
+ *
  * With {@code stub} it only proves the harness works (the stub is not a model). With a real provider the numbers are
  * the baseline to compare prompt versions and thresholds against. It asserts nothing about quality on purpose: the
  * acceptance thresholds are an OPEN ITEM that must be set from the first real-provider baseline.
@@ -45,5 +48,28 @@ class EvalLlmIT {
         System.out.println(EvalMetrics.format(report));
         results.forEach(r -> System.out.println("  " + r));
         assertThat(report.total()).isEqualTo(cases.size());
+    }
+
+    /** Bundle detection by the analysis model, then classification using those predictions instead of gold labels. */
+    @Test
+    @EnabledIfSystemProperty(named = "eval.analysis", matches = "true")
+    void printsBundleDetectionAndEndToEndMetrics() throws Exception {
+        var cases = EvalDatasetLoader.load("eval/issue-eval-v1.json");
+        var detector = new LlmBundleDetector(prompts, structured, props.prompts().articleAnalysisVersion(),
+                props.ai().analysisMaxAttempts(), props.ai().maxAnalysisTextChars());
+        var predicted = detector.detect(cases);
+        var bundles = MultiEventMetrics.compute(cases, predicted);
+
+        var judge = new LlmJudge(prompts, structured, props.prompts().issueClassifierVersion(), props.ai().classifierMaxAttempts());
+        var thresholds = new DecisionPolicy.Thresholds(props.classifier().sameIssueMinConfidence(), props.classifier().newIssueMinConfidence());
+        var results = new EvalRunner(judge, thresholds, props.classifier().candidateLimit()).run(cases, predicted);
+
+        System.out.println("EVAL issue-eval-v1 (analysis + classification) provider=" + props.ai().provider()
+                + " analysisPrompt=" + props.prompts().articleAnalysisVersion() + " classifierPrompt=" + props.prompts().issueClassifierVersion());
+        System.out.println(MultiEventMetrics.format(bundles));
+        System.out.println(EvalMetrics.format(EvalMetrics.compute(results)));
+        results.forEach(r -> System.out.println("  " + r));
+        assertThat(bundles.truePositive() + bundles.falsePositive() + bundles.falseNegative() + bundles.trueNegative()
+                + bundles.failed()).isEqualTo(cases.size());
     }
 }

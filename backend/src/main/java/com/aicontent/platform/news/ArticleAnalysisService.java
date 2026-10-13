@@ -20,7 +20,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ArticleAnalysisService {
 
-    private static final String PROMPT_KEY = "article-analysis";
+    public static final String PROMPT_KEY = "article-analysis";
 
     private final NewsArticleRepository articles;
     private final PromptRegistry prompts;
@@ -46,18 +46,9 @@ public class ArticleAnalysisService {
             return Map.of("skipped", "duplicate article is not analysed");
         }
         PromptTemplate prompt = prompts.get(PROMPT_KEY, props.prompts().articleAnalysisVersion());
-
-        String text = article.analysisText() == null ? "" : article.analysisText().trim();
-        int max = props.ai().maxAnalysisTextChars();
-        if (text.length() > max) {
-            text = text.substring(0, max);
-        }
-        Map<String, Object> vars = new LinkedHashMap<>();
-        vars.put("title", article.title());
-        vars.put("publisher", article.publisherName());
-        vars.put("publishedAt", article.publishedAt() == null ? "알 수 없음" : article.publishedAt().toString());
-        vars.put("category", article.category() == null ? "없음" : article.category());
-        vars.put("text", text.isEmpty() ? "(본문 없음 - 제목만 사용)" : text);
+        Map<String, Object> vars = promptVariables(article.title(), article.publisherName(),
+                article.publishedAt() == null ? null : article.publishedAt().toString(), article.category(),
+                article.analysisText(), props.ai().maxAnalysisTextChars());
 
         try {
             var result = structured.execute(new StructuredOutputService.Call(AiCallType.ARTICLE_ANALYSIS, prompt, vars,
@@ -72,5 +63,24 @@ public class ArticleAnalysisService {
         jobs.enqueue(JobType.EMBED_ARTICLE, Map.of("articleId", articleId), AsyncJobService.SYSTEM,
                 "embed:" + articleId, correlationId);
         return Map.of("articleId", articleId, "promptVersion", prompt.version());
+    }
+
+    /**
+     * Variables of the {@value #PROMPT_KEY} prompt. Public so the evaluation harness sends exactly what production
+     * sends (same truncation and placeholders).
+     */
+    public static Map<String, Object> promptVariables(String title, String publisher, String publishedAt, String category,
+                                                      String analysisText, int maxTextChars) {
+        String text = analysisText == null ? "" : analysisText.trim();
+        if (text.length() > maxTextChars) {
+            text = text.substring(0, maxTextChars);
+        }
+        Map<String, Object> vars = new LinkedHashMap<>();
+        vars.put("title", title);
+        vars.put("publisher", publisher);
+        vars.put("publishedAt", publishedAt == null ? "알 수 없음" : publishedAt);
+        vars.put("category", category == null ? "없음" : category);
+        vars.put("text", text.isEmpty() ? "(본문 없음 - 제목만 사용)" : text);
+        return vars;
     }
 }
