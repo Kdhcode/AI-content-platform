@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-13 KST · 기준 커밋 `191bc8b` + 이번 커밋 5개(아래 6절, 패치로 전달·PC 검증 전) (`main`, GitHub `Kdhcode/AI-content-platform`)
+최종 갱신: 2026-10-13 KST · 기준 커밋 `191bc8b` + 이번 커밋 9개(아래 6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달). `main` 병합은 PC 검증 후 (GitHub `Kdhcode/AI-content-platform`)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -164,13 +164,19 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 | `feat(ai)` | `AiUsageLimiter`: `app.ai.limits`(하루 예산·하루 호출 수·분당 호출 수). 닿으면 작업이 실패하지 않고 대기(`AsyncJobRepository.postpone`, 재시도·재큐 횟수 미사용). 사용량 API·화면에 한도 표시 |
 | `fix(ai)` | 실패한 AI 호출의 `ai_log.model`이 NULL이던 문제(공급자 오류 → 요청 모델, 차원 오류 → 응답 모델·토큰) |
 | `docs` | README 설정표, VERIFY·DB_SETUP의 V2 반영, 이 절 |
+| `feat(issue)` 제목 | V3 `issue.title_source` AUTO/MANUAL. AUTO 제목은 멤버십 변경 때 가장 이른 기사 제목으로 갱신, 관리자·분리 입력 제목은 유지. 대시보드 스키마 기대값 3 |
+| `feat(eval)` | `-Deval.analysis=true`: 분석 모델의 `multiEvent` 판별 측정 + 예측값으로 분류 재평가. 기본 평가 결과는 그대로 |
+| `feat(issue)` 락 | `app.classifier.lock-scope` GLOBAL(기본)/CATEGORY |
+| `docs` | 이 절 갱신 |
 
 **PC에서 할 일** (클라우드에서는 Maven Central·npm 레지스트리가 막혀 Java 컴파일과 프런트 빌드를 하지 못했다):
-1. 패치 적용: `git am <패치들>` (기준 `191bc8b`, 순서대로)
-2. `mvn test` — 예상 **131개**(기존 109 + 새 22: `AiLogRetentionServiceTest` 4, `AiLogRetentionIntegrationTest` 1, `IssueAutoCloseIntegrationTest` 2, `MaintenanceDefaultsIntegrationTest` 1, `AiUsageLimiterTest` 8, `AiLimitIntegrationTest` 1, `AsyncJobIntegrationTest` +1, `AiUsageApiIntegrationTest` +1, `EmbeddingServiceLogTest` 3). 컴파일 오류가 나면 이 절의 기록과 함께 알려준다
+1. 패치 적용: `git switch -c claude/ops-policy 191bc8b` → `git am <ai-content-patches-2026-10-13.zip을 푼 폴더>/*.patch` (커밋 9개, 앞서 받은 5개 포함이라 이전 zip은 쓰지 않는다)
+2. `mvn test` — 예상 **143개**(기존 109 + 새 34: `AiLogRetentionServiceTest` 4, `AiLogRetentionIntegrationTest` 1, `IssueAutoCloseIntegrationTest` 2, `MaintenanceDefaultsIntegrationTest` 1, `AiUsageLimiterTest` 8, `AiLimitIntegrationTest` 1, `AsyncJobIntegrationTest` +1, `AiUsageApiIntegrationTest` +1, `EmbeddingServiceLogTest` 3, `IssueManagementIntegrationTest` +3, `MultiEventMetricsTest` 3, `EvalRunnerTest` +1, `ClassificationLockKeyTest` 3, `LockScopeIntegrationTest` 2). Flyway가 기존 개발 DB에 V3를 적용한다(제목 출처 백필). 컴파일 오류가 나면 이 절의 기록과 함께 알려준다
 3. `npm run typecheck`, `npm run build`
 4. 서버를 띄운 상태에서 `npm run verify:ai-usage` (한도 패널은 `.stat-value`·표를 쓰지 않아 기존 검증 항목은 그대로여야 함). 한도 패널 화면 확인은 `AI_DAILY_MAX_CALLS=2` 같은 값을 넣고 1회
-5. 결과를 4절 형식으로 기록
+5. 이슈 상세 화면에서 "제목 출처" 표시 확인, 분리 후 제목이 남은 기사 중 가장 이른 기사 제목으로 바뀌는지 확인
+6. 모두 통과하면 `main`에 병합하고 push. Codex 리뷰 감시가 새 커밋 9개를 차례로 리뷰한다(20개 상한 이내)
+7. 결과를 4절 형식으로 기록
 
 ## 4. 구현 변경 내용과 실행한 검증
 
@@ -208,3 +214,4 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 2026-10-13 · 같은 기준 · `mvn test` **미실행**(Maven Central 403). 대신 의존성 없이 `javac`로 HEAD와 작업본의 진단을 비교: 새 진단은 모두 라이브러리 부재(Spring·JUnit·AssertJ)에서 나온 것이고 구문 오류·프로젝트 클래스 참조 오류는 0. 라이브러리 타입이 걸린 호출(`JdbcClient`, `TransactionTemplate`, AssertJ 등)은 이 방법으로 확인되지 않음
 - 2026-10-13 · 같은 기준 · `npm run typecheck`·`npm run build` **미실행**(npm 레지스트리 403). TypeScript 6.0.3 구문 검사 통과, React/Next 최소 shim으로 바뀐 페이지 타입 검사: 원본 페이지에도 똑같이 나는 shim 한계 1건 외 오류 0. `verify:ai-usage` **미실행**
 - 2026-10-13 · 같은 기준 · `tools/codex_review.py`의 비밀 검사(`scan_secrets` + 문맥 문서)를 코드 커밋 4개에 실행 · 탐지 0건, diff 크기 모두 제한(180,000자) 이하
+- 2026-10-13 · 6절 2차(이슈 제목 V3, 묶음 판별 평가, 락 범위) · 같은 클라우드 환경. V3 마이그레이션을 V1·V2가 적용된 새 DB에 실행해 백필 5가지 경우(자동/관리자 수정/분리 후 남은 옛 제목/분리 시 입력/상태만 수정) 확인, 제목 갱신 SQL이 두 번째 실행에서 0행(불필요한 `updated_at` 변경 없음)인 것 확인. V1~V3 위에서 `verify_schema.sql`·`verify_queries.sql`(제목 규칙 사본 추가) **둘 다 통과**. `javac` 비교 새 오류 0(라이브러리 부재 제외), TypeScript 구문 검사 통과, 비밀 검사 0건. `mvn test`·`npm run build` **미실행**(같은 이유)
