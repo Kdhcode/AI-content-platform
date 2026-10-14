@@ -8,6 +8,3 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
-# IntelliJ DB 연결 설정(개인 PC 전용, 비밀번호는 dataSources.local.xml에 따로 보관)
-/dataSources.xml
-/db-forest-config.xml
