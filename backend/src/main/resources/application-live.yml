@@ -1,4 +1,7 @@
 # Opt-in real RSS sources. Limit the initial collection before enabling a paid AI provider.
+# Feeds were fetched through RssNewsSourceAdapter on 2026-10-14 (dates parsed for all; see docs/DECISIONS.md).
+# Each publisher's RSS terms still have to be checked before any public use (OPEN_ITEMS #1): SBS's feed text says
+# it is allowed for personal reader use only and forbids reposting.
 app:
   news:
     scheduler-enabled: ${NEWS_SCHEDULER_ENABLED:false}
@@ -11,6 +14,41 @@ app:
         interval-seconds: 600
         config:
           publisher: 연합뉴스
+      - name: newsis-breaking
+        type: RSS
+        base-url: https://www.newsis.com/RSS/sokbo.xml
+        enabled: true
+        interval-seconds: 600
+        config:
+          publisher: 뉴시스
+      - name: sbs-politics
+        type: RSS
+        base-url: https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER
+        enabled: true
+        interval-seconds: 600
+        config:
+          publisher: SBS
+      - name: sbs-society
+        type: RSS
+        base-url: https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=03&plink=RSSREADER
+        enabled: true
+        interval-seconds: 600
+        config:
+          publisher: SBS
+      - name: donga-all
+        type: RSS
+        base-url: https://rss.donga.com/total.xml
+        enabled: true
+        interval-seconds: 600
+        config:
+          publisher: 동아일보
+      - name: khan-all
+        type: RSS
+        base-url: https://www.khan.co.kr/rss/rssdata/total_news.xml
+        enabled: true
+        interval-seconds: 600
+        config:
+          publisher: 경향신문
       - name: bbc-world
         type: RSS
         base-url: https://feeds.bbci.co.uk/news/world/rss.xml
