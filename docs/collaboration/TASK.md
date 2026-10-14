@@ -232,3 +232,11 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 분류: 후보 없음(NO_CANDIDATE) 29건, LLM 판단 6건 모두 SAME_ISSUE(신뢰도 0.90)로 자동 연결. 묶인 이슈 4개: 비서실장 임명(SBS 2 + 동아), 중수청장 후보 인사청문회(SBS 3), 9호선 급행 확대(뉴시스 + 경향), 울주군 공장 화재(SBS 2). 6건 모두 사람이 보기에 같은 사건이 맞음. 단독 이슈 25개를 훑어본 범위에서 놓친 같은 사건은 없었음. REVIEW·NEW_ISSUE(LLM 판단)는 이번 데이터에서 나오지 않아 **미검증**
   - 발견한 품질 문제(미수정): 카테고리 분류가 약함. BBC 국제 기사 5건 중 4건이 OTHER(WORLD여야 함), "인천 흉기 난동"이 LIFE, 국민연금 국감 기사가 OTHER
   - 평가 세트(대표 27건) 측정과 합격 기준 확정은 **미실행**
+- 2026-10-14 · 브랜치 `claude/ai-quality`(기준 `885b2f5` = main) · 분석 프롬프트 v2, AI 입력 정리, live 단가, 실제 OpenAI 재검증. 상세 `docs/AI_QUALITY_20261014.md`
+  - `mvn test -Dtest=AnalysisInputCleanerTest,PromptFilesTest,AiCostCalculatorTest,EvalRunnerTest,EvalDatasetTest` · **통과**(새 테스트: 입력 정리 10개, 프롬프트 v2 스키마·정의 검사 1개)
+  - `CleanerRealDataReport`(실제 기사 35건, AI 호출 없음) · 15건 정리(SBS 10, 뉴시스 5), 지워진 조각 전부 이용 조건·앱 안내·링크·서명으로 확인, 기사 문장 삭제 0
+  - **실제 OpenAI** 66회(상한 100, 실패·재시도 0), 새 DB `aicontent_aicheck_20261014`, 입력 89,594 / 출력 15,880 토큰, 추정 비용 $0.022947(청구액 아님). 비용 NULL 0건(응답 모델명 `gpt-4o-mini-2024-07-18` 접두사 일치 확인)
+  - 카테고리(실제 기사 20건, 기대값은 실행 전 작성): v1 6/20 → v2 1차 17/20 → v2 2차 **19/20**. 남은 오분류 1건(은평구 금성당제 → OTHER). 같은 20건으로 조정해 과적합 가능
+  - 분류 평가 세트 27건 1회: precision·recall 0.923, **오병합 1건(E09)** → 합격 기준 초안 필수 조건 미달. REVIEW 3, 스키마 실패 0. 3회 반복·묶음 판별은 **미실행**(호출 상한)
+  - 전체 `mvn test`(stub, 로컬 `aicontent_test`) · **154개 통과, 실패 0** (기존 143 + 새 11). 첫 실행에서 `ClassificationFlowIntegrationTest`가 분석 프롬프트 버전을 `v1`로 고정해 실패 → 기본값을 v2로 바꾼 의도된 변경이라 기대값을 `v2`로 수정. 유료 하네스(`AnalysisCompareIT`, `EvalLlmIT`)와 `CleanerRealDataReport`는 시스템 속성이 없으면 실행되지 않음
+  - `npm run typecheck`·`build` · **미실행**(관리자 UI 변경 없음)

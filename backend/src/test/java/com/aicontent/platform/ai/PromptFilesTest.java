@@ -27,11 +27,13 @@ class PromptFilesTest {
         return out;
     }
 
+    private static final String[] ANALYSIS_VERSIONS = {"v1", "v2"};
+
     @Test
     void everyPromptVersionHasAllFiles() {
-        for (String key : new String[] {"article-analysis", "issue-classifier"}) {
+        for (String dir : new String[] {"article-analysis/v1", "article-analysis/v2", "issue-classifier/v1"}) {
             for (String file : new String[] {"system.md", "user.md", "schema.json", "meta.json"}) {
-                assertTrue(Files.isRegularFile(ROOT.resolve(key).resolve("v1").resolve(file)), key + "/v1/" + file + " missing");
+                assertTrue(Files.isRegularFile(ROOT.resolve(dir).resolve(file)), dir + "/" + file + " missing");
             }
         }
     }
@@ -39,8 +41,24 @@ class PromptFilesTest {
     @Test
     void articleAnalysisPlaceholdersMatchServiceVariables() throws IOException {
         // ArticleAnalysisService provides: title, publisher, publishedAt, category, text
-        assertEquals(Set.of("category", "publishedAt", "publisher", "text", "title"),
-                placeholders(ROOT.resolve("article-analysis/v1/user.md")));
+        for (String v : ANALYSIS_VERSIONS) {
+            assertEquals(Set.of("category", "publishedAt", "publisher", "text", "title"),
+                    placeholders(ROOT.resolve("article-analysis/" + v + "/user.md")), v);
+        }
+    }
+
+    @Test
+    void analysisV2KeepsTheV1SchemaAndDefinesEveryCategory() throws IOException {
+        // v2 only changes the instructions: same JSON schema, so stored v1 and v2 analyses stay comparable
+        assertEquals(Files.readString(ROOT.resolve("article-analysis/v1/schema.json")),
+                Files.readString(ROOT.resolve("article-analysis/v2/schema.json")));
+        String system = Files.readString(ROOT.resolve("article-analysis/v2/system.md"));
+        String schema = Files.readString(ROOT.resolve("article-analysis/v2/schema.json"));
+        Matcher values = Pattern.compile("\"category\"\\s*:\\s*\\{[^}]*\"enum\"\\s*:\\s*\\[([^\\]]*)]").matcher(schema);
+        assertTrue(values.find());
+        for (String value : values.group(1).replace("\"", "").split("\\s*,\\s*")) {
+            assertTrue(system.contains("`" + value.trim() + "`:"), "category " + value + " has no definition in v2/system.md");
+        }
     }
 
     @Test
@@ -52,6 +70,7 @@ class PromptFilesTest {
     @Test
     void systemPromptsHaveNoPlaceholders() throws IOException {
         assertTrue(placeholders(ROOT.resolve("article-analysis/v1/system.md")).isEmpty());
+        assertTrue(placeholders(ROOT.resolve("article-analysis/v2/system.md")).isEmpty());
         assertTrue(placeholders(ROOT.resolve("issue-classifier/v1/system.md")).isEmpty());
     }
 }

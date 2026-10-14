@@ -3,6 +3,14 @@
 # Each publisher's RSS terms still have to be checked before any public use (OPEN_ITEMS #1): SBS's feed text says
 # it is allowed for personal reader use only and forbids reposting.
 app:
+  ai:
+    # Prices for the cost ESTIMATE in ai_log.estimated_cost_usd (USD per 1M tokens, Standard tier).
+    # Checked 2026-10-14 at https://developers.openai.com/api/docs/pricing . Not the invoice: cached-input discount,
+    # Batch, taxes and credits are not applied, so the real charge can be lower. Update value and date when prices change.
+    # Responses report dated model names (gpt-4o-mini-2024-07-18); AiCostCalculator matches them by the longest prefix.
+    pricing:
+      gpt-4o-mini: { input-per-million-usd: 0.15, output-per-million-usd: 0.60 }
+      text-embedding-3-small: { input-per-million-usd: 0.02 }
   news:
     scheduler-enabled: ${NEWS_SCHEDULER_ENABLED:false}
     max-articles-per-run: ${NEWS_MAX_ARTICLES_PER_RUN:3}

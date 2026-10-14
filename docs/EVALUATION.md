@@ -43,6 +43,20 @@ mvn -Dtest=EvalLlmIT -Deval.run=true -Deval.analysis=true -Dspring.profiles.acti
 ## 운영 데이터로 같은 지표 보기
 운영에서는 `classification_run`(후보·원판단·적용 여부)과 `issue_article.manually_corrected`/`admin_audit_log`가 쌓입니다. 관리자가 병합/이동/분리한 건수를 자동 적용 건수로 나누면 실제 `adminEditRate`를 얻을 수 있습니다(전용 리포트 화면은 Phase 1 범위 밖).
 
+## 실제 공급자 첫 측정 (2026-10-14, 1회)
+
+`gpt-4o-mini`, `issue-classifier/v1`, 운영 임계값 그대로. 판단 호출 24회. 상세: [AI_QUALITY_20261014.md](AI_QUALITY_20261014.md).
+
+| 지표 | 결과 | 초안 기준 |
+|---|---|---|
+| 오병합 | 1건 (E09: 같은 회사 다른 분기 실적을 G4에 병합) | 0건 — 미달 |
+| 스키마 실패 | 0건 | 1건 이하 — 충족 |
+| SAME 재현율 (모호 제외) | 11/13 (놓침: E08 REVIEW, E10 NEW) | 10/13 이상 — 충족 |
+| REVIEW | 3건 (E08, 묶음 E23·E24) | 8건 이하 — 충족 |
+| 반복성 | 1회 | 3회 — 미실행 |
+
+묶음 기사 판별(`-Deval.analysis=true`)은 호출 상한 때문에 실행하지 않았다. 합격 기준은 여전히 초안이다.
+
 ## 합격 기준 초안 (2026-10-12, **미확정 — 사용자 결정 필요**)
 
 ### v1 세트의 구성 (발행시각 순 처리 기준으로 계산)

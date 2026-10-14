@@ -67,11 +67,12 @@ public class ArticleAnalysisService {
 
     /**
      * Variables of the {@value #PROMPT_KEY} prompt. Public so the evaluation harness sends exactly what production
-     * sends (same truncation and placeholders).
+     * sends (same cleaning, truncation and placeholders). The body is cleaned of feed notices and link labels
+     * ({@link AnalysisInputCleaner}) before truncation; the stored body is not changed.
      */
     public static Map<String, Object> promptVariables(String title, String publisher, String publishedAt, String category,
                                                       String analysisText, int maxTextChars) {
-        String text = analysisText == null ? "" : analysisText.trim();
+        String text = AnalysisInputCleaner.clean(analysisText).text();
         if (text.length() > maxTextChars) {
             text = text.substring(0, maxTextChars);
         }
