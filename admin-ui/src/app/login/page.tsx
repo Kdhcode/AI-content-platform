@@ -1,8 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
-import { api, ApiFailure, clearCredentials, setCredentials } from "@/lib/api";
+import { useEffect, useState, type FormEvent } from "react";
+import { api, ApiFailure, clearCredentials, localVerifyMode, setCredentials } from "@/lib/api";
 import { ErrorText } from "@/components/ui";
 
 export default function LoginPage() {
@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  // local-verify mode needs no login: go straight to the workspace
+  useEffect(() => { localVerifyMode().then((m) => { if (m.loginBypass) router.replace("/"); }); }, [router]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

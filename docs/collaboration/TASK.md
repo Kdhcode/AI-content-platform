@@ -270,3 +270,10 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 새 통합 테스트 `PublicNewsReviewFlowIntegrationTest`: 검수 대기·보류 연결 기사는 공개되지 않고, 관리자의 분리·확정·병합 뒤에만 공개
 - 전체 `mvn test` 191개 통과, `npm run typecheck`·`build` 통과
 - 별도 DB와 포트(18082/13082)에서 `/news`와 관리자 화면을 브라우저로 확인(stub, 유료 호출 0)
+
+## 9. 로컬 검증 모드와 화면 확인 준비 (2026-10-14 밤, `claude/integration-review`)
+- 로그인 생략은 `local-verify` 프로필 전용, 기본 꺼짐. 루프백 주소·`live` 미사용·AI `none/stub`·OpenAI 키 없음이 아니면 시작 거부(설정 직후와 빈 생성 시 2회 검사). 인증 정보를 보낸 요청은 기존대로 검사
+- 화면: 모든 관리자 화면·뉴스룸에 “로컬 검증 모드” 띠와 데이터 구분(시나리오/실제 기사 복사본), 로그인 화면 건너뜀
+- 데이터: 시나리오 DB(가상 기사 8건, 기간 충돌 검수 2건·보류 연결 2건·분리·확정·병합 사례), 실제 기사 복사본 DB(`aicontent_view_20261014` 복사, AI·작업 실행기 꺼짐, 검수 대기 이슈 없음). 원본 DB와 8090/3090 서버는 그대로
+- IntelliJ 개인 DB 연결 설정 2개 파일은 Git 추적 해제(`.idea/.gitignore`), 연결 방법은 `docs/DB_SETUP.md`에 비밀값 없이 기록
+- 전체 `mvn test` 199개 통과, `npm run typecheck`·`build` 통과. 사용자 화면 확인 뒤 통합 PR·`main` 병합 예정

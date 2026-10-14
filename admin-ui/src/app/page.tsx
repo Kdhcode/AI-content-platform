@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, fmt, hasCredentials, type Dashboard, type IssueListItem, type ArticleListItem, type NewsSource, type Page, type Job } from "@/lib/api";
+import { api, fmt, type Dashboard, type IssueListItem, type ArticleListItem, type NewsSource, type Page, type Job } from "@/lib/api";
 import { Badge, ErrorText, PageHeading, Shell } from "@/components/ui";
 
 const steps = [
@@ -22,7 +22,7 @@ export default function Home() {
   const [collecting, setCollecting] = useState(false);
   const inFlight = useRef(false);
   const load = useCallback(async () => {
-    if (!hasCredentials() || inFlight.current) return;
+    if (inFlight.current) return;
     inFlight.current = true; setRefreshing(true);
     try {
       const [overview, issuePage, articlePage, sourceList] = await Promise.all([

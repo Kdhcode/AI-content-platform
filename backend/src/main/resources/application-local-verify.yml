@@ -1,0 +1,11 @@
+# Local screen check only (docs/LOCAL_VERIFY.md). Admin API without login, loopback only, no paid AI.
+# LocalVerifyGuard refuses to start if the live profile is active, server.address is not loopback, the AI provider
+# is anything other than none/stub (AI_PROVIDER, SPRING_APPLICATION_JSON, ...) or an OpenAI API key is set.
+server:
+  address: 127.0.0.1
+app:
+  local-verify:
+    login-bypass: true
+    data-label: ${LOCAL_VERIFY_DATA_LABEL:}
+  news:
+    scheduler-enabled: false
