@@ -8,3 +8,6 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
+# 개인 DB 연결 설정: 사람마다 DB 이름·계정이 다르므로 공유하지 않음 (docs/DB_SETUP.md "IntelliJ DB 연결")
+/dataSources.xml
+/db-forest-config.xml

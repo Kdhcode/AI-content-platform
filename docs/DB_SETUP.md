@@ -84,6 +84,24 @@ PC를 재부팅하면 자동 시작되는 서비스가 아니므로 아래 시�
 IntelliJ Database 창이나 다른 PostgreSQL 클라이언트에서는 Host `127.0.0.1`, Port `55432`,
 Database `aicontent`, User `aicontent`, 비밀번호 없음으로 연결한다.
 
+### IntelliJ DB 연결 (개인 설정, Git에서 제외)
+
+IntelliJ가 만드는 `.idea/dataSources.xml`, `.idea/db-forest-config.xml`은 사람마다 DB 이름과 계정이 달라 Git에 올리지 않는다(`.idea/.gitignore`). 비밀번호가 저장되는 `.idea/dataSources.local.xml`, `.idea/dataSources/`는 원래부터 제외되어 있다. 2026-10-14까지 `feature/public-news`에 올라가 있던 두 파일은 통합 브랜치에서 추적을 끊었다(파일 내용에는 비밀번호가 없었다).
+
+새로 연결할 때:
+1. Database 창 → `+` → Data Source → PostgreSQL.
+2. Host `127.0.0.1`, Port `55432`, User `aicontent`, Authentication `No auth`(로컬 trust 접속, 비밀번호 저장 안 함).
+3. Database에 용도별 DB 이름을 넣는다.
+
+| DB | 용도 |
+|---|---|
+| `aicontent` | 개발 앱 DB |
+| `aicontent_test` | Maven 통합 테스트(테스트가 테이블을 비움 — 조회만) |
+| `aicontent_view_20261014` | 2026-10-14 실제 OpenAI 검증 결과 보기용(원본, 수정 금지) |
+| `aicontent_verify_scenario`, `aicontent_verify_real` | 로컬 검증 모드 화면 확인용(`docs/LOCAL_VERIFY.md`) |
+
+**기존 파일을 쓰던 PC에서:** 이 변경이 들어온 커밋을 받으면 Git이 작업 폴더의 두 파일을 지울 수 있다. 받은 뒤 IntelliJ에서 연결이 사라졌다면 백업에서 다시 복사한다(사용자 PC 백업 위치: `.local/idea-db-settings-backup-20261014/`, `.local/`은 Git 제외). 파일을 수정해 둔 상태면 Git이 병합을 멈추고 알려 주므로, 백업을 확인한 뒤 `git restore .idea/db-forest-config.xml` 등으로 정리하고 다시 받는다.
+
 이 구성은 로컬 개발·검증용이다. 외부에 서비스할 때는 비밀번호 인증과 별도 운영 계정으로 구성한다.
 저장소의 `docker-compose.yml`은 별도의 표준 개발 환경으로, Docker 사용 시
 `pgvector/pgvector:pg16`과 포트 **5432**를 사용한다. 현재 실행 중인 네이티브 DB의 **55432**와 구분한다.
