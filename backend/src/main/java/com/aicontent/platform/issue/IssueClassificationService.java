@@ -143,6 +143,12 @@ public class IssueClassificationService {
                         candidates.stream().map(IssueCandidate::id).collect(Collectors.toSet()),
                         new DecisionPolicy.Thresholds(props.classifier().sameIssueMinConfidence(),
                                 props.classifier().newIssueMinConfidence()));
+                if (outcome.decision() == Decision.SAME_ISSUE) {
+                    final long matchedId = outcome.matchedIssueId();
+                    IssueCandidate target = candidates.stream().filter(c -> c.id() == matchedId).findFirst().orElseThrow();
+                    outcome = DecisionPolicy.applyPeriodGuard(outcome, periodText(article.title(), analysis),
+                            periodText(target.title(), target.summary(), target.keyFacts()));
+                }
             } catch (AiOutputInvalidException e) {
                 outcome = DecisionPolicy.invalidOutput(String.join("; ", e.errors()));
             } catch (AiException e) {
@@ -257,6 +263,18 @@ public class IssueClassificationService {
                 c.summary(), c.keyFacts(), String.valueOf(c.firstPublishedAt()), String.valueOf(c.lastUpdatedAt()),
                 c.articleCount(), c.publisherCount())).toList();
         return ClassifierPromptVariables.build(input, candidateInputs);
+    }
+
+    /** Text the period check reads: title, analysed summary and key facts (not the raw body). */
+    static String periodText(String title, JsonNode analysis) {
+        List<String> facts = new ArrayList<>();
+        analysis.path("keyFacts").forEach(n -> facts.add(n.asText()));
+        return periodText(title, analysis.path("summary").asText(""), facts);
+    }
+
+    static String periodText(String title, String summary, List<String> facts) {
+        return String.join("\n", title == null ? "" : title, summary == null ? "" : summary,
+                facts == null ? "" : String.join("\n", facts));
     }
 
     private DecisionPolicy.RawDecision toRaw(JsonNode v) {

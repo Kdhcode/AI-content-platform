@@ -2,6 +2,7 @@ package com.aicontent.platform.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.aicontent.platform.admin.IssueQueryRepository;
 import com.aicontent.platform.issue.IssueManagementService;
 import com.aicontent.platform.job.JobType;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 class PendingReviewFollowUpIntegrationTest extends IntegrationTestBase {
 
     @Autowired IssueManagementService management;
+    @Autowired IssueQueryRepository issueQueries;
 
     private static final String FIRST = article("가상시 B동 공장 폭발 사고 발생 주민 대피", "https://example.test/p/1", "가상일보", "2026-10-01T09:00:00+09:00");
     private static final String FOLLOW = article("가상시 B동 공장 폭발 사고 발생 부상자 이송", "https://example.test/p/2", "샘플뉴스", "2026-10-01T11:00:00+09:00");
@@ -60,6 +62,16 @@ class PendingReviewFollowUpIntegrationTest extends IntegrationTestBase {
                 .query(String.class).single()).isEqualTo("REVIEW");
         assertThat(jdbc.sql("SELECT status || '/' || article_count FROM issue WHERE id = :id").param("id", pending)
                 .query(String.class).single()).isEqualTo("REVIEW/2");       // not made ACTIVE automatically
+
+        // the admin detail tells the held follow-up from the first report and lists what it was compared with
+        var rows = issueQueries.detail(pending).orElseThrow().articles();
+        var heldRow = rows.stream().filter(a -> a.articleId() == follow).findFirst().orElseThrow();
+        assertThat(heldRow.heldWithPendingIssue()).isTrue();
+        assertThat(heldRow.runMethod()).isEqualTo("LLM");
+        assertThat(heldRow.llmReason()).startsWith("검수 대기 ISSUE #" + pending);
+        assertThat(heldRow.candidates().get(0).get("issueId").asLong()).isEqualTo(pending);
+        assertThat(heldRow.candidates().get(0).get("status").asText()).isEqualTo("REVIEW");
+        assertThat(rows.stream().filter(a -> a.articleId() != follow)).allMatch(a -> !a.heldWithPendingIssue());
 
         // a different event did not join the pending issue
         assertThat(count("SELECT count(*) FROM issue_article WHERE article_id = " + other + " AND issue_id = " + pending)).isZero();

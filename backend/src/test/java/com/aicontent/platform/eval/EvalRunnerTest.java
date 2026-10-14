@@ -3,6 +3,7 @@ package com.aicontent.platform.eval;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.aicontent.platform.eval.CaseResult.Gold;
+import com.aicontent.platform.issue.DecisionPolicy;
 import com.aicontent.platform.issue.DecisionPolicy.Decision;
 import com.aicontent.platform.issue.DecisionPolicy.Method;
 import com.aicontent.platform.issue.DecisionPolicy.RawDecision;
@@ -54,6 +55,29 @@ class EvalRunnerTest {
         var before = new EvalRunner(judge, T, 5, false).run(cases);
         assertEquals(CaseResult.Held.NONE, before.get(2).held());
         assertEquals(Method.GUARD_DOWNGRADE, before.get(2).method());
+    }
+
+    /**
+     * Replays the 2026-10-14 failure on the real v1 cases: the model said SAME for E09 (3분기) against the 2분기 issue and
+     * marked the period NOT_APPLICABLE, so the comparison check let it through. The code-side period rule must block it.
+     */
+    @Test
+    void periodRuleBlocksTheMergeTheModelsOwnComparisonMissed() throws Exception {
+        var cases = EvalDatasetLoader.load("eval/issue-eval-v1.json").stream()
+                .filter(c -> List.of("E07", "E08", "E09").contains(c.id())).toList();
+        var misjudged = new DecisionPolicy.Comparison(DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME,
+                DecisionPolicy.Match.NOT_APPLICABLE, DecisionPolicy.Match.NOT_APPLICABLE);
+        Judge judge = (article, candidates) -> new RawDecision(Decision.SAME_ISSUE, 0.9, candidates.get(0).issueId(),
+                "같은 회사의 실적 발표", misjudged);
+        var results = new EvalRunner(judge, T, 5).run(cases);
+
+        var e09 = results.stream().filter(r -> r.caseId().equals("E09")).findFirst().orElseThrow();
+        assertEquals(Decision.REVIEW, e09.decision());
+        assertEquals(Method.GUARD_DOWNGRADE, e09.method());
+        assertEquals(0, EvalMetrics.compute(results).wrongAutoSame());
+        // the same-quarter follow-up E08 is still linked automatically
+        var e08 = results.stream().filter(r -> r.caseId().equals("E08")).findFirst().orElseThrow();
+        assertEquals(Decision.SAME_ISSUE, e08.decision());
     }
 
     @Test

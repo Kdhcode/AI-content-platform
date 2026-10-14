@@ -99,6 +99,27 @@ public final class DecisionPolicy {
         return null;
     }
 
+    /**
+     * Applies the code-side period check ({@link PeriodGuard}) to an automatic SAME_ISSUE. A conflicting or unclear
+     * target period overrides the model: the article goes to REVIEW (GUARD_DOWNGRADE) with the extracted evidence in
+     * the reason. A consistent period only adds the evidence to the reason. Other outcomes are returned unchanged.
+     */
+    public static Outcome applyPeriodGuard(Outcome outcome, String articleText, String candidateText) {
+        if (outcome.decision() != Decision.SAME_ISSUE) {
+            return outcome;
+        }
+        PeriodGuard.Result check = PeriodGuard.compare(articleText, candidateText);
+        if (check.verdict() == PeriodGuard.Verdict.NOT_APPLICABLE) {
+            return outcome;
+        }
+        if (check.blocksAutoMerge()) {
+            return new Outcome(Decision.REVIEW, Method.GUARD_DOWNGRADE, null, outcome.confidence(),
+                    check.reason() + " | LLM 사유: " + outcome.reason(), outcome.rawDecision());
+        }
+        return new Outcome(outcome.decision(), outcome.method(), outcome.matchedIssueId(), outcome.confidence(),
+                outcome.reason() + " | " + check.reason(), outcome.rawDecision());
+    }
+
     private static Outcome llm(RawDecision raw, Long matched) {
         return new Outcome(raw.decision(), Method.LLM, matched, raw.confidence(), raw.reason(), raw.decision());
     }

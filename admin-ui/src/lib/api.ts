@@ -83,7 +83,9 @@ export type IssueDetail = IssueListItem & {
   titleSource: string; summarySource: string; keyFacts: string[]; entities: { name: string; type: string }[]; mergedFromIssueIds: number[];
   articles: { articleId: number; title: string; publisherName: string; publishedAt: string | null;
     classificationMethod: string; llmDecision: string | null; llmConfidence: number | null; llmReason: string | null;
-    similarity: number | null; manuallyCorrected: boolean }[];
+    similarity: number | null; manuallyCorrected: boolean; runMethod: string | null; runDecision: string | null;
+    heldWithPendingIssue: boolean;
+    candidates: { issueId: number; status?: string; title: string; similarity: number; articleCount: number }[] | null }[];
 };
 export type Job = {
   id: number; jobType: string; status: string; payload: Record<string, unknown>; result: Record<string, unknown> | null;

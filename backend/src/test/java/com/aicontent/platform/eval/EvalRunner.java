@@ -101,13 +101,21 @@ public class EvalRunner {
                 var views = candidates.stream().map(i -> new Judge.CandidateIssue(i.id, i.title, i.summary, List.copyOf(i.facts))).toList();
                 Set<Long> ids = candidates.stream().map(i -> i.id).collect(Collectors.toSet());
                 outcome = DecisionPolicy.evaluate(judge.judge(c, views), ids, thresholds);
+                if (outcome.decision() == Decision.SAME_ISSUE) {
+                    long matchedId = outcome.matchedIssueId();
+                    SimIssue target = candidates.stream().filter(i -> i.id == matchedId).findFirst().orElseThrow();
+                    outcome = DecisionPolicy.applyPeriodGuard(outcome,
+                            String.join("\n", c.title(), c.summary(), String.join("\n", c.keyFacts())),
+                            String.join("\n", target.title, target.summary, String.join("\n", target.facts)));
+                }
             }
 
             boolean sameCorrect = false;
             CaseResult.Held held = CaseResult.Held.NONE;
             Decision decision = outcome.decision();
             if (decision == Decision.SAME_ISSUE) {
-                SimIssue target = issues.stream().filter(i -> i.id == outcome.matchedIssueId()).findFirst().orElseThrow();
+                final long linkedId = outcome.matchedIssueId();
+                SimIssue target = issues.stream().filter(i -> i.id == linkedId).findFirst().orElseThrow();
                 boolean sameEvent = target.goldGroup.equals(c.eventGroup());
                 target.facts.addAll(c.keyFacts());
                 target.lastPublishedAt = c.publishedAt();
