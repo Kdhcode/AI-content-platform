@@ -264,3 +264,9 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 별도 검증 DB와 포트(18081/13081)에서 내장 브라우저로 분리·확정·병합 확인(stub, 유료 호출 0)
 - 전체 `mvn test` 182개 통과, `npm run typecheck`·`build` 통과
 - 공개 API 확인은 통합 브랜치에서 한다(`main` 병합 안 함)
+
+## 8. 통합 확인 브랜치 `claude/integration-review` (2026-10-14 밤, 검토용 · `main` 병합 안 함)
+- `claude/ai-quality` + `feature/public-news`, 충돌 없음
+- 새 통합 테스트 `PublicNewsReviewFlowIntegrationTest`: 검수 대기·보류 연결 기사는 공개되지 않고, 관리자의 분리·확정·병합 뒤에만 공개
+- 전체 `mvn test` 191개 통과, `npm run typecheck`·`build` 통과
+- 별도 DB와 포트(18082/13082)에서 `/news`와 관리자 화면을 브라우저로 확인(stub, 유료 호출 0)
