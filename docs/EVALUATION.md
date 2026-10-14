@@ -28,12 +28,20 @@ mvn -Dtest=EvalLlmIT -Deval.run=true -Deval.analysis=true -Dspring.profiles.acti
 ## 지표 정의 (`EvalMetrics`, 단위 테스트로 손계산 검증됨)
 | 지표 | 정의 |
 |---|---|
-| precision | 자동 SAME_ISSUE 중 정답 이슈에 연결된 비율 |
-| recall | 정답이 "기존 이슈와 같은 사건"인 사례(모호 제외) 중 자동으로 올바르게 연결된 비율 |
-| wrongAutoSameRate | 잘못된 자동 SAME_ISSUE 건수 / 전체 건수 — 가장 비싼 오류(이슈 오염) |
+**2026-10-14 수정:** precision·recall과 오류 분류는 **명확한 사례(모호 표시 없음)만**으로 계산한다. 예전에는 recall 분자에 모호 사례가 들어가 1을 넘을 수 있었다(v2에서 1.077). 모호 사례는 결정 분포만 따로 보고한다.
+
+| 지표 | 정의 |
+|---|---|
+| precision | 명확한 사례의 자동 SAME_ISSUE 중 정답 이슈에 연결된 수 / 명확한 사례의 자동 SAME_ISSUE 수 |
+| recall | 명확한 SAME 정답 중 정답 이슈에 자동 연결된 수 / 명확한 SAME 정답 수 (분자는 분모의 부분집합) |
+| SAME 정답 분해 | 자동 연결 성공(linked) + 다른 이슈에 자동 연결(wrongIssue) + NEW로 분리(splitAsNew = 병합 누락) + REVIEW 보류(heldForReview) = SAME 정답 수. 보류 중 같은 사건의 검수 대기 이슈에 붙은 것은 heldWithSameEvent |
+| 모호 사례 | 건수와 자동 SAME / 자동 NEW / REVIEW 분포만 보고 |
+| wrongAutoSameRate | 명확한 사례의 잘못된 자동 SAME_ISSUE 건수 / 전체 건수 — 가장 비싼 오류(이슈 오염) |
 | reviewRate | REVIEW 건수 / 전체 — 사람 검수 부담 |
-| adminEditRate | 잘못된 자동 결정(REVIEW 아님) / 자동 결정 — 관리자가 고쳐야 할 비율(모호 사례는 오류로 세지 않음) |
-| errorTypes | `FALSE_MERGE`(자동 SAME이 다른 이슈/첫 보도에 붙음), `MISSED_MERGE`(같은 사건인데 자동 NEW), `BUNDLE_NOT_REVIEWED`, `REVIEW_COULD_BE_SAME/NEW`(명확한 답이 있었는데 REVIEW: 오류는 아니지만 자동화 손실), `INVALID_LLM_OUTPUT`, `GUARD_DOWNGRADE`(정책이 LLM 판단을 뒤집음) |
+| adminEditRate | 명확한 사례의 잘못된 자동 결정 / 명확한 사례의 자동 결정 |
+| errorTypes | `FALSE_MERGE`(자동 SAME이 다른 이슈/첫 보도에 붙음), `MISSED_MERGE`(같은 사건인데 자동 NEW), `BUNDLE_NOT_REVIEWED`, `REVIEW_COULD_BE_SAME/NEW`(명확한 답이 있었는데 REVIEW: 오류는 아니지만 자동화 손실), `HELD_WITH_OTHER_EVENT`(다른 사건의 검수 대기 이슈에 보류 연결), `INVALID_LLM_OUTPUT`, `GUARD_DOWNGRADE`(정책이 LLM 판단을 뒤집음) |
+
+평가 하네스는 운영과 같이 검수 대기(REVIEW) 이슈도 후보로 제시하고, 거기에 맞으면 보류 연결(REVIEW)로 센다(묶음 기사로 생긴 검수 대기 이슈는 제외). 과거 로그는 `EvalLogRecompute`로 유료 호출 없이 재계산할 수 있다.
 
 분모가 0이면 `n/a`(null)입니다.
 
@@ -60,7 +68,7 @@ mvn -Dtest=EvalLlmIT -Deval.run=true -Deval.analysis=true -Dspring.profiles.acti
 ## 분류 프롬프트 v2·v3 반복 측정 (2026-10-14 오후)
 
 상세: [AI_QUALITY_20261014.md](AI_QUALITY_20261014.md) 8절. "SAME 13건 중"은 모호 사례를 뺀 정답 SAME 13건 중 맞힌 건수다.
-도구가 출력하는 `recall`은 분자에 모호 사례의 SAME이 들어가 1을 넘을 수 있으므로 합격 판정에 쓰지 않았다.
+당시 도구가 출력한 `recall`은 분자에 모호 사례의 SAME이 들어가 1을 넘을 수 있어 합격 판정에 쓰지 않았다(9절 수정 후 재계산: [AI_QUALITY_20261014.md](AI_QUALITY_20261014.md) 9-1).
 
 | 프롬프트 | 회차 | 오병합 | REVIEW | 스키마 실패 | SAME 13건 중 |
 |---|---|---|---|---|---|
@@ -71,6 +79,16 @@ mvn -Dtest=EvalLlmIT -Deval.run=true -Deval.analysis=true -Dspring.profiles.acti
 
 초안 기준으로 v3 최종 3회는 필수·목표를 모두 충족(재현율은 경계값 10/13)했지만, 4번째 실행은 재현율 미달. 기준은 바꾸지 않았다.
 묶음 기사 판별(`-Deval.analysis=true`, 분석 v2): 2/2 판별, 잘못된 판정 0.
+
+## 검수 대기 이슈 후보 제시 정책 반영 측정 (2026-10-14, v3, 3회)
+
+| 회차 | 오병합 | 연결 성공 | NEW로 분리 | REVIEW 보류(같은 사건) | REVIEW 전체 | precision | recall |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | 10 | 1 | 2 (2) | 5 | 1.000 | 0.769 |
+| 2 | 0 | 10 | 1 | 2 (2) | 5 | 1.000 | 0.769 |
+| 3 | 1 (E09) | 10 | 2 | 1 (0) | 3 | 0.909 | 0.769 |
+
+초안 필수 기준(오병합 0, 3회 모두)은 3회차 때문에 **미달**. 재현율 목표(10/13)는 3회 모두 10으로 경계값. 상세: AI_QUALITY_20261014.md 9-2.
 
 ## 합격 기준 초안 (2026-10-12, **미확정 — 사용자 결정 필요**)
 

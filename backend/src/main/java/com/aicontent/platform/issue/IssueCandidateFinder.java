@@ -31,12 +31,15 @@ public class IssueCandidateFinder {
         var c = props.classifier();
         return jdbc.sql("""
                 SELECT * FROM (
-                    SELECT i.id, i.title, i.summary, CAST(i.key_facts AS text) AS key_facts, i.first_published_at,
+                    SELECT i.id, i.status, i.title, i.summary, CAST(i.key_facts AS text) AS key_facts, i.first_published_at,
                            i.last_updated_at, i.article_count, i.publisher_count,
                            1 - (i.embedding <=> a.embedding) AS similarity
                     FROM issue i, (SELECT embedding FROM news_article WHERE id = :article) a
                     WHERE i.status IN (:statuses)
                       AND i.embedding IS NOT NULL AND a.embedding IS NOT NULL
+                      -- a pending issue opened for a bundle article covers several events: never a candidate
+                      AND NOT (i.status = 'REVIEW' AND EXISTS (SELECT 1 FROM classification_run r
+                                                               WHERE r.applied_issue_id = i.id AND r.method = 'MULTI_EVENT'))
                       AND COALESCE(i.last_updated_at, i.updated_at) >= now() - make_interval(days => :days)
                     ORDER BY i.embedding <=> a.embedding
                     LIMIT :limit
@@ -52,7 +55,7 @@ public class IssueCandidateFinder {
                     List<String> facts = new ArrayList<>();
                     JsonNode node = json.parse(rs.getString("key_facts"));
                     node.forEach(f -> facts.add(f.asText()));
-                    return new IssueCandidate(rs.getLong("id"), rs.getString("title"), rs.getString("summary"), facts,
+                    return new IssueCandidate(rs.getLong("id"), rs.getString("status"), rs.getString("title"), rs.getString("summary"), facts,
                             Sql.odt(rs, "first_published_at"), Sql.odt(rs, "last_updated_at"),
                             rs.getInt("article_count"), rs.getInt("publisher_count"), rs.getDouble("similarity"));
                 })

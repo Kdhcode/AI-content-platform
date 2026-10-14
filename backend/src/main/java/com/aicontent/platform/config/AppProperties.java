@@ -96,7 +96,7 @@ public record AppProperties(
             @DefaultValue("5") int candidateLimit,
             @DefaultValue("0.60") double candidateMinSimilarity,
             @DefaultValue("30") int candidateWindowDays,
-            @DefaultValue("ACTIVE") List<String> candidateIssueStatuses,
+            @DefaultValue({"ACTIVE", "REVIEW"}) List<String> candidateIssueStatuses,
             @DefaultValue("0.85") double sameIssueMinConfidence,
             @DefaultValue("0.70") double newIssueMinConfidence,
             @DefaultValue("300") long lockWaitSeconds,

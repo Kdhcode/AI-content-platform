@@ -248,3 +248,10 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 새 기사 7건(독립 5): 수집 → 분석 v2 → 임베딩 → 분류 v3 → 저장 성공. 독립 5건 카테고리 모두 기대 범위 안. 조정에 쓴 교황 기사가 이번엔 OTHER(이전 WORLD 2회) → 카테고리 흔들림. 분류는 7건 모두 후보 없음 → 실제 기사에서 분류 v3 호출·같은 사건 다매체 처리는 **미검증**
   - 전체 `mvn test`(stub, 로컬 `aicontent_test`) · **161개 통과, 실패 0**. 첫 실행에서 기본 분류 프롬프트 v3 전환으로 stub 응답에 `comparison`이 없어 20건 실패 → `StubAiClient`가 v3 스키마면 `comparison`을 넣도록 수정. 모의 서버 테스트(`OpenAiFlowIntegrationTest`)가 `issue-classifier.v1` 문자열로 분류 요청을 구분해 1건 실패 → 버전 무관하게 구분하고 v3 형식으로 응답하도록 수정
   - 관리자 UI는 수정하지 않아 `npm run typecheck`·`build` **미실행**
+- 2026-10-14 오후(3차) · 브랜치 `claude/ai-quality`(기준 `e6bde0d`) · 지표 수정, 검수 대기 후속 기사, 실제 다매체 검증. 상세 `docs/AI_QUALITY_20261014.md` 9절
+  - `EvalMetrics`: precision·recall을 명확한 사례로만 계산, 모호 사례 분리 보고, SAME 정답 분해(연결·다른 이슈·NEW 분리·REVIEW 보류). 회귀 테스트 `ambiguousHitsNoLongerInflateRecall`(v2의 recall 1.077 → 12/13). 저장된 평가 로그 11개를 `EvalLogRecompute`로 유료 호출 없이 재계산
+  - 검수 대기 이슈를 후보로 제시하고 같은 사건이면 보류 연결(REVIEW 유지, 자동 ACTIVE 없음). 묶음 기사 검수 이슈는 후보 제외. stub 통합 테스트 4개(보류 연결 → 관리자 확정, 분리, 묶음 제외, ACTIVE 자동 연결 유지)
+  - **실제 OpenAI** 93회(작업 한도 300회·$1, 재시도 0), 입력 186,208 / 출력 14,539 토큰, 추정 $0.036155(청구액 아님, 대조 미검증). 비용 NULL 0. 호출 전 한도 차단 재확인
+  - 평가 27건 v3 + 새 정책 3회: 오병합 0/0/1(3회차 E09 재발, 모델이 period를 NOT_APPLICABLE로 표시), 연결 10/10/10, NEW 분리 1/1/2, REVIEW 보류 2/2/1, REVIEW 5/5/3 → 초안 필수 기준 미달
+  - 실제 다매체 8건(사건 3개, 사건당 언론사 2~3곳, 이전 검증에 안 쓴 기사): 수집 → 분석 v2 → 임베딩 → pgvector 후보 검색 → 분류 v3 → 연결 모두 성공. 후속 5건에서 v3 후보 비교 실제 호출, 오병합·누락·REVIEW 0. 비슷한 다른 사건은 후보 검색 단계에서 분리돼 AI가 다른 사건을 거부하는 경우는 **미검증**
+  - 전체 `mvn test`(stub, 로컬 `aicontent_test`) · **169개 통과, 실패 0**. 관리자 UI 변경 없음 → `npm run typecheck`·`build` **미실행**. 공개 API 회귀 테스트는 이 브랜치에 없어 **미실행**
