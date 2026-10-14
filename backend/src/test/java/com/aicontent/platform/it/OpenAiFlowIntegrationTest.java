@@ -65,10 +65,11 @@ class OpenAiFlowIntegrationTest extends IntegrationTestBase {
                     assertThat(exchange.getRequestURI().getPath()).isEqualTo("/v1/chat/completions");
                     assertThat(request.path("response_format").path("type").asText()).isEqualTo("json_object");
                     String content;
-                    if (request.path("messages").path(0).path("content").asText().contains("issue-classifier.v1")) {
+                    if (request.path("messages").path(0).path("content").asText().contains("issue-classifier.v")) {
                         classifierCalls.incrementAndGet();
                         content = """
-                                {"decision":"REVIEW","confidence":0.5,"matchedIssueId":null,"reason":"동일 사건인지 관리자 검토가 필요합니다."}""";
+                                {"decision":"REVIEW","confidence":0.5,"matchedIssueId":null,"reason":"동일 사건인지 관리자 검토가 필요합니다.",
+                                "comparison":{"actor":"SAME","action":"SAME","period":"NOT_APPLICABLE","place":"UNKNOWN"}}""";
                     } else {
                         analysisCalls.incrementAndGet();
                         content = """

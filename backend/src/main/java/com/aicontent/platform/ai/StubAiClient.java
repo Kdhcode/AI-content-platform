@@ -31,7 +31,8 @@ public class StubAiClient implements AiClient {
     public AiCompletion complete(AiRequest request) {
         Map<String, Object> out = switch (request.type()) {
             case ARTICLE_ANALYSIS -> analysis(request.variables());
-            case ISSUE_CLASSIFY -> classify(request.variables());
+            case ISSUE_CLASSIFY -> classify(request.variables(), request.jsonSchema() != null && request.jsonSchema().has("properties")
+                    && request.jsonSchema().get("properties").has("comparison"));
             default -> throw new AiException("AI_UNSUPPORTED", "stub cannot complete " + request.type(), false);
         };
         try {
@@ -59,8 +60,9 @@ public class StubAiClient implements AiClient {
         return m;
     }
 
+    /** @param withComparison the prompt's schema asks for the itemised comparison (issue-classifier v3 and later) */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> classify(Map<String, Object> vars) {
+    private Map<String, Object> classify(Map<String, Object> vars, boolean withComparison) {
         Set<String> articleTokens = tokens(String.valueOf(vars.getOrDefault("title", "")));
         List<Map<String, Object>> candidates = (List<Map<String, Object>>) vars.getOrDefault("candidatesData", List.of());
         Long bestId = null;
@@ -88,6 +90,11 @@ public class StubAiClient implements AiClient {
             m.put("confidence", 0.8);
             m.put("matchedIssueId", null);
             m.put("reason", "stub: no candidate title overlaps enough");
+        }
+        if (withComparison) {
+            boolean same = "SAME_ISSUE".equals(m.get("decision"));
+            m.put("comparison", Map.of("actor", same ? "SAME" : "UNKNOWN", "action", same ? "SAME" : "DIFFERENT",
+                    "period", "NOT_APPLICABLE", "place", "NOT_APPLICABLE"));
         }
         return m;
     }

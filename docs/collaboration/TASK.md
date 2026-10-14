@@ -240,3 +240,11 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 분류 평가 세트 27건 1회: precision·recall 0.923, **오병합 1건(E09)** → 합격 기준 초안 필수 조건 미달. REVIEW 3, 스키마 실패 0. 3회 반복·묶음 판별은 **미실행**(호출 상한)
   - 전체 `mvn test`(stub, 로컬 `aicontent_test`) · **154개 통과, 실패 0** (기존 143 + 새 11). 첫 실행에서 `ClassificationFlowIntegrationTest`가 분석 프롬프트 버전을 `v1`로 고정해 실패 → 기본값을 v2로 바꾼 의도된 변경이라 기대값을 `v2`로 수정. 유료 하네스(`AnalysisCompareIT`, `EvalLlmIT`)와 `CleanerRealDataReport`는 시스템 속성이 없으면 실행되지 않음
   - `npm run typecheck`·`build` · **미실행**(관리자 UI 변경 없음)
+- 2026-10-14 오후 · 브랜치 `claude/ai-quality`(기준 `17a1222`) · 오병합 대응·추가 검증. 상세 `docs/AI_QUALITY_20261014.md` 8절
+  - 원인: E09는 AI 판단 단계(다른 분기라고 쓰고도 SAME 0.9), E10은 E09 결과의 연쇄. 분류 프롬프트 v2(지시문) 3회 → E09 오병합 그대로. v3(항목별 비교 + DecisionPolicy 모순 강등, 기본값) 초안·최종
+  - **실제 OpenAI** 282회(작업 한도 300회·$1, 재시도 1 포함), 입력 519,600 / 출력 39,568 토큰, 추정 $0.101390(청구액 아님, 청구 대조 미검증). 비용 NULL 0. 호출 전 한도 차단(예산·호출 수) 확인
+  - 평가 27건: v2 3회 오병합 1(E09)·SAME 13건 중 12. **v3 최종 3회 오병합 0/0/0**, SAME 13건 중 10/11/10, REVIEW 3/4/3, 스키마 실패 0 → 합격 기준 초안 충족(재현율 경계값). 묶음 판별 연결 실행(4번째)은 SAME 8/13으로 미달
+  - 묶음 판별(eval.analysis, 분석 v2): 2/2, 잘못된 판정 0, 묶음 기사는 MULTI_EVENT로 REVIEW
+  - 새 기사 7건(독립 5): 수집 → 분석 v2 → 임베딩 → 분류 v3 → 저장 성공. 독립 5건 카테고리 모두 기대 범위 안. 조정에 쓴 교황 기사가 이번엔 OTHER(이전 WORLD 2회) → 카테고리 흔들림. 분류는 7건 모두 후보 없음 → 실제 기사에서 분류 v3 호출·같은 사건 다매체 처리는 **미검증**
+  - 전체 `mvn test`(stub, 로컬 `aicontent_test`) · **161개 통과, 실패 0**. 첫 실행에서 기본 분류 프롬프트 v3 전환으로 stub 응답에 `comparison`이 없어 20건 실패 → `StubAiClient`가 v3 스키마면 `comparison`을 넣도록 수정. 모의 서버 테스트(`OpenAiFlowIntegrationTest`)가 `issue-classifier.v1` 문자열로 분류 요청을 구분해 1건 실패 → 버전 무관하게 구분하고 v3 형식으로 응답하도록 수정
+  - 관리자 UI는 수정하지 않아 `npm run typecheck`·`build` **미실행**

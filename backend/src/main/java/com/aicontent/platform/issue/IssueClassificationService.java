@@ -243,9 +243,7 @@ public class IssueClassificationService {
     }
 
     private DecisionPolicy.RawDecision toRaw(JsonNode v) {
-        Long matched = v.hasNonNull("matchedIssueId") ? v.get("matchedIssueId").asLong() : null;
-        return new DecisionPolicy.RawDecision(Decision.valueOf(v.get("decision").asText()), v.get("confidence").asDouble(),
-                matched, v.get("reason").asText());
+        return RawDecisionParser.parse(v);
     }
 
     private String candidatesJson(List<IssueCandidate> candidates) {

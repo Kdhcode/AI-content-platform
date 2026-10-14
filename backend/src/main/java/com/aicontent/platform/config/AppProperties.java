@@ -110,7 +110,7 @@ public record AppProperties(
 
     public record Prompts(
             @DefaultValue("v2") String articleAnalysisVersion,
-            @DefaultValue("v1") String issueClassifierVersion) {}
+            @DefaultValue("v3") String issueClassifierVersion) {}
 
     public record Admin(
             @DefaultValue("") String bootstrapUsername,

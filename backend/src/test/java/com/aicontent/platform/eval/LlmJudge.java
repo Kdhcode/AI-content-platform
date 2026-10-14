@@ -8,6 +8,7 @@ import com.aicontent.platform.ai.StructuredOutputService;
 import com.aicontent.platform.issue.ClassifierPromptVariables;
 import com.aicontent.platform.issue.DecisionPolicy.Decision;
 import com.aicontent.platform.issue.DecisionPolicy.RawDecision;
+import com.aicontent.platform.issue.RawDecisionParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 
@@ -36,9 +37,7 @@ public class LlmJudge implements Judge {
             var result = structured.execute(new StructuredOutputService.Call(AiCallType.ISSUE_CLASSIFY,
                     prompts.get("issue-classifier", promptVersion), ClassifierPromptVariables.build(input, cands), maxAttempts,
                     AiCallContext.of(null, null)));
-            JsonNode v = result.value();
-            return new RawDecision(Decision.valueOf(v.get("decision").asText()), v.get("confidence").asDouble(),
-                    v.hasNonNull("matchedIssueId") ? v.get("matchedIssueId").asLong() : null, v.get("reason").asText());
+            return RawDecisionParser.parse(result.value());
         } catch (AiOutputInvalidException e) {
             // an unusable answer is a REVIEW with zero confidence, the same outcome production reaches
             return new RawDecision(Decision.REVIEW, 0.0, null, "invalid LLM output: " + String.join("; ", e.errors()));

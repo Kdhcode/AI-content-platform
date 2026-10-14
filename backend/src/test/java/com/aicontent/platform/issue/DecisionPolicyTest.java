@@ -18,6 +18,44 @@ class DecisionPolicyTest {
     private static final Thresholds T = new Thresholds(0.85, 0.70);
     private static final Set<Long> CANDIDATES = Set.of(10L, 20L);
 
+    private static DecisionPolicy.Comparison cmp(DecisionPolicy.Match actor, DecisionPolicy.Match action,
+                                                 DecisionPolicy.Match period, DecisionPolicy.Match place) {
+        return new DecisionPolicy.Comparison(actor, action, period, place);
+    }
+
+    @Test
+    void sameIssueThatTheModelsOwnComparisonContradictsBecomesReview() {
+        var c = cmp(DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME, DecisionPolicy.Match.DIFFERENT, DecisionPolicy.Match.NOT_APPLICABLE);
+        var o = DecisionPolicy.evaluate(new RawDecision(SAME_ISSUE, 0.95, 10L, "r", c), CANDIDATES, T);
+        assertEquals(REVIEW, o.decision());
+        assertEquals(Method.GUARD_DOWNGRADE, o.method());
+        assertEquals(SAME_ISSUE, o.rawDecision());
+        assertTrue(o.reason().contains("대상 기간"));
+    }
+
+    @Test
+    void sameIssueWithUnknownActorOrActionBecomesReview() {
+        for (var c : new DecisionPolicy.Comparison[] {
+                cmp(DecisionPolicy.Match.UNKNOWN, DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME),
+                cmp(DecisionPolicy.Match.SAME, DecisionPolicy.Match.UNKNOWN, DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME)}) {
+            assertEquals(REVIEW, DecisionPolicy.evaluate(new RawDecision(SAME_ISSUE, 0.95, 10L, "r", c), CANDIDATES, T).decision());
+        }
+    }
+
+    @Test
+    void followUpWithoutPeriodOrPlaceIsStillApplied() {
+        var c = cmp(DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME, DecisionPolicy.Match.UNKNOWN, DecisionPolicy.Match.NOT_APPLICABLE);
+        var o = DecisionPolicy.evaluate(new RawDecision(SAME_ISSUE, 0.9, 10L, "r", c), CANDIDATES, T);
+        assertEquals(SAME_ISSUE, o.decision());
+        assertEquals(Method.LLM, o.method());
+    }
+
+    @Test
+    void newIssueIsNotAffectedByTheComparison() {
+        var c = cmp(DecisionPolicy.Match.SAME, DecisionPolicy.Match.DIFFERENT, DecisionPolicy.Match.DIFFERENT, DecisionPolicy.Match.SAME);
+        assertEquals(NEW_ISSUE, DecisionPolicy.evaluate(new RawDecision(NEW_ISSUE, 0.9, null, "r", c), CANDIDATES, T).decision());
+    }
+
     @Test
     void confidentSameIssueInCandidatesIsApplied() {
         var o = DecisionPolicy.evaluate(new RawDecision(SAME_ISSUE, 0.9, 10L, "r"), CANDIDATES, T);

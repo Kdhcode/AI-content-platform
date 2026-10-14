@@ -1,0 +1,2 @@
+{ "key": "issue-classifier", "version": "v2", "schemaVersion": "issue-classifier.v1", "temperature": 0.0,
+  "description": "v1과 같은 스키마. 같은 사건을 대상·행위·대상 기간·장소로 정의하고, 기간·장소·행위가 다르면 별개 사건, 발행일만 다른 후속 보도는 같은 사건, 근거 부족·충돌은 REVIEW로 정리" }
