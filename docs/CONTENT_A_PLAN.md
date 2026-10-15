@@ -4,10 +4,12 @@
 
 | 작업 | 상태 | 비고 |
 |---|---|---|
-| A1 스키마 | **구현됨** | V4(`content`·`content_source`·`content_link`) + V5(EXTERNAL_URL 출처의 URL 필수 — V4 CHECK가 NULL을 통과시키던 문제 수정) |
+| A1 스키마 | **구현됨** | V4(`content`·`content_source`·`content_link`) + V5(EXTERNAL_URL 출처의 URL 필수 — V4 CHECK가 NULL을 통과시키던 문제 수정) + V6(관련 URL 표시 위치 값·기본값, URL 규칙 통일) |
 | A2 생성·조회·편집 | **구현됨** | `docs/API.md` "콘텐츠" |
 | A3 상태 전이 | **구현됨(2026-10-15)** | 4절 최종 표 |
-| A4 출처 관리 · A5 관련 URL · A6 업데이트 필요 표시 · A7 화면 · A8 분리 확인 | 계획만 있음 | 6절 |
+| A4 출처 관리 | **구현됨(2026-10-15)** | 5절 "출처 관리" |
+| A5 관련 URL | **구현됨(2026-10-15)** | 5절 "관련 URL", V6(표시 위치 값·URL 규칙) |
+| A6 업데이트 필요 표시 · A7 화면 · A8 분리 확인 | 계획만 있음 | 6절 |
 
 구현하면서 계획과 달라진 점: ① 생성 요청의 `body`는 선택이고 생략하면 빈 본문(기본 소제목 자동 채움은 7절 7번이 정해질 때까지 하지 않음) ② 같은 키의 다른 요청을 가리기 위해 `content.creation_fingerprint`(요청 해시) 열 추가 ③ 상태 동작 실패(검수 요청·승인 조건 미달)는 422 `CONTENT_NOT_READY`.
 
@@ -142,6 +144,21 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 
 ## 5. 동작 세부
 
+**출처 관리(A4, 2026-10-15 구현):**
+- 종류별로 해당 참조값 하나만 받는다: ISSUE→`issueId`, NEWS_ARTICLE→`newsArticleId`, EXTERNAL_URL→`externalUrl`, MANUAL→`label`(공백만은 거부). 다른 칸이 오면 400.
+- ISSUE는 존재하고 ACTIVE·CLOSED인 이슈만(생성 기준과 같음, REVIEW·EXCLUDED·MERGED는 409). NEWS_ARTICLE은 존재하는 기사이고 중복 기사(`duplicate_of_article_id`)가 아니어야 한다(409, 원본 기사 번호 안내). URL은 http(s)·호스트·공백 없음·2000자(서버가 접속하지 않음).
+- 같은 콘텐츠에 같은 이슈·기사·URL은 한 번만(409 `CONTENT_SOURCE_DUPLICATE`, 원천 이슈도 포함). MANUAL은 중복 검사 없음.
+- 수정은 역할(`role`)과 설명(`label`)만. 가리키는 대상을 바꾸려면 삭제 후 추가(감사 기록에 둘 다 남음).
+- **원천 이슈 출처**(생성 때 자동 등록된 `ISSUE`·`issue_id = origin_issue_id`): 삭제 불가(409 `CONTENT_SOURCE_PROTECTED`) — 콘텐츠가 어디서 왔는지의 기록. 역할 변경은 허용. `origin_issue_id`는 어떤 출처 변경으로도 바뀌지 않는다.
+- 초안은 PRIMARY 없이도 저장된다. 검수 요청·승인 때만 PRIMARY 1개 이상(A3, 422).
+
+**관련 URL(A5, 2026-10-15 구현):**
+- 종류 PRODUCT·OFFICIAL·MAP·RESERVATION·PURCHASE·REFERENCE·OTHER, 제목 0~200자(한 줄), URL은 출처와 같은 규칙, 사이트 노출 기본 true·블로그 노출 기본 false, 표시 위치 **BODY_TOP(본문 위)·BODY_BOTTOM(본문 아래, 기본)·SOURCES(출처 영역)** — 사용자 결정(10-15), V6에서 DB 제약.
+- 새 링크는 맨 뒤에 붙는다. 정렬은 `PUT .../links/order`에 이 콘텐츠의 링크 id를 **빠짐없이 한 번씩**: 중복·모르는 id(다른 콘텐츠 것 포함)·빠진 id가 하나라도 있으면 400(`details{duplicateIds, unknownIds, missingIds}`)이고 아무것도 바뀌지 않는다. 지금과 같은 순서면 변경 없음.
+- 노출 설정은 저장만 한다. 뉴스룸·블로그 노출은 Phase 3·5.
+
+**출처·URL 공통(`ContentChanges`, 제목·본문 편집과 같은 경로):** 콘텐츠 행 잠금 → HOLD·EXCLUDED·ARCHIVED면 409 → version 불일치면 409 `CONTENT_VERSION_CONFLICT` → 변경 → **실제로 달라졌을 때만** version +1, REVIEW·APPROVED → DRAFT(검수 기록 정리, APPROVED면 승인 해제 기록), 감사 기록. 같은 값·같은 순서 요청은 아무것도 쓰지 않는다(`changed: false`). 다른 콘텐츠의 sourceId·linkId는 404. 삭제는 `?version=`으로 version을 보낸다.
+
 **중복 생성 방지:** 화면이 "만들기" 대화상자를 열 때 UUID를 만들어 `Idempotency-Key`로 보낸다. 서버는 `content.creation_key`(UNIQUE)에 저장하고, 같은 키가 다시 오면 새로 만들지 않고 기존 콘텐츠를 200으로 돌려준다(첫 생성은 201). 키가 없으면 400. 같은 이슈에 새 콘텐츠를 더 만들려면 대화상자를 다시 열면 된다(새 키).
 
 **동시 편집:** `PATCH`는 `version`이 현재 값과 같을 때만 저장한다. 다르면 409 `CONTENT_VERSION_CONFLICT`와 `{currentVersion, updatedBy, updatedAt}`. 화면은 자동저장을 멈추고 "다른 곳에서 먼저 저장됨" 안내와 두 선택지를 준다: ① 내 편집본을 이 브라우저에 보관한 채 최신 내용 불러오기(보관본은 옆에 표시해 복사 가능) ② 취소. 내 편집본은 충돌 시점에 `localStorage`(콘텐츠 id별)에 남긴다.
@@ -163,8 +180,8 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 | A1 (구현됨) | 스키마 V4, V5 | `db/migration/V4__content.sql` | - | 빈 DB·기존 DB(V3) 모두 적용, CHECK·UNIQUE 위반 시 실패하는 통합 테스트, 기존 테스트 전부 통과 | 없음 |
 | A2 (구현됨) | 생성·조회·편집 | `content/ContentRepository`, `ContentService`, `ContentBody`, `ContentBodyValidator`, `admin/ContentAdminController`, `AdminRequests`(요청 DTO), `ErrorCode`(CONTENT_*) | `POST /api/admin/issues/{id}/contents`, `GET /api/admin/contents`, `GET/PATCH /api/admin/contents/{id}` | 본문 규칙 단위 테스트, 이슈 상태별 생성 허용·거부, 같은 키 재요청 시 1건, version 충돌 409, 비로그인 401, 감사 기록 | A1 |
 | A3 (구현됨) | 상태 전이 | `content/ContentStatusPolicy`, `ContentService` 상태 메서드 | `POST /api/admin/contents/{id}/{submit,approve,return,hold,resume,exclude,archive,restore}` | 표 전체 단위 테스트(허용·거부·역할), DRAFT 직접 승인 거부, 편집 시 승인 해제, version 불일치 409 | A2 |
-| A4 | 출처 | `content/ContentSourceRepository`, 서비스·컨트롤러 | `GET/POST/DELETE /api/admin/contents/{id}/sources` | 생성 시 원천 이슈를 PRIMARY로 자동 등록, 유형별 칸 검증, 중복 거부, 변경 시 승인 해제 | A2 (A3과 병행 가능) |
-| A5 | 관련 URL | `content/ContentLinkRepository`, 서비스·컨트롤러 | `POST/PATCH/DELETE /api/admin/contents/{id}/links` | 잘못된 URL 거부, 사이트만·블로그만·둘 다 저장(명세 09 §7), 변경 시 승인 해제 | A2 (병행 가능) |
+| A4 (구현됨) | 출처 | `content/ContentSourceRepository`, 서비스·컨트롤러 | `GET/POST/DELETE /api/admin/contents/{id}/sources` | 생성 시 원천 이슈를 PRIMARY로 자동 등록, 유형별 칸 검증, 중복 거부, 변경 시 승인 해제 | A2 (A3과 병행 가능) |
+| A5 (구현됨) | 관련 URL | `content/ContentLinkRepository`, 서비스·컨트롤러 | `POST/PATCH/DELETE /api/admin/contents/{id}/links` | 잘못된 URL 거부, 사이트만·블로그만·둘 다 저장(명세 09 §7), 변경 시 승인 해제 | A2 (병행 가능) |
 | A6 | 업데이트 필요 표시 | 조회 쿼리, `acknowledge` 동작 | `GET /api/admin/contents?updateNeeded=true`, `POST /api/admin/contents/{id}/acknowledge-origin` | 기사 추가·병합 후 표시, 확인 후 해제, 본문 불변 | A2 |
 | A7 | 관리자 화면 | `admin-ui/src/lib/api.ts`, `app/contents/page.tsx`(목록: 유형 탭·상태·업데이트 필요 필터·검색), `app/contents/[id]/page.tsx`(편집: 섹션·문단 추가/삭제/순서, 자동저장, 충돌 안내, 상태 버튼, 출처, 관련 URL), `app/issues/[id]/page.tsx`("NEWS/LIFE 콘텐츠 만들기"), 메뉴 | 위 API | 타입 검사·빌드, 로컬 검증 모드에서 브라우저로 생성→편집→검수 요청→승인→수정 시 DRAFT 복귀→충돌 안내 확인 | A3~A6 |
 | A8 | 분리 확인·문서 | 공개 API 회귀 테스트, `docs/API.md`, `DECISIONS.md` | - | 승인 콘텐츠가 있어도 `/api/public/*` 응답 동일 | A7 |
@@ -175,10 +192,12 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 
 1. ~~승인 권한~~ → **결정(10-15):** SYSTEM_ADMIN만, 본인 작성분 승인 허용(초기 운영).
 2. ~~REVIEW 중 편집~~ → **결정(10-15):** 실제 내용이 바뀌면 DRAFT로.
-3. **관련 URL 표시 위치 값:** 명세는 "노출 문구 및 위치 설정"만 있음. 제안: 본문 위 / 본문 아래 / 출처 영역.
+3. ~~관련 URL 표시 위치 값~~ → **결정(10-15):** BODY_TOP · BODY_BOTTOM(기본) · SOURCES.
 4. **크기 한도:** 섹션 30·문단 50·문단 5,000자·전체 100,000자·제목 200자 제안값 확인.
 5. **자동저장 간격:** 제안 2초.
 6. **LIFE 수동 생성 유지:** B 묶음(LIFE 판정) 이후에도 판정 없이 LIFE를 만들 수 있게 둘지.
 7. **기본 소제목 자동 채움:** 명세 구조로 미리 채울지, 빈 본문으로 시작할지.
 8. **원천 이슈가 EXCLUDED·MERGED일 때 검수 요청·승인:** 지금은 계획대로 막지 않고 상세에서 보이기만 한다. 막을지(또는 경고만 할지) 결정 필요.
 9. **본인 승인 허용의 종료 시점:** 운영 인원이 늘면 작성자와 승인자를 분리할지.
+10. **원천 이슈 출처 삭제:** 지금은 삭제 불가(역할 변경만). 원천 이슈를 잘못 고른 콘텐츠는 새로 만들어야 한다. 원천 이슈를 바꾸는 별도 동작이 필요하면 결정 필요.
+11. **같은 URL의 관련 링크 중복:** 지금은 허용(같은 지도 링크를 위·아래에 둘 수 있음). 막을지 결정 필요.

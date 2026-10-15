@@ -370,3 +370,13 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 테스트(로컬 `aicontent_test`, stub): 새 테스트 12개(정책 표 3, 상태 API 6, 동시성·원자성 3) + 스키마 회귀 보강 포함 전체 `mvn package` **237개 통과**(기준: A3 코드 커밋). 대시보드 스키마 버전 기대값 4→5
 - 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig5_fresh` V1~V5, `aicontent_mig_upgrade` V4→V5, `aicontent_main` 새 복사본 `aicontent_mig5_upgrade` V3→V5 — 두 업그레이드 모두 기존 11개 테이블 행 md5 동일, 업그레이드 DB에서 NULL URL 출처 삽입 거부 확인(확인용 콘텐츠 1건이 그 검증 DB에 남음). 원본 `aicontent_main`은 V3, daily 서버 그대로
 - UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 17. 2026-10-15 콘텐츠 A4 출처·A5 관련 URL (`claude/content-a`, `main` 미병합)
+
+- API: `GET/POST /api/admin/contents/{id}/sources`, `PATCH/DELETE .../sources/{sourceId}`, `GET/POST .../links`, `PATCH/DELETE .../links/{linkId}`, `PUT .../links/order`. 규칙은 `CONTENT_A_PLAN.md` 5절
+- 공통 변경 경로 `ContentChanges`로 제목·본문 편집(A2)도 옮김(동작 동일, 응답에 `changed`·`itemId` 추가)
+- V6: 링크 표시 위치 BODY_TOP·BODY_BOTTOM(기본)·SOURCES, NULL은 BODY_BOTTOM으로 채우고 다른 값은 마이그레이션이 멈추게 함(행 삭제·추측 없음), 링크 URL 규칙을 V5 출처와 통일
+- **테스트 코드 문제 발견·수정:** MockMvc 응답을 `getContentAsString()`(ISO-8859-1)으로 읽어 한글이 깨졌고, 그래서 A2·A3의 "승인 콘텐츠가 공개 응답에 없음"(`doesNotContain(한글)`) 검사는 노출돼도 통과할 수 있었다. 콘텐츠 테스트 전체를 UTF-8로 읽도록 고침(이제 실제로 검사함)
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 8개(출처·링크 API 6, 동시성·원자성 2) + 스키마 V6 검사 포함 전체 `mvn package` **245개 통과**(기준: A4·A5 코드 커밋)
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig6_fresh` V1~V6(기본값 BODY_BOTTOM, NOT NULL), `aicontent_mig5_upgrade` V5→V6(미리 넣은 NULL 위치 링크 → BODY_BOTTOM, 나머지 13개 테이블 행 동일), `aicontent_main` 새 복사본 `aicontent_mig6_upgrade` V3→V6(기존 11개 테이블 행 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
