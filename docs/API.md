@@ -96,6 +96,33 @@
 
 ---
 
+## 콘텐츠 (NEWS·LIFE, A2 — 수동 작성)
+
+관리자 전용(OPERATOR+). 공개 API(`/api/public/*`)와 뉴스룸은 콘텐츠를 읽지 않으며, 승인돼도 자동 공개되지 않는다. 본문 형식·한도는 `docs/CONTENT_A_PLAN.md` 2절.
+
+### `POST /issues/{issueId}/contents` — 수동 초안 생성 (OPERATOR+) · 동기
+헤더 `Idempotency-Key` 필수(영문·숫자·`._:-` 8~100자, 대화상자를 열 때마다 새로 만듦). 본문 `{contentType: NEWS|LIFE, title?, body?}`(title·body 생략 시 빈 제목·빈 본문 `{"schemaVersion":1,"sections":[]}`).
+- 201: 새 DRAFT(`version` 0). 원천 이슈가 PRIMARY 출처로 같은 트랜잭션에서 등록되고 감사 기록 `CONTENT_CREATE`.
+- 200 + `Idempotent-Replayed: true`: 같은 키·같은 요청(이슈·유형·제목·본문, JSON 키 순서 무관)의 재요청 → 처음 만든 콘텐츠. 동시 재요청도 콘텐츠·출처·감사 기록은 1건.
+- 409 `IDEMPOTENCY_KEY_CONFLICT`(`details.contentId`): 같은 키로 다른 요청.
+- 409 `ISSUE_STATE_INVALID`: 이슈가 REVIEW·EXCLUDED·MERGED(MERGED면 병합 대상 이슈 번호 안내). 404 `ISSUE_NOT_FOUND`.
+- 400 `VALIDATION_ERROR`(키 없음·형식, 유형, 제목 200자 초과·줄바꿈), 400 `CONTENT_BODY_INVALID`(`details.violations[]: {path, message}`, 최대 20개).
+
+### `GET /contents` — 목록 (OPERATOR+)
+`type`(NEWS|LIFE), `status`(DRAFT|REVIEW|APPROVED|HOLD|EXCLUDED|ARCHIVED), `issueId`, `q`(제목 검색, 200자 이하), `page`, `size`, `sort`(`updatedAt|createdAt|title|id`, 기본 최근 수정순). 항목: `id, contentType, status, title, version, originIssueId, originIssueTitle, originIssueStatus, updatedBy, updatedAt`.
+
+### `GET /contents/{id}` — 상세 (OPERATOR+)
+`id, contentType, status, title, body, version, originIssue{id, title, status, mergedIntoIssueId}, originCheckedAt, sources[]{id, kind, issueId, newsArticleId, externalUrl, label, role, checkedAt}, statusReason, createdBy/At, updatedBy/At, submittedAt, approvedBy/At`. 404 `CONTENT_NOT_FOUND`.
+
+### `PATCH /contents/{id}` — 제목·본문 저장 (OPERATOR+) · 동기
+본문 `{version, title?, body?}` — 생략한 값은 유지, 둘 다 없으면 400. `version`은 편집기가 불러온 값.
+- 200 `{content, statusChanged}`: 저장되면 `version`+1, 감사 기록 `CONTENT_UPDATE`. REVIEW·APPROVED 콘텐츠는 DRAFT로 돌아가고(`statusChanged: true`, 승인·검수 요청 기록 지움) APPROVED였으면 `CONTENT_APPROVAL_REVOKED_BY_EDIT`도 기록. 값이 같으면 아무것도 바꾸지 않음(version 그대로).
+- 409 `CONTENT_VERSION_CONFLICT`: `details{currentVersion, sentVersion, updatedBy, updatedAt}` — 다시 불러와 확인. 검사와 저장은 행 잠금 안에서 함께 처리.
+- 409 `CONTENT_STATE_INVALID`: HOLD·EXCLUDED·ARCHIVED(복귀 동작은 A3).
+- 400 `CONTENT_BODY_INVALID` / `VALIDATION_ERROR`.
+
+---
+
 ## 작업 (ASYNC_JOB)
 
 ### `GET /jobs` — 목록 (OPERATOR+)

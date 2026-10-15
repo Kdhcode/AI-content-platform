@@ -352,3 +352,12 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 확인된 문제: 검수 대기 이슈를 제외(EXCLUDED)한 뒤 API로 CLOSED로 바꾸면 검수 안 된 기사가 공개됐다(REVIEW→CLOSED만 막혀 있었음). 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가로 수정
 - 실행 스크립트: 혼합 검사를 끄는 잔여 변수(`APP_AI_EMBEDDINGGUARD*`)도 거부 목록에 추가
 - 전체 `mvn test` 205개 통과(UI 코드 변경 없음). 유료 호출 0
+
+## 15. 2026-10-15 NEWS·LIFE 콘텐츠 A1·A2 (`claude/content-a`, `main` 미병합)
+
+- 범위: A1 스키마(V4), A2 `POST /api/admin/issues/{id}/contents`, `GET /api/admin/contents`, `GET /api/admin/contents/{id}`, `PATCH /api/admin/contents/{id}`. 상태 전이·출처/URL 관리 API·화면·자동저장·AI 생성·LIFE 판정·회원·TV·블로그 발행은 하지 않음
+- 저장소에 `AGENTS.md`는 없음 → `docs/collaboration/RULES.md` 기준
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 20개(본문 검증 6, API 8, 동시성·트랜잭션 3, 스키마 제약 3) 포함 전체 `mvn package` **225개 통과**(기준: 이 커밋의 코드). 대시보드 스키마 버전 기대값 3→4 갱신, 테스트 정리 대상에 콘텐츠 테이블 추가
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig_fresh`에 V1~V4 적용. `aicontent_main`(V3)의 복사본 `aicontent_mig_upgrade`에 V4만 적용, 기존 11개 테이블 행 전체 md5 동일(데이터 보존). 원본 `aicontent_main`은 V3 그대로, daily 서버는 건드리지 않음
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+- A3 전에 정할 것: `CONTENT_A_PLAN.md` 7절(승인 권한, REVIEW 중 편집, 기본 소제목 등)
