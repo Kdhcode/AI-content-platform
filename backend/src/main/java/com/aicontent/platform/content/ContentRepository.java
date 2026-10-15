@@ -30,8 +30,13 @@ public class ContentRepository {
     public record Source(long id, String kind, Long issueId, Long newsArticleId, String externalUrl, String label,
                          String role, OffsetDateTime checkedAt) {}
 
+    public record Link(long id, String linkType, String title, String url, boolean siteVisible, boolean blogVisible,
+                       String displayPosition, int sortOrder, OffsetDateTime createdAt, OffsetDateTime updatedAt) {}
+
+    /** {@code sources}: PRIMARY, SUPPORTING, REFERENCE, then id. {@code links}: sort order, then id. */
     public record Detail(long id, String contentType, String status, String title, JsonNode body, long version,
-                         OriginIssue originIssue, OffsetDateTime originCheckedAt, List<Source> sources, String statusReason,
+                         OriginIssue originIssue, OffsetDateTime originCheckedAt, List<Source> sources, List<Link> links,
+                         String statusReason,
                          String createdBy, OffsetDateTime createdAt, String updatedBy, OffsetDateTime updatedAt,
                          OffsetDateTime submittedAt, String approvedBy, OffsetDateTime approvedAt) {}
 
@@ -40,7 +45,7 @@ public class ContentRepository {
 
     /** Current state read under a row lock (FOR UPDATE) before a change. */
     record Locked(long id, String status, String title, JsonNode body, long version, String updatedBy,
-                  OffsetDateTime updatedAt) {}
+                  OffsetDateTime updatedAt, long originIssueId) {}
 
     private final JdbcClient jdbc;
     private final Json json;
@@ -79,31 +84,34 @@ public class ContentRepository {
 
     Optional<Locked> lock(long id) {
         return jdbc.sql("""
-                SELECT id, status, title, CAST(body AS text) AS body, version, updated_by, updated_at
+                SELECT id, status, title, CAST(body AS text) AS body, version, updated_by, updated_at, origin_issue_id
                 FROM content WHERE id = :id FOR UPDATE""").param("id", id)
                 .query((rs, n) -> new Locked(rs.getLong("id"), rs.getString("status"), rs.getString("title"),
                         json.parse(rs.getString("body")), rs.getLong("version"), rs.getString("updated_by"),
-                        Sql.odt(rs, "updated_at")))
+                        Sql.odt(rs, "updated_at"), rs.getLong("origin_issue_id")))
                 .optional();
     }
 
+    void setTitleBody(long id, String title, JsonNode body) {
+        jdbc.sql("UPDATE content SET title = :title, body = CAST(:body AS jsonb) WHERE id = :id")
+                .param("title", title).param("body", json.write(body)).param("id", id).update();
+    }
+
     /**
-     * Saves title and body and increments the version, only if the version is still the expected one (the caller
-     * holds the row lock, so this is a guard, not the conflict check). A REVIEW or APPROVED content goes back to DRAFT
-     * when {@code backToDraft}: approval and review request are cleared.
+     * Records a change of the content or of its sources / links: version +1, who and when, guarded by the expected
+     * version (the caller holds the row lock). With {@code backToDraft} a REVIEW or APPROVED content returns to DRAFT and
+     * its review record (submitted, approved, status reason) is cleared, the same rule as the A3 return.
      */
-    int update(long id, long expectedVersion, String title, JsonNode body, boolean backToDraft, String actor) {
+    int bump(long id, long expectedVersion, boolean backToDraft, String actor) {
         return jdbc.sql("""
-                UPDATE content SET title = :title, body = CAST(:body AS jsonb), version = version + 1,
-                       updated_by = :actor, updated_at = now(),
+                UPDATE content SET version = version + 1, updated_by = :actor, updated_at = now(),
                        status = CASE WHEN :draft THEN 'DRAFT' ELSE status END,
                        submitted_at = CASE WHEN :draft THEN NULL ELSE submitted_at END,
                        approved_by = CASE WHEN :draft THEN NULL ELSE approved_by END,
                        approved_at = CASE WHEN :draft THEN NULL ELSE approved_at END,
                        status_reason = CASE WHEN :draft THEN NULL ELSE status_reason END
                 WHERE id = :id AND version = :version""")
-                .param("title", title).param("body", json.write(body)).param("actor", actor).param("draft", backToDraft)
-                .param("id", id).param("version", expectedVersion).update();
+                .param("actor", actor).param("draft", backToDraft).param("id", id).param("version", expectedVersion).update();
     }
 
     /**
@@ -154,6 +162,16 @@ public class ContentRepository {
         return PageResponse.of(items, total, page);
     }
 
+    List<Link> links(long contentId) {
+        return jdbc.sql("""
+                SELECT id, link_type, title, url, site_visible, blog_visible, display_position, sort_order, created_at, updated_at
+                FROM content_link WHERE content_id = :id ORDER BY sort_order, id""").param("id", contentId)
+                .query((rs, n) -> new Link(rs.getLong("id"), rs.getString("link_type"), rs.getString("title"), rs.getString("url"),
+                        rs.getBoolean("site_visible"), rs.getBoolean("blog_visible"), rs.getString("display_position"),
+                        rs.getInt("sort_order"), Sql.odt(rs, "created_at"), Sql.odt(rs, "updated_at")))
+                .list();
+    }
+
     public Optional<Detail> detail(long id) {
         List<Source> sources = jdbc.sql("""
                 SELECT id, source_kind, issue_id, news_article_id, external_url, source_label, source_role, source_checked_at
@@ -174,7 +192,7 @@ public class ContentRepository {
                         rs.getString("title"), json.parse(rs.getString("body")), rs.getLong("version"),
                         new OriginIssue(rs.getLong("origin_issue_id"), rs.getString("issue_title"),
                                 rs.getString("issue_status"), Sql.longOrNull(rs, "merged_into_issue_id")),
-                        Sql.odt(rs, "origin_checked_at"), sources, rs.getString("status_reason"),
+                        Sql.odt(rs, "origin_checked_at"), sources, links(id), rs.getString("status_reason"),
                         rs.getString("created_by"), Sql.odt(rs, "created_at"), rs.getString("updated_by"),
                         Sql.odt(rs, "updated_at"), Sql.odt(rs, "submitted_at"), rs.getString("approved_by"),
                         Sql.odt(rs, "approved_at")))

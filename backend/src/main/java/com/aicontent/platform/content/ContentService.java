@@ -34,23 +34,20 @@ public class ContentService {
     public static final Set<String> STATUSES = Set.of("DRAFT", "REVIEW", "APPROVED", "HOLD", "EXCLUDED", "ARCHIVED");
     /** Content can be made from these issue states only (REVIEW is still undecided, EXCLUDED / MERGED are gone). */
     static final Set<String> CREATABLE_ISSUE_STATUSES = Set.of("ACTIVE", "CLOSED");
-    /** Editable after restoring only (A3: resume / restore). */
-    static final Set<String> LOCKED_STATUSES = Set.of("HOLD", "EXCLUDED", "ARCHIVED");
-    /** Editing these invalidates the review request / approval. */
-    static final Set<String> BACK_TO_DRAFT_ON_EDIT = Set.of("REVIEW", "APPROVED");
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("^[A-Za-z0-9._:-]{8,100}$");
 
     public record CreateResult(ContentRepository.Detail content, boolean created) {}
 
-    public record PatchResult(ContentRepository.Detail content, boolean statusChanged) {}
-
     private final ContentRepository contents;
+    private final ContentChanges changes;
     private final IssueRepository issues;
     private final AuditService audit;
     private final Json json;
 
-    public ContentService(ContentRepository contents, IssueRepository issues, AuditService audit, Json json) {
+    public ContentService(ContentRepository contents, ContentChanges changes, IssueRepository issues, AuditService audit,
+                          Json json) {
         this.contents = contents;
+        this.changes = changes;
         this.issues = issues;
         this.audit = audit;
         this.json = json;
@@ -102,12 +99,12 @@ public class ContentService {
     }
 
     /**
-     * Saves title and/or body (an omitted field keeps its value) when {@code version} is the current one; otherwise
-     * 409 with the current version, who saved it and when. The check and the update happen under the row lock, and
-     * the audit record is written in the same transaction. Saving an unchanged title and body changes nothing.
+     * Saves title and/or body (an omitted field keeps its value) through {@link ContentChanges}: at the current version
+     * only (409 otherwise), never in HOLD / EXCLUDED / ARCHIVED, and an unchanged title and body change nothing. A real
+     * change of a REVIEW or APPROVED content sends it back to DRAFT.
      */
     @Transactional
-    public PatchResult patch(long id, long version, String title, JsonNode body, String actor, String correlationId) {
+    public ContentChanges.Result patch(long id, long version, String title, JsonNode body, String actor, String correlationId) {
         if (title == null && (body == null || body.isNull())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "title 또는 body 중 하나는 보내야 합니다.");
         }
@@ -115,37 +112,18 @@ public class ContentService {
         if (body != null && !body.isNull()) {
             ContentBodyValidator.validate(body);
         }
-        var current = contents.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND));
-        if (LOCKED_STATUSES.contains(current.status())) {
-            throw new BusinessException(ErrorCode.CONTENT_STATE_INVALID,
-                    current.status() + " 상태의 콘텐츠는 수정할 수 없습니다. 먼저 보류 해제 또는 복귀하세요.",
-                    Map.of("status", current.status()));
-        }
-        if (current.version() != version) {
-            throw conflict(current, version);
-        }
-        String newTitle = title == null ? current.title() : title;
-        JsonNode newBody = body == null || body.isNull() ? current.body() : body;
-        boolean titleChanged = !newTitle.equals(current.title());
-        boolean bodyChanged = !newBody.equals(current.body());
-        if (!titleChanged && !bodyChanged) {
-            return new PatchResult(contents.detail(id).orElseThrow(), false);
-        }
-        boolean backToDraft = BACK_TO_DRAFT_ON_EDIT.contains(current.status());
-        if (contents.update(id, version, newTitle, newBody, backToDraft, actor) != 1) {
-            throw new IllegalStateException("content " + id + " changed while locked");   // cannot happen under FOR UPDATE
-        }
-        String newStatus = backToDraft ? "DRAFT" : current.status();
-        audit.record(actor, "CONTENT_UPDATE", "CONTENT", id,
-                Map.of("title", current.title(), "status", current.status(), "version", current.version()),
-                Map.of("title", newTitle, "status", newStatus, "version", current.version() + 1,
-                        "titleChanged", titleChanged, "bodyChanged", bodyChanged),
-                null, correlationId);
-        if ("APPROVED".equals(current.status())) {
-            audit.record(actor, "CONTENT_APPROVAL_REVOKED_BY_EDIT", "CONTENT", id, Map.of("status", "APPROVED"),
-                    Map.of("status", "DRAFT"), "승인된 콘텐츠를 수정해 승인이 해제됨", correlationId);
-        }
-        return new PatchResult(contents.detail(id).orElseThrow(), backToDraft);
+        return changes.apply(id, version, actor, correlationId, "CONTENT_UPDATE", current -> {
+            String newTitle = title == null ? current.title() : title;
+            JsonNode newBody = body == null || body.isNull() ? current.body() : body;
+            boolean titleChanged = !newTitle.equals(current.title());
+            boolean bodyChanged = !newBody.equals(current.body());
+            if (!titleChanged && !bodyChanged) {
+                return ContentChanges.Outcome.unchanged(null);
+            }
+            contents.setTitleBody(id, newTitle, newBody);
+            return new ContentChanges.Outcome(true, Map.of("title", current.title()),
+                    Map.of("title", newTitle, "titleChanged", titleChanged, "bodyChanged", bodyChanged), null);
+        });
     }
 
     /**
@@ -159,7 +137,7 @@ public class ContentService {
         String reason = ContentStatusPolicy.reason(action, rawReason);
         var current = contents.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND));
         if (current.version() != version) {
-            throw conflict(current, version);
+            throw ContentChanges.conflict(current, version);
         }
         String to = ContentStatusPolicy.decide(action, current.status(), systemAdmin);
         if (action == ContentStatusPolicy.Action.SUBMIT || action == ContentStatusPolicy.Action.APPROVE) {
@@ -181,17 +159,6 @@ public class ContentService {
                 Map.of("status", current.status(), "version", current.version()),
                 Map.of("status", to, "version", version + 1), reason, correlationId);
         return contents.detail(id).orElseThrow();
-    }
-
-    private static BusinessException conflict(ContentRepository.Locked current, long sentVersion) {
-        Map<String, Object> details = new HashMap<>();
-        details.put("currentVersion", current.version());
-        details.put("updatedBy", current.updatedBy());
-        details.put("updatedAt", current.updatedAt());
-        details.put("sentVersion", sentVersion);
-        details.put("status", current.status());
-        return new BusinessException(ErrorCode.CONTENT_VERSION_CONFLICT,
-                "다른 곳에서 먼저 저장했습니다(현재 version " + current.version() + "). 최신 내용을 다시 불러오세요.", details);
     }
 
     private CreateResult replayed(ContentRepository.CreationRecord existing, String fingerprint) {

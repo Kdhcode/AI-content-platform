@@ -44,6 +44,47 @@ public final class AdminRequests {
             @NotNull @PositiveOrZero Long version,
             @Size(max = 2000) String reason) {}
 
+    /** A4: exactly the reference field of {@code kind}; role defaults to SUPPORTING. */
+    public record ContentSourceAddRequest(
+            @NotNull @PositiveOrZero Long version,
+            @NotNull String kind,
+            @Positive Long issueId,
+            @Positive Long newsArticleId,
+            @Size(max = 4000) String externalUrl,
+            @Size(max = 1000) String label,
+            String role) {}
+
+    /** A4: role and/or label; null keeps the value, an empty label clears it (not for MANUAL). */
+    public record ContentSourcePatchRequest(
+            @NotNull @PositiveOrZero Long version,
+            String role,
+            @Size(max = 1000) String label) {}
+
+    /** A5: siteVisible defaults to true, blogVisible to false, displayPosition to BODY_BOTTOM. */
+    public record ContentLinkAddRequest(
+            @NotNull @PositiveOrZero Long version,
+            @NotNull String linkType,
+            @Size(max = 1000) String title,
+            @Size(max = 4000) String url,
+            Boolean siteVisible,
+            Boolean blogVisible,
+            String displayPosition) {}
+
+    /** A5: null keeps the value. */
+    public record ContentLinkPatchRequest(
+            @NotNull @PositiveOrZero Long version,
+            String linkType,
+            @Size(max = 1000) String title,
+            @Size(max = 4000) String url,
+            Boolean siteVisible,
+            Boolean blogVisible,
+            String displayPosition) {}
+
+    /** A5: every link id of the content exactly once, in the new order. */
+    public record ContentLinkOrderRequest(
+            @NotNull @PositiveOrZero Long version,
+            @NotNull @Size(max = 500) List<Long> linkIds) {}
+
     public record IssuePatchRequest(
             @Size(max = 300) String title,
             @Size(max = 5000) String summary,

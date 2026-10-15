@@ -5,20 +5,25 @@ import com.aicontent.platform.common.BusinessException;
 import com.aicontent.platform.common.ErrorCode;
 import com.aicontent.platform.common.PageParams;
 import com.aicontent.platform.common.PageResponse;
+import com.aicontent.platform.content.ContentChanges;
+import com.aicontent.platform.content.ContentRelationService;
 import com.aicontent.platform.content.ContentRepository;
 import com.aicontent.platform.content.ContentService;
 import com.aicontent.platform.content.ContentStatusPolicy;
 import com.aicontent.platform.content.ContentStatusPolicy.Action;
 import jakarta.validation.Valid;
 import java.security.Principal;
+import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,10 +38,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ContentAdminController {
 
     private final ContentService service;
+    private final ContentRelationService relations;
     private final ContentRepository query;
 
-    public ContentAdminController(ContentService service, ContentRepository query) {
+    public ContentAdminController(ContentService service, ContentRelationService relations, ContentRepository query) {
         this.service = service;
+        this.relations = relations;
         this.query = query;
     }
 
@@ -77,9 +84,9 @@ public class ContentAdminController {
         return ApiResponse.ok(query.detail(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND)));
     }
 
-    /** {@code statusChanged=true} when the save sent a REVIEW / APPROVED content back to DRAFT. */
+    /** {@code changed=false}: same values, nothing written. {@code statusChanged=true}: REVIEW / APPROVED went back to DRAFT. */
     @PatchMapping("/api/admin/contents/{id}")
-    public ApiResponse<ContentService.PatchResult> patch(@PathVariable long id,
+    public ApiResponse<ContentChanges.Result> patch(@PathVariable long id,
                                                         @Valid @RequestBody AdminRequests.ContentPatchRequest body,
                                                         Principal principal) {
         return ApiResponse.ok(service.patch(id, body.version(), body.title(), body.body(), principal.getName(),
@@ -126,6 +133,72 @@ public class ContentAdminController {
     @PostMapping("/api/admin/contents/{id}/restore")
     public ApiResponse<ContentRepository.Detail> restore(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
         return act(id, Action.RESTORE, body, auth);
+    }
+
+    // --- sources (A4) and related URLs (A5): every change sends the content version; the response carries the content
+    //     (new version, status), whether anything changed, whether the status went back to DRAFT, and the item id ---
+
+    @GetMapping("/api/admin/contents/{id}/sources")
+    public ApiResponse<List<ContentRepository.Source>> sources(@PathVariable long id) {
+        return ApiResponse.ok(detail(id).sources());
+    }
+
+    @PostMapping("/api/admin/contents/{id}/sources")
+    public ResponseEntity<ApiResponse<ContentChanges.Result>> addSource(@PathVariable long id,
+            @Valid @RequestBody AdminRequests.ContentSourceAddRequest b, Principal principal) {
+        var result = relations.addSource(id, b.version(), new ContentRelationService.SourceInput(b.kind(), b.issueId(),
+                b.newsArticleId(), b.externalUrl(), b.label(), b.role()), principal.getName(), CorrelationIdFilter.current());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @PatchMapping("/api/admin/contents/{id}/sources/{sourceId}")
+    public ApiResponse<ContentChanges.Result> updateSource(@PathVariable long id, @PathVariable long sourceId,
+            @Valid @RequestBody AdminRequests.ContentSourcePatchRequest b, Principal principal) {
+        return ApiResponse.ok(relations.updateSource(id, sourceId, b.version(), b.role(), b.label(), b.label() != null,
+                principal.getName(), CorrelationIdFilter.current()));
+    }
+
+    @DeleteMapping("/api/admin/contents/{id}/sources/{sourceId}")
+    public ApiResponse<ContentChanges.Result> removeSource(@PathVariable long id, @PathVariable long sourceId,
+            @RequestParam long version, Principal principal) {
+        return ApiResponse.ok(relations.removeSource(id, sourceId, version, principal.getName(), CorrelationIdFilter.current()));
+    }
+
+    @GetMapping("/api/admin/contents/{id}/links")
+    public ApiResponse<List<ContentRepository.Link>> links(@PathVariable long id) {
+        return ApiResponse.ok(detail(id).links());
+    }
+
+    @PostMapping("/api/admin/contents/{id}/links")
+    public ResponseEntity<ApiResponse<ContentChanges.Result>> addLink(@PathVariable long id,
+            @Valid @RequestBody AdminRequests.ContentLinkAddRequest b, Principal principal) {
+        var result = relations.addLink(id, b.version(), new ContentRelationService.LinkInput(b.linkType(), b.title(), b.url(),
+                b.siteVisible(), b.blogVisible(), b.displayPosition()), principal.getName(), CorrelationIdFilter.current());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @PatchMapping("/api/admin/contents/{id}/links/{linkId}")
+    public ApiResponse<ContentChanges.Result> updateLink(@PathVariable long id, @PathVariable long linkId,
+            @Valid @RequestBody AdminRequests.ContentLinkPatchRequest b, Principal principal) {
+        return ApiResponse.ok(relations.updateLink(id, linkId, b.version(), new ContentRelationService.LinkInput(b.linkType(),
+                b.title(), b.url(), b.siteVisible(), b.blogVisible(), b.displayPosition()), principal.getName(),
+                CorrelationIdFilter.current()));
+    }
+
+    @DeleteMapping("/api/admin/contents/{id}/links/{linkId}")
+    public ApiResponse<ContentChanges.Result> removeLink(@PathVariable long id, @PathVariable long linkId,
+            @RequestParam long version, Principal principal) {
+        return ApiResponse.ok(relations.removeLink(id, linkId, version, principal.getName(), CorrelationIdFilter.current()));
+    }
+
+    @PutMapping("/api/admin/contents/{id}/links/order")
+    public ApiResponse<ContentChanges.Result> reorderLinks(@PathVariable long id,
+            @Valid @RequestBody AdminRequests.ContentLinkOrderRequest b, Principal principal) {
+        return ApiResponse.ok(relations.reorderLinks(id, b.version(), b.linkIds(), principal.getName(), CorrelationIdFilter.current()));
+    }
+
+    private ContentRepository.Detail detail(long id) {
+        return query.detail(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND));
     }
 
     private ApiResponse<ContentRepository.Detail> act(long id, Action action, AdminRequests.ContentActionRequest body, Authentication auth) {
