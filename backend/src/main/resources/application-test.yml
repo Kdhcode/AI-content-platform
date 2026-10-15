@@ -15,5 +15,6 @@ app:
     scheduler-enabled: false
   ai:
     provider: stub
+    embedding-guard-enabled: false   # all integration tests share aicontent_test; AiProviderGuardIntegrationTest covers it
   classifier:
     candidate-window-days: 36500   # fixtures use fixed 2026 dates; do not let the 30-day window age them out

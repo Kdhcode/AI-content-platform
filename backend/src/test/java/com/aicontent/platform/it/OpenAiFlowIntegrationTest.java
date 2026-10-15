@@ -95,6 +95,9 @@ class OpenAiFlowIntegrationTest extends IntegrationTestBase {
         registry.add("app.ai.pricing.contract-chat.output-per-million-usd", () -> "6");
         registry.add("app.ai.pricing.contract-embedding.input-per-million-usd", () -> "0.5");
         registry.add("app.ai.provider", () -> "openai");
+        // the models requested are the ones priced above (AiProviderGuard refuses paid AI without a price)
+        registry.add("app.ai.openai.chat-model", () -> "contract-chat");
+        registry.add("app.ai.openai.embedding-model", () -> "contract-embedding");
         registry.add("app.ai.openai.api-key", () -> "contract-test-key");
         registry.add("app.ai.openai.base-url", () -> "http://127.0.0.1:" + api.getAddress().getPort() + "/v1");
     }
