@@ -26,14 +26,16 @@ $BackendJar = Join-Path $RunDir 'platform-backend.jar'
 #   dev              stub embeddings only, admin login
 #   verify-scenario  local-verify (no login, loopback, stub), scenario fixtures
 #   verify-real      local-verify (no login, loopback, AI off, worker off), copy of real data
+#   verify-content   local-verify (login optional, loopback, stub, worker off), content screens (A7) on a scenario copy
 $Envs = @{
     'daily'           = @{ Db = 'aicontent_main';            BackendPort = 8080;  UiPort = 3000;  Ai = 'none'; Vectors = 'real'; Profile = '' }
     'dev'             = @{ Db = 'aicontent';                 BackendPort = 8081;  UiPort = 3001;  Ai = 'stub'; Vectors = 'stub'; Profile = '' }
     'verify-scenario' = @{ Db = 'aicontent_verify_scenario'; BackendPort = 18091; UiPort = 13091; Ai = 'stub'; Vectors = 'stub'; Profile = 'local-verify'; Label = '시나리오 데이터 (가상 기사, aicontent_verify_scenario)' }
     'verify-real'     = @{ Db = 'aicontent_verify_real';     BackendPort = 18092; UiPort = 13092; Ai = 'none'; Vectors = 'real'; Profile = 'local-verify'; Label = '실제 기사 복사본 (2026-10-14 수집, aicontent_verify_real)'; NoWorker = $true }
+    'verify-content'  = @{ Db = 'aicontent_verify_content';  BackendPort = 18093; UiPort = 13093; Ai = 'stub'; Vectors = 'stub'; Profile = 'local-verify'; Label = '콘텐츠 화면 검증용 데이터 (시나리오 복사본, aicontent_verify_content)'; NoWorker = $true }
 }
 
 function Get-RunEnv([string]$Name) {
-    if (-not $Envs.ContainsKey($Name)) { throw "unknown environment '$Name' (daily, dev, verify-scenario, verify-real)" }
+    if (-not $Envs.ContainsKey($Name)) { throw "unknown environment '$Name' (daily, dev, verify-scenario, verify-real, verify-content)" }
     return $Envs[$Name]
 }
