@@ -7,6 +7,7 @@
 - 프로필 `local-verify`(`backend/src/main/resources/application-local-verify.yml`)에서만 켜진다. 기본값은 꺼짐(`app.local-verify.login-bypass=false`)이다.
 - 켜지면 인증 정보(Authorization 헤더) 없이 온 관리자 API 요청을 고정 사용자 `local-verify`(OPERATOR + SYSTEM_ADMIN)로 처리한다. 감사 로그의 처리자도 `local-verify`로 남는다.
 - 인증 정보를 보낸 요청은 지금처럼 검사한다(틀린 비밀번호는 401).
+- 요청 자체도 이 PC에서 온 것이어야 한다(2026-10-15 추가): 호스트 이름(Host)이 루프백이고, 브라우저가 보낸 Origin과 관리자 UI 프록시가 붙이는 `X-Forwarded-Host`가 있으면 그것도 루프백이어야 한다. 같은 브라우저에 열린 다른 사이트가 보내는 요청(교차 사이트 POST, DNS 리바인딩)은 로그인 생략 없이 401을 받는다. CSRF 보호가 꺼져 있어서 추가한 조건이다. 실제 서버로 확인: 직접·프록시 경유의 외부 Origin POST, 직접·프록시 경유의 다른 Host 모두 401, 정상 로컬 사용은 200/202.
 - 관리자 화면은 로그인 화면을 건너뛰고, 모든 관리자 화면과 뉴스룸 위에 노란 띠를 보여 준다: "로컬 검증 모드", 데이터 구분(`LOCAL_VERIFY_DATA_LABEL`), AI 상태.
 - 화면은 `GET /api/local-verify/mode`로 상태를 확인한다(로그인 불필요). 모드가 꺼져 있으면 `loginBypass:false`만 돌려준다.
 
@@ -22,7 +23,7 @@
 | AI 공급자가 `none` 또는 `stub`이어야 함. 설정 경로와 무관(`AI_PROVIDER`, `SPRING_APPLICATION_JSON`, 명령줄 등) | `AI_PROVIDER=openai` |
 | OpenAI API 키가 없어야 함 | `OPENAI_API_KEY`가 설정된 경우 |
 
-테스트: `LocalVerifyGuardTest`(조건별), `LocalVerifyIntegrationTest`(기본 설정은 여전히 401, 모드에서는 로그인 없이 동작·처리자 기록·틀린 인증은 401, 실제 시작 거부 4가지).
+테스트: `LocalVerifyGuardTest`(조건별, 요청 출처 판정), `LocalVerifyIntegrationTest`(기본 설정은 여전히 401, 모드에서는 로그인 없이 동작·처리자 기록·틀린 인증은 401, 외부 Origin·Host·X-Forwarded-Host는 401, 실제 시작 거부 4가지).
 
 ## 3. 실행 방법
 

@@ -31,6 +31,24 @@ class LocalVerifyGuardTest {
     }
 
     @Test
+    void onlyRequestsAddressedToAndComingFromThisMachineAreLocal() {
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1:18091", null, null)).isTrue();
+        assertThat(LocalVerifyGuard.isLocalRequest("localhost", "http://127.0.0.1:13091", null)).isTrue();
+        assertThat(LocalVerifyGuard.isLocalRequest("[::1]:18091", "http://localhost:13091", null)).isTrue();
+
+        assertThat(LocalVerifyGuard.isLocalRequest(null, null, null)).isFalse();
+        assertThat(LocalVerifyGuard.isLocalRequest("evil.example:18091", null, null)).isFalse();        // DNS rebinding
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1:18091", "https://evil.example", null)).isFalse();  // cross-site
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1:18091", "null", null)).isFalse();
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1:18091", "http://127.0.0.1.evil.example", null)).isFalse();
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1:18091", "::not a uri", null)).isFalse();
+        // behind the admin UI proxy: the original host is in X-Forwarded-Host
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1", null, "127.0.0.1:13091")).isTrue();
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1", null, "evil.example:13091")).isFalse();
+        assertThat(LocalVerifyGuard.isLocalRequest("127.0.0.1", null, "127.0.0.1:13091, evil.example")).isFalse();
+    }
+
+    @Test
     void aRealAiProviderOrAnApiKeyIsRefusedWhateverSetIt() {
         assertThat(LocalVerifyGuard.problems(PROFILES, "127.0.0.1", "openai", "")).hasSize(1);
         assertThat(LocalVerifyGuard.problems(PROFILES, "127.0.0.1", "OpenAI", "")).hasSize(1);

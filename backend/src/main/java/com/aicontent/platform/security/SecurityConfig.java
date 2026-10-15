@@ -59,7 +59,13 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** Only installed after {@link LocalVerifyGuard} accepted the configuration. */
+    /**
+     * Only installed after {@link LocalVerifyGuard} accepted the configuration. The bypass also requires the request
+     * itself to be local: a host name (from the Host header) naming this machine and, when the browser sends one, an Origin on this
+     * machine. Behind the admin UI's proxy the original host arrives as X-Forwarded-Host and is checked too (it can
+     * only take the bypass away, never grant it). A page from another site open in the same browser (cross-site POST,
+     * DNS rebinding) therefore gets the normal 401 instead of admin rights.
+     */
     private static final class LocalVerifyFilter extends OncePerRequestFilter {
         private static final List<SimpleGrantedAuthority> ROLES =
                 List.of(new SimpleGrantedAuthority("ROLE_OPERATOR"), new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"));
@@ -67,7 +73,8 @@ public class SecurityConfig {
         @Override
         protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest req, HttpServletResponse res,
                                         jakarta.servlet.FilterChain chain) throws jakarta.servlet.ServletException, IOException {
-            if (req.getHeader("Authorization") == null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (req.getHeader("Authorization") == null && SecurityContextHolder.getContext().getAuthentication() == null
+                    && LocalVerifyGuard.isLocalRequest(req.getServerName(), req.getHeader("Origin"), req.getHeader("X-Forwarded-Host"))) {
                 var context = SecurityContextHolder.createEmptyContext();
                 context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(LocalVerifyGuard.ACTOR, null, ROLES));
                 SecurityContextHolder.setContext(context);

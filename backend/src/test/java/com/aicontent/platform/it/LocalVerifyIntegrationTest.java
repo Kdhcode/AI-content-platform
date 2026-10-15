@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -63,6 +64,15 @@ class LocalVerifyIntegrationTest {
         @Test
         void requestsThatSendCredentialsAreStillChecked() throws Exception {
             mvc.perform(get("/api/admin/issues").with(httpBasic("nobody", "wrong"))).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void requestsFromAnotherSiteOrHostNameGetNoBypass() throws Exception {
+            mvc.perform(get("/api/admin/issues").header("Origin", "http://127.0.0.1:13091")).andExpect(status().isOk());
+            mvc.perform(post("/api/admin/sources/1/collect").header("Origin", "https://evil.example"))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(get("/api/admin/issues").header("Host", "evil.example:18091")).andExpect(status().isUnauthorized());
+            mvc.perform(get("/api/admin/issues").header("X-Forwarded-Host", "evil.example:13091")).andExpect(status().isUnauthorized());
         }
     }
 

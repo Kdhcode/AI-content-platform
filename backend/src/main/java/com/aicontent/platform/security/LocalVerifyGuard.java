@@ -65,6 +65,38 @@ public class LocalVerifyGuard {
         return binder.bind("app.local-verify.login-bypass", Boolean.class).orElse(false);
     }
 
+    /** Host (required), and Origin and X-Forwarded-Host when present, must all name this machine. */
+    static boolean isLocalRequest(String host, String origin, String forwardedHost) {
+        if (host == null || !LOOPBACK.contains(hostName(host))) {
+            return false;
+        }
+        if (forwardedHost != null) {
+            for (String h : forwardedHost.split(",")) {                     // one entry per proxy hop
+                if (!LOOPBACK.contains(hostName(h))) return false;
+            }
+        }
+        if (origin == null) {
+            return true;
+        }
+        try {
+            String originHost = java.net.URI.create(origin.trim()).getHost();   // "null" (sandboxed page) has no host
+            return originHost != null && LOOPBACK.contains(hostName(originHost));
+        } catch (IllegalArgumentException e) {
+            return false;                                                   // malformed Origin
+        }
+    }
+
+    /** "127.0.0.1:13091" -> "127.0.0.1", "[::1]:8080" -> "::1", "LOCALHOST" -> "localhost". */
+    private static String hostName(String hostAndPort) {
+        String h = hostAndPort.trim().toLowerCase();
+        if (h.startsWith("[")) {
+            int end = h.indexOf(']');
+            return end > 0 ? h.substring(1, end) : h;
+        }
+        int colon = h.indexOf(':');
+        return colon >= 0 && h.indexOf(':', colon + 1) < 0 ? h.substring(0, colon) : h;
+    }
+
     /** Every reason the bypass must not run; empty when it may. */
     static List<String> problems(List<String> profiles, String serverAddress, String aiProvider, String openAiKey) {
         List<String> problems = new ArrayList<>();
