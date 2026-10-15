@@ -87,6 +87,11 @@ class ContentItemRepository {
                 .list();
     }
 
+    long linkCount(long contentId) {
+        return jdbc.sql("SELECT count(*) FROM content_link WHERE content_id = :cid").param("cid", contentId)
+                .query(Long.class).single();
+    }
+
     Optional<LinkRow> findLink(long contentId, long linkId) {
         return links(contentId).stream().filter(l -> l.id() == linkId).findFirst();
     }

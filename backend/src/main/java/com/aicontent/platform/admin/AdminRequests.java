@@ -80,10 +80,10 @@ public final class AdminRequests {
             Boolean blogVisible,
             String displayPosition) {}
 
-    /** A5: every link id of the content exactly once, in the new order. */
+    /** A5: every link id of the content exactly once, in the new order (at most 500, the per-content link limit). */
     public record ContentLinkOrderRequest(
             @NotNull @PositiveOrZero Long version,
-            @NotNull @Size(max = 500) List<Long> linkIds) {}
+            @NotNull @Size(max = com.aicontent.platform.content.ContentRelationService.MAX_LINKS_PER_CONTENT) List<Long> linkIds) {}
 
     public record IssuePatchRequest(
             @Size(max = 300) String title,

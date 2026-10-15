@@ -29,6 +29,7 @@ public enum ErrorCode {
     CONTENT_STATE_INVALID(HttpStatus.CONFLICT, "현재 콘텐츠 상태에서는 수행할 수 없는 작업입니다."),
     CONTENT_NOT_READY(HttpStatus.UNPROCESSABLE_ENTITY, "검수 요청·승인에 필요한 내용이 갖춰지지 않았습니다."),
     CONTENT_SOURCE_DUPLICATE(HttpStatus.CONFLICT, "이미 이 콘텐츠의 출처로 등록돼 있습니다."),
+    CONTENT_LINK_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "콘텐츠당 관련 URL은 500개까지 등록할 수 있습니다."),
     CONTENT_SOURCE_PROTECTED(HttpStatus.CONFLICT, "원천 이슈 출처는 삭제할 수 없습니다."),
     CONTENT_SOURCE_INVALID(HttpStatus.CONFLICT, "출처로 쓸 수 없는 대상입니다."),
     IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "같은 Idempotency-Key로 다른 요청이 이미 처리되었습니다."),

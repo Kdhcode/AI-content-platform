@@ -150,7 +150,8 @@
 - `PATCH /{linkId}` `{version, linkType?, title?, url?, siteVisible?, blogVisible?, displayPosition?}` — 생략한 값 유지.
 - `DELETE /{linkId}?version=N`.
 - `PUT /order` `{version, linkIds: [이 콘텐츠의 링크 id 전부, 한 번씩]}` — 중복·모르는 id·빠진 id가 있으면 400 `details{duplicateIds, unknownIds, missingIds}`, 아무것도 바뀌지 않음.
-- 오류: 400 `VALIDATION_ERROR`, 404 `CONTENT_LINK_NOT_FOUND`(이 콘텐츠의 링크가 아님).
+- **한도: 콘텐츠당 500개.** 501번째 `POST`는 409 `CONTENT_LINK_LIMIT_EXCEEDED`(`details{limit, current}`, 콘텐츠 행 잠금 안에서 세므로 동시 추가도 넘지 못함). 정렬 `linkIds`도 최대 500개(넘으면 400).
+- 오류: 400 `VALIDATION_ERROR`, 409 `CONTENT_LINK_LIMIT_EXCEEDED`, 404 `CONTENT_LINK_NOT_FOUND`(이 콘텐츠의 링크가 아님).
 
 **출처·URL 공통 응답** `{content(상세: 새 version·상태·sources·links), changed, statusChanged, itemId}`. 실제 변경이 있을 때만 version +1·감사 기록(`CONTENT_SOURCE_ADD|UPDATE|REMOVE`, `CONTENT_LINK_ADD|UPDATE|REMOVE`, `CONTENT_LINKS_REORDER`), REVIEW·APPROVED는 DRAFT로(`statusChanged: true`, APPROVED면 `CONTENT_APPROVAL_REVOKED_BY_EDIT`). 같은 값이면 `changed: false`로 아무것도 쓰지 않음. HOLD·EXCLUDED·ARCHIVED는 409 `CONTENT_STATE_INVALID`, version 불일치는 409 `CONTENT_VERSION_CONFLICT`. 노출 설정은 저장만 하며 공개 API·뉴스룸에는 나오지 않는다.
 

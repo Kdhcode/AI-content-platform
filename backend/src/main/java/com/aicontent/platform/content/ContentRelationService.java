@@ -28,6 +28,8 @@ public class ContentRelationService {
     static final Set<String> SOURCE_ISSUE_STATUSES = Set.of("ACTIVE", "CLOSED");
     static final int MAX_LABEL_CHARS = 300;
     static final int MAX_LINK_TITLE_CHARS = 200;
+    /** Links per content; the reorder request lists every link, so it is capped the same (ContentLinkOrderRequest). */
+    public static final int MAX_LINKS_PER_CONTENT = 500;
 
     public record SourceInput(String kind, Long issueId, Long newsArticleId, String externalUrl, String label, String role) {}
 
@@ -144,6 +146,13 @@ public class ContentRelationService {
                 ContentUrls.normalize(in.url(), "url"), in.siteVisible() == null || in.siteVisible(),
                 in.blogVisible() != null && in.blogVisible(), oneOf("displayPosition", in.displayPosition(), DISPLAY_POSITIONS, "BODY_BOTTOM"), 0);
         return changes.apply(contentId, version, actor, corr, "CONTENT_LINK_ADD", current -> {
+            // counted under the content row lock, so concurrent adds cannot pass the limit together
+            long count = items.linkCount(contentId);
+            if (count >= MAX_LINKS_PER_CONTENT) {
+                throw new BusinessException(ErrorCode.CONTENT_LINK_LIMIT_EXCEEDED,
+                        "관련 URL은 콘텐츠당 " + MAX_LINKS_PER_CONTENT + "개까지입니다(현재 " + count + "개). 필요 없는 링크를 먼저 삭제하세요.",
+                        Map.of("limit", MAX_LINKS_PER_CONTENT, "current", count));
+            }
             long id = items.insertLink(contentId, row);
             return new ContentChanges.Outcome(true, Map.of(), linkAudit(id, row), id);
         });
