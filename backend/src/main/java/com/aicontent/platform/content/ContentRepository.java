@@ -20,10 +20,21 @@ public class ContentRepository {
     public static final Map<String, String> SORTS = Map.of(
             "updatedAt", "c.updated_at", "createdAt", "c.created_at", "title", "c.title", "id", "c.id");
 
-    public record Filter(String type, String status, Long issueId, String q) {}
+    /** {@code updateNeeded}: null = all, true = only unacknowledged origin changes, false = only acknowledged ones. */
+    public record Filter(String type, String status, Long issueId, String q, Boolean updateNeeded) {}
+
+    /**
+     * A6. {@code unacknowledged}: the origin issue changed (issue.change_seq) after what an admin last acknowledged.
+     * {@code notice}: the origin issue's present state when it is no longer a live issue (MERGED / EXCLUDED, else
+     * null) — shown regardless of acknowledgement. {@code issueChangeSeq} is what acknowledge-origin must send back.
+     */
+    public record OriginChange(boolean unacknowledged, long issueChangeSeq, long acknowledgedSeq,
+                               OffsetDateTime issueChangedAt, OffsetDateTime acknowledgedAt, String issueStatus,
+                               String notice, Long mergedIntoIssueId) {}
 
     public record ListItem(long id, String contentType, String status, String title, long version, long originIssueId,
-                           String originIssueTitle, String originIssueStatus, String updatedBy, OffsetDateTime updatedAt) {}
+                           String originIssueTitle, String originIssueStatus, OriginChange originChange, String updatedBy,
+                           OffsetDateTime updatedAt) {}
 
     public record OriginIssue(long id, String title, String status, Long mergedIntoIssueId) {}
 
@@ -35,7 +46,8 @@ public class ContentRepository {
 
     /** {@code sources}: PRIMARY, SUPPORTING, REFERENCE, then id. {@code links}: sort order, then id. */
     public record Detail(long id, String contentType, String status, String title, JsonNode body, long version,
-                         OriginIssue originIssue, OffsetDateTime originCheckedAt, List<Source> sources, List<Link> links,
+                         OriginIssue originIssue, OffsetDateTime originCheckedAt, OriginChange originChange,
+                         List<Source> sources, List<Link> links,
                          String statusReason,
                          String createdBy, OffsetDateTime createdAt, String updatedBy, OffsetDateTime updatedAt,
                          OffsetDateTime submittedAt, String approvedBy, OffsetDateTime approvedAt) {}
@@ -45,7 +57,16 @@ public class ContentRepository {
 
     /** Current state read under a row lock (FOR UPDATE) before a change. */
     record Locked(long id, String status, String title, JsonNode body, long version, String updatedBy,
-                  OffsetDateTime updatedAt, long originIssueId) {}
+                  OffsetDateTime updatedAt, long originIssueId, long originAckSeq) {}
+
+    /** The origin issue read with a share lock: its changes wait until the acknowledging transaction ends. */
+    record OriginState(long changeSeq, OffsetDateTime changedAt, String status, Long mergedIntoIssueId) {}
+
+    /** The one rule for "origin changed, not yet acknowledged", used by list, filter and detail alike. */
+    static final String UNACKNOWLEDGED_SQL = "(i.change_seq > c.origin_ack_seq)";
+    private static final String ORIGIN_COLUMNS = """
+            i.change_seq AS issue_change_seq, i.change_seq_at AS issue_changed_at, c.origin_ack_seq, c.origin_checked_at,
+            i.status AS issue_status, i.merged_into_issue_id, """ + UNACKNOWLEDGED_SQL + " AS unacknowledged";
 
     private final JdbcClient jdbc;
     private final Json json;
@@ -60,9 +81,10 @@ public class ContentRepository {
                                   String actor) {
         // ON CONFLICT waits for a concurrent insert with the same key to commit, then does nothing: exactly one row.
         return jdbc.sql("""
-                INSERT INTO content (content_type, title, body, origin_issue_id, creation_key, creation_fingerprint,
-                                     created_by, updated_by)
-                VALUES (:type, :title, CAST(:body AS jsonb), :issue, :key, :fp, :actor, :actor)
+                INSERT INTO content (content_type, title, body, origin_issue_id, origin_ack_seq, creation_key,
+                                     creation_fingerprint, created_by, updated_by)
+                VALUES (:type, :title, CAST(:body AS jsonb), :issue, (SELECT change_seq FROM issue WHERE id = :issue),
+                        :key, :fp, :actor, :actor)
                 ON CONFLICT (creation_key) DO NOTHING
                 RETURNING id""")
                 .param("type", type).param("title", title).param("body", json.write(body)).param("issue", issueId)
@@ -84,12 +106,42 @@ public class ContentRepository {
 
     Optional<Locked> lock(long id) {
         return jdbc.sql("""
-                SELECT id, status, title, CAST(body AS text) AS body, version, updated_by, updated_at, origin_issue_id
+                SELECT id, status, title, CAST(body AS text) AS body, version, updated_by, updated_at, origin_issue_id,
+                       origin_ack_seq
                 FROM content WHERE id = :id FOR UPDATE""").param("id", id)
                 .query((rs, n) -> new Locked(rs.getLong("id"), rs.getString("status"), rs.getString("title"),
                         json.parse(rs.getString("body")), rs.getLong("version"), rs.getString("updated_by"),
-                        Sql.odt(rs, "updated_at"), rs.getLong("origin_issue_id")))
+                        Sql.odt(rs, "updated_at"), rs.getLong("origin_issue_id"), rs.getLong("origin_ack_seq")))
                 .optional();
+    }
+
+    /** Lock order everywhere: content row (FOR UPDATE) first, then its origin issue. */
+    OriginState shareLockOrigin(long issueId) {
+        return jdbc.sql("""
+                SELECT change_seq, change_seq_at, status, merged_into_issue_id FROM issue WHERE id = :id FOR SHARE""")
+                .param("id", issueId)
+                .query((rs, n) -> new OriginState(rs.getLong("change_seq"), Sql.odt(rs, "change_seq_at"),
+                        rs.getString("status"), Sql.longOrNull(rs, "merged_into_issue_id")))
+                .single();
+    }
+
+    /**
+     * Records that an admin acknowledged the origin issue up to {@code changeSeq}: version +1 (editors holding the old
+     * version reload), nothing else about the content changes — status and review record stay.
+     */
+    int acknowledgeOrigin(long id, long expectedVersion, long changeSeq, String actor) {
+        return jdbc.sql("""
+                UPDATE content SET origin_ack_seq = :seq, origin_checked_at = now(), version = version + 1,
+                       updated_by = :actor, updated_at = now()
+                WHERE id = :id AND version = :version""")
+                .param("seq", changeSeq).param("actor", actor).param("id", id).param("version", expectedVersion).update();
+    }
+
+    private static OriginChange originChange(java.sql.ResultSet rs) throws java.sql.SQLException {
+        String status = rs.getString("issue_status");
+        return new OriginChange(rs.getBoolean("unacknowledged"), rs.getLong("issue_change_seq"), rs.getLong("origin_ack_seq"),
+                Sql.odt(rs, "issue_changed_at"), Sql.odt(rs, "origin_checked_at"), status,
+                "MERGED".equals(status) || "EXCLUDED".equals(status) ? status : null, Sql.longOrNull(rs, "merged_into_issue_id"));
     }
 
     void setTitleBody(long id, String title, JsonNode body) {
@@ -146,17 +198,20 @@ public class ContentRepository {
             where.add("c.title ILIKE :q ESCAPE '\\'");
             params.put("q", Sql.likeContains(f.q().trim()));
         }
+        if (f.updateNeeded() != null) {
+            where.add(f.updateNeeded() ? UNACKNOWLEDGED_SQL : "NOT " + UNACKNOWLEDGED_SQL);
+        }
         String from = " FROM content c JOIN issue i ON i.id = c.origin_issue_id"
                 + (where.isEmpty() ? "" : " WHERE " + String.join(" AND ", where));
         long total = jdbc.sql("SELECT count(*)" + from).params(params).query(Long.class).single();
         List<ListItem> items = jdbc.sql("""
                 SELECT c.id, c.content_type, c.status, c.title, c.version, c.origin_issue_id, i.title AS issue_title,
-                       i.status AS issue_status, c.updated_by, c.updated_at""" + from
+                       c.updated_by, c.updated_at, """ + ORIGIN_COLUMNS + from
                         + " ORDER BY " + page.orderBy() + " LIMIT :limit OFFSET :offset")
                 .params(params).param("limit", page.size()).param("offset", page.offset())
                 .query((rs, n) -> new ListItem(rs.getLong("id"), rs.getString("content_type"), rs.getString("status"),
                         rs.getString("title"), rs.getLong("version"), rs.getLong("origin_issue_id"),
-                        rs.getString("issue_title"), rs.getString("issue_status"), rs.getString("updated_by"),
+                        rs.getString("issue_title"), rs.getString("issue_status"), originChange(rs), rs.getString("updated_by"),
                         Sql.odt(rs, "updated_at")))
                 .list();
         return PageResponse.of(items, total, page);
@@ -184,15 +239,15 @@ public class ContentRepository {
                 .list();
         return jdbc.sql("""
                 SELECT c.id, c.content_type, c.status, c.title, CAST(c.body AS text) AS body, c.version, c.origin_issue_id,
-                       i.title AS issue_title, i.status AS issue_status, i.merged_into_issue_id, c.origin_checked_at,
-                       c.status_reason, c.created_by, c.created_at, c.updated_by, c.updated_at, c.submitted_at,
-                       c.approved_by, c.approved_at
+                       i.title AS issue_title, c.status_reason, c.created_by, c.created_at, c.updated_by, c.updated_at,
+                       c.submitted_at, c.approved_by, c.approved_at, """ + ORIGIN_COLUMNS + """
+
                 FROM content c JOIN issue i ON i.id = c.origin_issue_id WHERE c.id = :id""").param("id", id)
                 .query((rs, n) -> new Detail(rs.getLong("id"), rs.getString("content_type"), rs.getString("status"),
                         rs.getString("title"), json.parse(rs.getString("body")), rs.getLong("version"),
                         new OriginIssue(rs.getLong("origin_issue_id"), rs.getString("issue_title"),
                                 rs.getString("issue_status"), Sql.longOrNull(rs, "merged_into_issue_id")),
-                        Sql.odt(rs, "origin_checked_at"), sources, links(id), rs.getString("status_reason"),
+                        Sql.odt(rs, "origin_checked_at"), originChange(rs), sources, links(id), rs.getString("status_reason"),
                         rs.getString("created_by"), Sql.odt(rs, "created_at"), rs.getString("updated_by"),
                         Sql.odt(rs, "updated_at"), Sql.odt(rs, "submitted_at"), rs.getString("approved_by"),
                         Sql.odt(rs, "approved_at")))

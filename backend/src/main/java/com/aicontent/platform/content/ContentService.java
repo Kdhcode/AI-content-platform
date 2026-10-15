@@ -161,6 +161,51 @@ public class ContentService {
         return contents.detail(id).orElseThrow();
     }
 
+    /**
+     * A6: records that an admin has seen the origin issue as of {@code seenChangeSeq} (the issueChangeSeq they were
+     * shown). Lock order: content row, then a share lock on the origin issue, so a concurrent issue change either
+     * commits first (then the seq differs: 409 CONTENT_ORIGIN_CHANGED, nothing is acknowledged) or waits and raises the
+     * seq afterwards (the content shows as unacknowledged again). Acknowledging is not an edit: title, body, sources,
+     * links, status and review record stay; it is allowed in every content status. The same seq again changes nothing.
+     */
+    @Transactional
+    public ContentChanges.Result acknowledgeOrigin(long id, long version, long seenChangeSeq, String actor, String correlationId) {
+        var current = contents.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND));
+        if (current.version() != version) {
+            throw ContentChanges.conflict(current, version);
+        }
+        var origin = contents.shareLockOrigin(current.originIssueId());
+        if (origin.changeSeq() != seenChangeSeq) {
+            Map<String, Object> details = new HashMap<>();
+            details.put("currentChangeSeq", origin.changeSeq());
+            details.put("sentChangeSeq", seenChangeSeq);
+            details.put("acknowledgedSeq", current.originAckSeq());
+            details.put("issueChangedAt", origin.changedAt());
+            details.put("issueStatus", origin.status());
+            details.put("mergedIntoIssueId", origin.mergedIntoIssueId());
+            throw new BusinessException(ErrorCode.CONTENT_ORIGIN_CHANGED,
+                    "원천 이슈가 다시 바뀌었습니다(현재 " + origin.changeSeq() + ", 확인하려던 " + seenChangeSeq + "). 다시 조회해 확인하세요.",
+                    details);
+        }
+        if (current.originAckSeq() == seenChangeSeq) {
+            return new ContentChanges.Result(contents.detail(id).orElseThrow(), false, false, null);
+        }
+        if (contents.acknowledgeOrigin(id, version, seenChangeSeq, actor) != 1) {
+            throw new IllegalStateException("content " + id + " changed while locked");   // cannot happen under FOR UPDATE
+        }
+        Map<String, Object> after = new HashMap<>();
+        after.put("originAckSeq", seenChangeSeq);
+        after.put("version", version + 1);
+        after.put("originIssueId", current.originIssueId());
+        after.put("issueStatus", origin.status());
+        after.put("mergedIntoIssueId", origin.mergedIntoIssueId());
+        after.put("issueChangedAt", origin.changedAt());
+        audit.record(actor, "CONTENT_ORIGIN_ACKNOWLEDGED", "CONTENT", id,
+                Map.of("originAckSeq", current.originAckSeq(), "version", current.version(), "status", current.status()),
+                after, null, correlationId);
+        return new ContentChanges.Result(contents.detail(id).orElseThrow(), true, false, null);
+    }
+
     private CreateResult replayed(ContentRepository.CreationRecord existing, String fingerprint) {
         if (!existing.fingerprint().equals(fingerprint)) {
             throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,

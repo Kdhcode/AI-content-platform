@@ -67,6 +67,7 @@ public class ContentAdminController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long issueId,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean updateNeeded,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String sort) {
@@ -76,7 +77,7 @@ public class ContentAdminController {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "q는 200자 이하여야 합니다.");
         }
         PageParams params = PageParams.of(page, size, sort, ContentRepository.SORTS, "c.updated_at DESC, c.id DESC");
-        return ApiResponse.ok(query.list(new ContentRepository.Filter(type, status, issueId, q), params));
+        return ApiResponse.ok(query.list(new ContentRepository.Filter(type, status, issueId, q, updateNeeded), params));
     }
 
     @GetMapping("/api/admin/contents/{id}")
@@ -195,6 +196,14 @@ public class ContentAdminController {
     public ApiResponse<ContentChanges.Result> reorderLinks(@PathVariable long id,
             @Valid @RequestBody AdminRequests.ContentLinkOrderRequest b, Principal principal) {
         return ApiResponse.ok(relations.reorderLinks(id, b.version(), b.linkIds(), principal.getName(), CorrelationIdFilter.current()));
+    }
+
+    /** A6: acknowledge the origin issue's changes up to the issueChangeSeq the admin saw; content itself unchanged. */
+    @PostMapping("/api/admin/contents/{id}/acknowledge-origin")
+    public ApiResponse<ContentChanges.Result> acknowledgeOrigin(@PathVariable long id,
+            @Valid @RequestBody AdminRequests.ContentAcknowledgeOriginRequest b, Principal principal) {
+        return ApiResponse.ok(service.acknowledgeOrigin(id, b.version(), b.originChangeSeq(), principal.getName(),
+                CorrelationIdFilter.current()));
     }
 
     private ContentRepository.Detail detail(long id) {

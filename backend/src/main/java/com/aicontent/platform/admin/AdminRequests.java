@@ -39,6 +39,11 @@ public final class AdminRequests {
             String title,
             JsonNode body) {}
 
+    /** A6: {@code originChangeSeq} is the originChange.issueChangeSeq the admin was shown. */
+    public record ContentAcknowledgeOriginRequest(
+            @NotNull @PositiveOrZero Long version,
+            @NotNull @PositiveOrZero Long originChangeSeq) {}
+
     /** Body of every content status action; {@code version} is the one the editor has (409 otherwise). */
     public record ContentActionRequest(
             @NotNull @PositiveOrZero Long version,
