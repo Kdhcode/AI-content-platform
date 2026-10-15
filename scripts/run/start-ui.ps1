@@ -17,13 +17,14 @@ if ($Rebuild -or -not (Test-Path (Join-Path $dst '.next'))) {
         if (-not (Test-Path (Join-Path $src 'node_modules'))) { throw "run 'npm install' in admin-ui first" }
         New-Item -ItemType Junction -Path (Join-Path $dst 'node_modules') -Target (Join-Path $src 'node_modules') | Out-Null
     }
+    $savedBackendUrl = $env:BACKEND_URL                # restored below: this terminal's variables stay as they were
     $env:BACKEND_URL = "http://127.0.0.1:$($cfg.BackendPort)"
     Push-Location $dst
     $ErrorActionPreference = 'Continue'      # see start-backend.ps1
     try {
         & (Join-Path $NodeDir 'npm.cmd') run build
         if ($LASTEXITCODE -ne 0) { throw "UI build failed ($LASTEXITCODE)" }
-    } finally { Pop-Location }
+    } finally { Pop-Location; $env:BACKEND_URL = $savedBackendUrl }
 }
 Write-Host "[$Target] admin http://127.0.0.1:$($cfg.UiPort)/  newsroom http://127.0.0.1:$($cfg.UiPort)/news  -> backend 127.0.0.1:$($cfg.BackendPort)"
 $ErrorActionPreference = 'Continue'
