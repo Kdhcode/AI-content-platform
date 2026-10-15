@@ -48,7 +48,7 @@ class ContentStatusApiIntegrationTest extends IntegrationTestBase {
         String json = empty ? "{\"contentType\":\"NEWS\"}" : "{\"contentType\":\"NEWS\",\"title\":\"검수용 제목\",\"body\":" + READY_BODY + "}";
         String res = mvc.perform(post("/api/admin/issues/" + issue() + "/contents").with(httpBasic(user, user + "-pw"))
                         .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content(json))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         return com.jayway.jsonpath.JsonPath.<Number>read(res, "$.data.id").longValue();
     }
 
@@ -220,13 +220,13 @@ class ContentStatusApiIntegrationTest extends IntegrationTestBase {
         String res = mvc.perform(post("/api/admin/issues/" + issueId + "/contents").with(httpBasic("op", "op-pw"))
                         .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\":\"LIFE\",\"title\":\"공개되면 안 되는 제목\",\"body\":" + READY_BODY + "}"))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         long id = com.jayway.jsonpath.JsonPath.<Number>read(res, "$.data.id").longValue();
-        String before = mvc.perform(get("/api/public/issues/" + issueId)).andReturn().getResponse().getContentAsString();
+        String before = mvc.perform(get("/api/public/issues/" + issueId)).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         act("op", id, "submit", 0, null).andExpect(status().isOk());
         act("root", id, "approve", 1, null).andExpect(status().isOk());
-        assertThat(mvc.perform(get("/api/public/issues/" + issueId)).andReturn().getResponse().getContentAsString()).isEqualTo(before);
-        assertThat(mvc.perform(get("/api/public/issues")).andReturn().getResponse().getContentAsString()).doesNotContain("공개되면 안 되는 제목");
+        assertThat(mvc.perform(get("/api/public/issues/" + issueId)).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8)).isEqualTo(before);
+        assertThat(mvc.perform(get("/api/public/issues")).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("공개되면 안 되는 제목");
         mvc.perform(get("/api/public/contents")).andExpect(status().isUnauthorized());
     }
 }

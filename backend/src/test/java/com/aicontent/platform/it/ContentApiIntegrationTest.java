@@ -64,7 +64,7 @@ class ContentApiIntegrationTest extends IntegrationTestBase {
 
     private long createdId(long issueId, String type) throws Exception {
         String res = create(issueId, UUID.randomUUID().toString(), "{\"contentType\":\"" + type + "\",\"title\":\"" + type + " 초안\"}")
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         return com.jayway.jsonpath.JsonPath.<Number>read(res, "$.data.id").longValue();
     }
 
@@ -121,7 +121,7 @@ class ContentApiIntegrationTest extends IntegrationTestBase {
     void aRetriedRequestReturnsTheFirstContentAndAReusedKeyIsRefused() throws Exception {
         long a = issue("ACTIVE"), b = issue("ACTIVE");
         String req = "{\"contentType\":\"NEWS\",\"title\":\"같은 요청\",\"body\":" + BODY + "}";
-        String first = create(a, "retry-key-0001", req).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String first = create(a, "retry-key-0001", req).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         long id = com.jayway.jsonpath.JsonPath.<Number>read(first, "$.data.id").longValue();
         // same request again (key order of the JSON may differ) -> 200 with the same content
         create(a, "retry-key-0001", "{\"body\":" + BODY + ",\"title\":\"같은 요청\",\"contentType\":\"NEWS\"}")
@@ -268,11 +268,11 @@ class ContentApiIntegrationTest extends IntegrationTestBase {
         mvc.perform(get("/api/admin/contents").with(httpBasic("op", "wrong"))).andExpect(status().isUnauthorized());
 
         // even an APPROVED content is not part of the public newsroom, which still lists issues only
-        String before = mvc.perform(get("/api/public/issues/" + active)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String before = mvc.perform(get("/api/public/issues/" + active)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         jdbc.sql("UPDATE content SET status = 'APPROVED', approved_by = 'root', approved_at = now() WHERE id = :id").param("id", id).update();
-        String after = mvc.perform(get("/api/public/issues/" + active)).andReturn().getResponse().getContentAsString();
+        String after = mvc.perform(get("/api/public/issues/" + active)).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         assertThat(after).isEqualTo(before).doesNotContain("NEWS 초안");
-        assertThat(mvc.perform(get("/api/public/issues")).andReturn().getResponse().getContentAsString()).doesNotContain("NEWS 초안");
+        assertThat(mvc.perform(get("/api/public/issues")).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("NEWS 초안");
         mvc.perform(get("/api/public/contents")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/public/contents/" + id)).andExpect(status().isUnauthorized());
         assertThat(count("SELECT count(*) FROM content")).isEqualTo(1);
