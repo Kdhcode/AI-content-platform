@@ -1,8 +1,10 @@
 package com.aicontent.platform.admin;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -24,6 +26,18 @@ public final class AdminRequests {
     public record MoveRequest(
             @NotNull @Positive Long targetIssueId,
             @Size(max = 500) String reason) {}
+
+    /** Manual content: {@code body} is optional (empty draft); size and structure are checked by ContentBodyValidator. */
+    public record ContentCreateRequest(
+            @NotNull String contentType,
+            String title,
+            JsonNode body) {}
+
+    /** Omitted title / body keep their value; {@code version} is the one the editor loaded. */
+    public record ContentPatchRequest(
+            @NotNull @PositiveOrZero Long version,
+            String title,
+            JsonNode body) {}
 
     public record IssuePatchRequest(
             @Size(max = 300) String title,
