@@ -16,7 +16,7 @@ if (-not (Test-Path $BackendJar)) { throw "no backend jar: run .\scripts\run\bui
 
 # Leftovers that command-line arguments cannot fully neutralise (extra profiles / config files / JVM properties)
 $risky = @(Get-ChildItem Env: | Where-Object {
-    $_.Name -match '^(SPRING_PROFILES_|SPRING_CONFIG_|SPRING_APPLICATION_JSON$|SPRING_DATASOURCE_|SERVER_ADDRESS$|APP_LOCAL_?VERIFY|APP_AI_PROVIDER$|APP_AI_OPENAI_)' -or
+    $_.Name -match '^(SPRING_PROFILES_|SPRING_CONFIG_|SPRING_APPLICATION_JSON$|SPRING_DATASOURCE_|SERVER_ADDRESS$|APP_LOCAL_?VERIFY|APP_AI_PROVIDER$|APP_AI_OPENAI_|APP_AI_EMBEDDING_?GUARD)' -or
     ($_.Name -match '^(JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$' -and $_.Value -match '-D')
 } | ForEach-Object { $_.Name })
 if ($risky.Count -gt 0) {

@@ -65,7 +65,7 @@
 
 PC를 켤 때마다 DB가 자동으로 뜨게 하려면 Windows 서비스로 등록할 수 있다(`pg_ctl register`, 관리자 권한 필요 — 사용자가 직접 결정·실행).
 
-**스크립트가 막는 것(2026-10-15 보강):** 환경을 정하는 값(프로필, 로그인 생략, AI 공급자, DB, 주소, 포트)은 모두 명령줄 인자로 넘긴다. Spring Boot는 명령줄 인자를 환경 변수·설정 파일보다 우선하므로, 터미널에 남은 `AI_PROVIDER`, `DB_URL`, `OPENAI_API_KEY` 같은 값은 무시된다. 인자로 완전히 덮을 수 없는 값(`SPRING_PROFILES_*`, `SPRING_CONFIG_*`, `SPRING_APPLICATION_JSON`, `SPRING_DATASOURCE_*`, `SERVER_ADDRESS`, `APP_LOCALVERIFY*`/`APP_LOCAL_VERIFY*`, `APP_AI_PROVIDER`, `APP_AI_OPENAI_*`, `-D`가 든 `JAVA_TOOL_OPTIONS`/`JDK_JAVA_OPTIONS`/`_JAVA_OPTIONS`)이 남아 있으면 스크립트가 이름을 알려 주고 시작하지 않는다(`Remove-Item Env:이름`으로 지운 뒤 다시 실행). 스크립트는 터미널의 환경 변수를 바꾸지 않는다. daily·dev는 `--app.local-verify.login-bypass=false`를 항상 넘기므로 로그인 생략이 켜질 수 없다.
+**스크립트가 막는 것(2026-10-15 보강):** 환경을 정하는 값(프로필, 로그인 생략, AI 공급자, DB, 주소, 포트)은 모두 명령줄 인자로 넘긴다. Spring Boot는 명령줄 인자를 환경 변수·설정 파일보다 우선하므로, 터미널에 남은 `AI_PROVIDER`, `DB_URL`, `OPENAI_API_KEY` 같은 값은 무시된다. 인자로 완전히 덮을 수 없는 값(`SPRING_PROFILES_*`, `SPRING_CONFIG_*`, `SPRING_APPLICATION_JSON`, `SPRING_DATASOURCE_*`, `SERVER_ADDRESS`, `APP_LOCALVERIFY*`/`APP_LOCAL_VERIFY*`, `APP_AI_PROVIDER`, `APP_AI_OPENAI_*`, `APP_AI_EMBEDDINGGUARD*`(혼합 검사 끄기), `-D`가 든 `JAVA_TOOL_OPTIONS`/`JDK_JAVA_OPTIONS`/`_JAVA_OPTIONS`)이 남아 있으면 스크립트가 이름을 알려 주고 시작하지 않는다(`Remove-Item Env:이름`으로 지운 뒤 다시 실행). 스크립트는 터미널의 환경 변수를 바꾸지 않는다. daily·dev는 `--app.local-verify.login-bypass=false`를 항상 넘기므로 로그인 생략이 켜질 수 없다.
 
 확인 기록(10-15, 유료 호출 없음): 보강 전에는 터미널에 `SPRING_PROFILES_ACTIVE=local-verify`, `APP_LOCALVERIFY_LOGINBYPASS=true`가 남아 있으면 daily에서 로그인 생략이 켜졌다(관리자 API 200). 보강 후 스크립트가 시작을 거부하고, 스크립트를 거치지 않고 같은 인자로 실행해도 로그인 생략 꺼짐·401.
 
