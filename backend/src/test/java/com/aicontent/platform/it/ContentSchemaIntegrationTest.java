@@ -61,6 +61,13 @@ class ContentSchemaIntegrationTest extends IntegrationTestBase {
         fails(ins + "(" + c + ", 'ISSUE', NULL, NULL, NULL, NULL, 't')");                            // missing reference
         fails(ins + "(" + c + ", 'ISSUE', " + issueId + ", " + articleId + ", NULL, NULL, 't')");    // two references
         fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, 'javascript:alert(1)', NULL, 't')");    // not http(s)
+        // V5: a NULL url made the V4 CHECK evaluate to NULL, which PostgreSQL accepts
+        fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, NULL, NULL, 't')");
+        fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, NULL, '라벨만 있음', 't')");
+        fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, '', NULL, 't')");
+        fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, 'https://', NULL, 't')");                // no host
+        fails(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, 'https://example.test/a b', NULL, 't')"); // whitespace
+        jdbc.sql(ins + "(" + c + ", 'EXTERNAL_URL', NULL, NULL, 'http://example.test/path?q=1#f', NULL, 't')").update();
         fails(ins + "(" + c + ", 'MANUAL', NULL, NULL, NULL, '  ', 't')");                           // blank label
         fails(ins + "(" + c + ", 'TV_ITEM', NULL, NULL, NULL, 'x', 't')");                           // not in this phase
         fails(ins + "(" + c + ", 'ISSUE', " + issueId + ", NULL, NULL, NULL, 't')");                 // duplicate issue
