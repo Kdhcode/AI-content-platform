@@ -99,10 +99,33 @@ public class ContentRepository {
                        status = CASE WHEN :draft THEN 'DRAFT' ELSE status END,
                        submitted_at = CASE WHEN :draft THEN NULL ELSE submitted_at END,
                        approved_by = CASE WHEN :draft THEN NULL ELSE approved_by END,
-                       approved_at = CASE WHEN :draft THEN NULL ELSE approved_at END
+                       approved_at = CASE WHEN :draft THEN NULL ELSE approved_at END,
+                       status_reason = CASE WHEN :draft THEN NULL ELSE status_reason END
                 WHERE id = :id AND version = :version""")
                 .param("title", title).param("body", json.write(body)).param("actor", actor).param("draft", backToDraft)
                 .param("id", id).param("version", expectedVersion).update();
+    }
+
+    /**
+     * Applies a status action decided by {@link ContentStatusPolicy} and increments the version, guarded by the expected
+     * version (the caller holds the row lock). {@code reason} is stored as status_reason when the rule says so.
+     */
+    int transition(long id, long expectedVersion, ContentStatusPolicy.Rule rule, String reason, String actor) {
+        return jdbc.sql("""
+                UPDATE content SET status = :to, version = version + 1, updated_by = :actor, updated_at = now(),
+                       status_reason = :reason,
+                       submitted_at = CASE :sub WHEN 'SET' THEN now() WHEN 'CLEAR' THEN NULL ELSE submitted_at END,
+                       approved_by  = CASE :app WHEN 'SET' THEN :actor WHEN 'CLEAR' THEN NULL ELSE approved_by END,
+                       approved_at  = CASE :app WHEN 'SET' THEN now() WHEN 'CLEAR' THEN NULL ELSE approved_at END
+                WHERE id = :id AND version = :version""")
+                .param("to", rule.to()).param("actor", actor).param("reason", rule.storesReason() ? reason : null)
+                .param("sub", rule.submitted().name()).param("app", rule.approved().name())
+                .param("id", id).param("version", expectedVersion).update();
+    }
+
+    long primarySourceCount(long contentId) {
+        return jdbc.sql("SELECT count(*) FROM content_source WHERE content_id = :id AND source_role = 'PRIMARY'")
+                .param("id", contentId).query(Long.class).single();
     }
 
     public PageResponse<ListItem> list(Filter f, PageParams page) {

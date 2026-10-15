@@ -24,8 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manual NEWS / LIFE content (bundle A2: create, read, edit). Status actions (submit, approve, ...) come with A3; the
- * only status change here is the rule that editing a REVIEW or APPROVED content sends it back to DRAFT.
+ * Manual NEWS / LIFE content: create, read, edit (A2) and status actions (A3). Statuses change only through
+ * {@link #transition} and the edit rule (editing a REVIEW or APPROVED content sends it back to DRAFT).
  */
 @Service
 public class ContentService {
@@ -122,13 +122,7 @@ public class ContentService {
                     Map.of("status", current.status()));
         }
         if (current.version() != version) {
-            Map<String, Object> details = new HashMap<>();
-            details.put("currentVersion", current.version());
-            details.put("updatedBy", current.updatedBy());
-            details.put("updatedAt", current.updatedAt());
-            details.put("sentVersion", version);
-            throw new BusinessException(ErrorCode.CONTENT_VERSION_CONFLICT,
-                    "다른 곳에서 먼저 저장했습니다(현재 version " + current.version() + "). 최신 내용을 다시 불러오세요.", details);
+            throw conflict(current, version);
         }
         String newTitle = title == null ? current.title() : title;
         JsonNode newBody = body == null || body.isNull() ? current.body() : body;
@@ -152,6 +146,52 @@ public class ContentService {
                     Map.of("status", "DRAFT"), "승인된 콘텐츠를 수정해 승인이 해제됨", correlationId);
         }
         return new PatchResult(contents.detail(id).orElseThrow(), backToDraft);
+    }
+
+    /**
+     * Performs one status action (docs/CONTENT_A_PLAN.md §4) on the version the caller has: row lock, version check,
+     * role and source-status check, reason check, readiness for submit / approve, then status + version + review record
+     * + audit in this transaction. A concurrent edit or action at the same version makes this one fail with 409.
+     */
+    @Transactional
+    public ContentRepository.Detail transition(long id, ContentStatusPolicy.Action action, long version, String rawReason,
+                                               String actor, boolean systemAdmin, String correlationId) {
+        String reason = ContentStatusPolicy.reason(action, rawReason);
+        var current = contents.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.CONTENT_NOT_FOUND));
+        if (current.version() != version) {
+            throw conflict(current, version);
+        }
+        String to = ContentStatusPolicy.decide(action, current.status(), systemAdmin);
+        if (action == ContentStatusPolicy.Action.SUBMIT || action == ContentStatusPolicy.Action.APPROVE) {
+            var violations = new ArrayList<>(ContentBodyValidator.readinessViolations(current.title(), current.body()));
+            if (contents.primarySourceCount(id) == 0) {
+                violations.add(new ContentBodyValidator.Violation("sources", "PRIMARY 출처가 하나 이상 있어야 합니다."));
+            }
+            if (!violations.isEmpty()) {
+                throw new BusinessException(ErrorCode.CONTENT_NOT_READY,
+                        ContentStatusPolicy.name(action) + "에 필요한 내용이 부족합니다: " + violations.get(0).path() + " "
+                                + violations.get(0).message(), Map.of("violations", violations));
+            }
+        }
+        var rule = ContentStatusPolicy.rule(action);
+        if (contents.transition(id, version, rule, reason, actor) != 1) {
+            throw new IllegalStateException("content " + id + " changed while locked");   // cannot happen under FOR UPDATE
+        }
+        audit.record(actor, "CONTENT_" + action.name(), "CONTENT", id,
+                Map.of("status", current.status(), "version", current.version()),
+                Map.of("status", to, "version", version + 1), reason, correlationId);
+        return contents.detail(id).orElseThrow();
+    }
+
+    private static BusinessException conflict(ContentRepository.Locked current, long sentVersion) {
+        Map<String, Object> details = new HashMap<>();
+        details.put("currentVersion", current.version());
+        details.put("updatedBy", current.updatedBy());
+        details.put("updatedAt", current.updatedAt());
+        details.put("sentVersion", sentVersion);
+        details.put("status", current.status());
+        return new BusinessException(ErrorCode.CONTENT_VERSION_CONFLICT,
+                "다른 곳에서 먼저 저장했습니다(현재 version " + current.version() + "). 최신 내용을 다시 불러오세요.", details);
     }
 
     private CreateResult replayed(ContentRepository.CreationRecord existing, String fingerprint) {

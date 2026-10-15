@@ -7,11 +7,14 @@ import com.aicontent.platform.common.PageParams;
 import com.aicontent.platform.common.PageResponse;
 import com.aicontent.platform.content.ContentRepository;
 import com.aicontent.platform.content.ContentService;
+import com.aicontent.platform.content.ContentStatusPolicy;
+import com.aicontent.platform.content.ContentStatusPolicy.Action;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,8 +25,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Manual NEWS / LIFE content (bundle A2). Admin only (OPERATOR or SYSTEM_ADMIN, see SecurityConfig); nothing here is
- * reachable from /api/public, and an APPROVED content is not published anywhere.
+ * Manual NEWS / LIFE content: create / read / edit (A2) and status actions (A3). Admin only (OPERATOR or SYSTEM_ADMIN;
+ * approve and restore SYSTEM_ADMIN only, see SecurityConfig and ContentStatusPolicy). Nothing here is reachable from
+ * /api/public, and an APPROVED content is not published anywhere.
  */
 @RestController
 public class ContentAdminController {
@@ -79,6 +83,54 @@ public class ContentAdminController {
                                                         @Valid @RequestBody AdminRequests.ContentPatchRequest body,
                                                         Principal principal) {
         return ApiResponse.ok(service.patch(id, body.version(), body.title(), body.body(), principal.getName(),
+                CorrelationIdFilter.current()));
+    }
+
+    // --- status actions (docs/CONTENT_A_PLAN.md §4): body {version, reason?}; the response is the updated detail ---
+
+    @PostMapping("/api/admin/contents/{id}/submit")
+    public ApiResponse<ContentRepository.Detail> submit(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.SUBMIT, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/approve")
+    public ApiResponse<ContentRepository.Detail> approve(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.APPROVE, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/return")
+    public ApiResponse<ContentRepository.Detail> returnToDraft(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.RETURN, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/hold")
+    public ApiResponse<ContentRepository.Detail> hold(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.HOLD, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/resume")
+    public ApiResponse<ContentRepository.Detail> resume(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.RESUME, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/exclude")
+    public ApiResponse<ContentRepository.Detail> exclude(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.EXCLUDE, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/archive")
+    public ApiResponse<ContentRepository.Detail> archive(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.ARCHIVE, body, auth);
+    }
+
+    @PostMapping("/api/admin/contents/{id}/restore")
+    public ApiResponse<ContentRepository.Detail> restore(@PathVariable long id, @Valid @RequestBody AdminRequests.ContentActionRequest body, Authentication auth) {
+        return act(id, Action.RESTORE, body, auth);
+    }
+
+    private ApiResponse<ContentRepository.Detail> act(long id, Action action, AdminRequests.ContentActionRequest body, Authentication auth) {
+        boolean systemAdmin = auth.getAuthorities().stream().anyMatch(a -> "ROLE_SYSTEM_ADMIN".equals(a.getAuthority()));
+        return ApiResponse.ok(service.transition(id, action, body.version(), body.reason(), auth.getName(), systemAdmin,
                 CorrelationIdFilter.current()));
     }
 

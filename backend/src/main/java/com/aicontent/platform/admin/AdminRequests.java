@@ -39,6 +39,11 @@ public final class AdminRequests {
             String title,
             JsonNode body) {}
 
+    /** Body of every content status action; {@code version} is the one the editor has (409 otherwise). */
+    public record ContentActionRequest(
+            @NotNull @PositiveOrZero Long version,
+            @Size(max = 2000) String reason) {}
+
     public record IssuePatchRequest(
             @Size(max = 300) String title,
             @Size(max = 5000) String summary,

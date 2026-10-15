@@ -61,6 +61,31 @@ public final class ContentBodyValidator {
         }
     }
 
+    /**
+     * Extra conditions for submitting or approving (not for saving a draft): a non-blank title, at least one section,
+     * every section with a non-blank heading and at least one paragraph, no blank paragraph. Assumes a body that
+     * already passed {@link #validate}.
+     */
+    public static List<Violation> readinessViolations(String title, JsonNode body) {
+        List<Violation> out = new ArrayList<>();
+        if (title == null || title.isBlank()) out.add(new Violation("title", "제목이 비어 있습니다."));
+        JsonNode sections = body.path("sections");
+        if (sections.size() == 0) out.add(new Violation("body.sections", "섹션이 하나 이상 있어야 합니다."));
+        for (int s = 0; s < sections.size(); s++) {
+            JsonNode section = sections.get(s);
+            String sp = "body.sections[" + s + "]";
+            if (section.path("heading").asText("").isBlank()) out.add(new Violation(sp + ".heading", "소제목이 비어 있습니다."));
+            JsonNode paragraphs = section.path("paragraphs");
+            if (paragraphs.size() == 0) out.add(new Violation(sp + ".paragraphs", "문단이 하나 이상 있어야 합니다."));
+            for (int p = 0; p < paragraphs.size(); p++) {
+                if (paragraphs.get(p).path("text").asText("").isBlank()) {
+                    out.add(new Violation(sp + ".paragraphs[" + p + "].text", "빈 문단입니다."));
+                }
+            }
+        }
+        return out;
+    }
+
     static List<Violation> violations(JsonNode body) {
         List<Violation> out = new ArrayList<>();
         if (body == null || !body.isObject()) {

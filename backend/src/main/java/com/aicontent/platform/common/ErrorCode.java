@@ -25,6 +25,7 @@ public enum ErrorCode {
     CONTENT_BODY_INVALID(HttpStatus.BAD_REQUEST, "콘텐츠 본문 형식이 올바르지 않습니다."),
     CONTENT_VERSION_CONFLICT(HttpStatus.CONFLICT, "다른 곳에서 먼저 저장된 콘텐츠입니다. 최신 내용을 다시 불러오세요."),
     CONTENT_STATE_INVALID(HttpStatus.CONFLICT, "현재 콘텐츠 상태에서는 수행할 수 없는 작업입니다."),
+    CONTENT_NOT_READY(HttpStatus.UNPROCESSABLE_ENTITY, "검수 요청·승인에 필요한 내용이 갖춰지지 않았습니다."),
     IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "같은 Idempotency-Key로 다른 요청이 이미 처리되었습니다."),
 
     JOB_NOT_RETRYABLE(HttpStatus.CONFLICT, "재시도할 수 없는 작업 상태입니다."),
