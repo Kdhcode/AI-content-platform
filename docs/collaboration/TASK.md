@@ -337,3 +337,12 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 ### 실행 환경
 - `docs/RUNBOOK.md`, `scripts/run/*.ps1` 추가. 평소 사용 DB `aicontent_main`(실제 OpenAI 임베딩, `aicontent_view_20261014` 복사) 신규 생성. stub DB(`aicontent`)와 분리
 - 다음 기능 범위: `docs/NEXT_CONTENT_SCOPE.md`(구현은 시작하지 않음)
+
+## 12. 2026-10-15 오후: 실행 스크립트 점검, A 묶음 계획
+
+- 통합 PR: 생성 못 함. `gh` 미설치, 내장 브라우저는 GitHub 미로그인(비밀번호 입력은 하지 않음). 본문 초안은 준비됨
+- **확인된 문제 1:** 터미널에 `SPRING_PROFILES_ACTIVE=local-verify`, `APP_LOCALVERIFY_LOGINBYPASS=true`가 남아 있으면 daily에서 로그인 생략이 켜졌다(재현: 관리자 API 200). 스크립트가 환경을 정하는 값을 명령줄 인자로 넘기고 위험한 잔여 변수는 거부(`1d47522`). 재확인: 스크립트 거부, 같은 인자로 직접 실행해도 생략 꺼짐·401
+- **확인된 문제 2:** daily에서 `-Ai openai`를 켜면 단가가 없어 비용이 NULL로 기록될 수 있었다(단가는 `live` 프로필에만 있음). 유료 AI는 `live` 프로필로 실행, 앱은 단가 없는 openai 시작 거부(`c5042f9`)
+- stub↔실제 임베딩 혼합: 스크립트 고정에 더해 앱 시작 시 `ai_log` 근거로 거부(`c5042f9`). 실제 실행으로 3가지 거부 확인, `live`+한도 1 정상 시작·AI 호출 0
+- 전체 `mvn package` **205개 통과**(기준 `c5042f9`; 이후 커밋은 스크립트·문서만). UI 코드 변경 없음(타입 검사·빌드 기준 `400d1be` 유지). 유료 호출 0
+- NEWS·LIFE A 묶음 구현 계획: `docs/CONTENT_A_PLAN.md`(코드·마이그레이션 미구현)
