@@ -43,6 +43,11 @@
 
 ---
 
+## 계정
+
+### `GET /me` — 로그인한 계정 (OPERATOR+)
+`{username, roles[]}`(`roles`는 `OPERATOR`·`SYSTEM_ADMIN`, `ROLE_` 접두어 없음). 관리자 화면이 보여 줄 버튼을 고르는 데만 쓴다 — 모든 동작은 서버가 역할을 다시 검사한다. 미인증·틀린 비밀번호 401. 로컬 검증 모드에서 인증 헤더 없이 부르면 `local-verify`(두 역할), 계정으로 로그인한 요청은 그 계정의 역할.
+
 ## 기사
 
 ### `GET /articles` — 목록 (OPERATOR+)
@@ -112,6 +117,7 @@
 `type`(NEWS|LIFE), `status`(DRAFT|REVIEW|APPROVED|HOLD|EXCLUDED|ARCHIVED), `issueId`, `q`(제목 검색, 200자 이하), `updateNeeded`(true: 미확인 원천 변경만, false: 없는 것만 — 페이지 전에 적용), `page`, `size`, `sort`(`updatedAt|createdAt|title|id`, 기본 최근 수정순). 항목: `id, contentType, status, title, version, originIssueId, originIssueTitle, originIssueStatus, originChange, updatedBy, updatedAt`. `originChange` = `{unacknowledged, issueChangeSeq, acknowledgedSeq, issueChangedAt, acknowledgedAt, issueStatus, notice(MERGED|EXCLUDED|null), mergedIntoIssueId}` — `unacknowledged`는 확인 뒤 원천 이슈가 바뀌었는지, `notice`는 원천 이슈의 현재 상태 안내(확인해도 남음).
 
 ### `GET /contents/{id}` — 상세 (OPERATOR+)
+한 SQL 문으로 읽어 모든 필드가 같은 시점(스냅샷)이다 — 변경 응답의 `content`도 같다.
 `id, contentType, status, title, body, version, originIssue{id, title, status, mergedIntoIssueId}, originCheckedAt(마지막 확인 시각), originChange(목록과 같음), sources[]{id, kind, issueId, newsArticleId, externalUrl, label, role, checkedAt}, links[]{id, linkType, title, url, siteVisible, blogVisible, displayPosition, sortOrder, createdAt, updatedAt}, statusReason, createdBy/At, updatedBy/At, submittedAt, approvedBy/At`. 404 `CONTENT_NOT_FOUND`.
 
 ### `PATCH /contents/{id}` — 제목·본문 저장 (OPERATOR+) · 동기

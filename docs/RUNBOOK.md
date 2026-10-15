@@ -37,6 +37,7 @@
 | **daily (평소)** | 관리자 http://127.0.0.1:3000 · 뉴스룸 http://127.0.0.1:3000/news · API 8080 | `aicontent_main` | 기본 `none`(유료 호출 없음). 새 기사 처리가 필요할 때만 `-Ai openai` + 호출 한도 | **관리자 인증 필수** |
 | dev (개발) | 3001 / 8081 | `aicontent` | `stub` | 관리자 인증 |
 | verify-scenario / verify-real | 13091·18091 / 13092·18092 | 검증 DB | stub / none | 로그인 생략(검증 전용, `local-verify`) |
+| verify-content | 13093·18093 | `aicontent_verify_content`(시나리오 DB 복사본) | stub, 작업자 끔 | 로그인 생략 가능 + 실제 계정 로그인(역할 확인용, 계정은 검증 DB에만) |
 
 로그인 생략은 검증 환경에만 남긴다. daily·dev는 `local-verify` 프로필을 쓰지 않으므로 기존 인증이 그대로다(2026-10-15 확인: daily에서 로그인 없이·틀린 비밀번호로 관리자 API 401, `viewer` 계정 200).
 

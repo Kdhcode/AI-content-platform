@@ -388,3 +388,17 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 테스트(로컬 `aicontent_test`, stub): 새 테스트 10개(링크 한도 2, 원천 변경 8) 포함 전체 `mvn package` **255개 통과**(기준: A6 코드 커밋). 대시보드 스키마 버전 기대값 6→7
 - 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig7_fresh` V1~V7, `aicontent_mig6_upgrade` V6→V7(미리 넣은 콘텐츠 2건: 이슈 변경 뒤 확인한 것 → 확인됨, 그 전 것 → 미확인; 기존 14개 테이블 행 동일[새 열 제외]; 업그레이드 뒤 제목 변경은 번호 +1, 임베딩만 갱신은 그대로), `aicontent_main` 새 복사본 `aicontent_mig7_upgrade` V3→V7(기존 11개 테이블 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
 - UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 19. 2026-10-15 상세 조회 일관성 · A7 콘텐츠 화면 · A8 공개 분리 (`claude/content-a`, `main` 미병합)
+
+- 상세 조회: 출처·링크를 따로 읽던 3개 문장 → 한 SQL 문(`jsonb_agg`). 동시 변경 중 읽기 테스트가 고치기 전 실패("version 3, 출처 3, 링크 2"), 고친 뒤 통과. 추가 잠금 없음
+- `GET /api/admin/me`(역할 조회) + 테스트
+- A7 화면: `/contents` 목록, `/contents/{id}` 편집기(섹션·문단, 자동저장 큐, 충돌, 보관본, 상태 버튼, 출처, 관련 URL, 원천 이슈), 이슈 상세 "콘텐츠 만들기". 규칙은 `CONTENT_A_PLAN.md` 5절
+- 테스트: `npm run verify:content-session` 15개(자동저장 2초·되돌림·IME·저장 중 입력·순서·version 전달·저장 실패 시 동작 차단·한도·충돌·연타·키 순서·보관본·id, 서버 상수와 한도 비교) — 일부러 깨뜨린 코드(응답이 입력 덮기, 큐 제거, 실패 뒤 동작 실행)에서 실패 확인. 끝나지 않는 테스트도 실패로 처리
+- 기존 `verify-auth-client`는 로컬 검증 모드 조회(`/api/local-verify/mode`)를 요청으로 세어 이전부터 실패하고 있었음 → "관리자 요청 없음"을 검사하도록 수정
+- 전체 `mvn package` **257개 통과**, 타입 검사·`next build` 통과, `verify-dashboard`·`verify-ai-usage`(검증 UI, SYSTEM_ADMIN 로그인)·`verify-public-news` 통과. `verify-flow`는 실제 RSS 수집·실제 AI가 필요해 실행 안 함
+- 검증 환경 `verify-content`(DB `aicontent_verify_content` = `aicontent_verify_scenario` 복사본 V3→V7, 백엔드 18093·UI 13093, stub, 작업자 끔, 화면에 "콘텐츠 화면 검증용 데이터" 표시). 검증 DB에만 OPERATOR·SYSTEM_ADMIN 계정 생성(비밀번호는 기록하지 않음)
+- 브라우저 확인(내장 브라우저, 실제 로그인): NEWS·LIFE 생성, 제목·본문 자동저장·새로고침 유지, 출처 4종·중복·잘못된 URL·원천 출처 삭제 불가·역할 변경, 링크 추가·수정·삭제·정렬·`javascript:` 거부, 검수 요청→승인→편집 시작 확인 1회→DRAFT, 반려·보류·보관·제외·복귀·보류 해제와 사유, 두 탭 충돌→비교→다시 불러오기→보관본 복원, 저장 중 입력, 저장 실패 시 검수 요청 미전송, 연타 1회, 생성 응답 유실 뒤 같은 키 재시도(콘텐츠 1개), 원천 변경 표시·확인 경합 409·재확인·새 변경 재표시·병합 안내, 역할별 버튼과 UI 우회 시 403, 승인 콘텐츠가 공개 API·뉴스룸에 없음
+- 브라우저 검증 중 고친 것: 출처 역할 선택이 예전 값을 보내던 문제(비동기 요청이 React가 되돌린 값을 읽음), 버튼 연타 시 여러 번 전송(상태 대신 ref로 막음), 같은 값 저장 시 "바꿨습니다" 대신 "바뀐 내용 없음"
+- 실제 한글 IME는 자동화로 칠 수 없어 composition 이벤트로 확인. 이탈 확인 창은 사용자 조작이 없으면 브라우저가 띄우지 않아 처리기 동작(`beforeunload` 취소 여부)으로 확인
+- 유료 AI 호출 0. `aicontent_main`(V3)·daily 서버(3000·8080) 그대로
