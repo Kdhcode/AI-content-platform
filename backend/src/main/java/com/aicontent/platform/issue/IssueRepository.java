@@ -87,6 +87,14 @@ public class IssueRepository {
                 .param("i", issueId).param("a", articleId).query(Long.class).single() > 0;
     }
 
+    /** Members still flagged REVIEW (not yet decided by an admin). */
+    public long countReviewMembers(long issueId) {
+        return jdbc.sql("""
+                SELECT count(*) FROM issue_article ia JOIN news_article a ON a.id = ia.article_id
+                WHERE ia.issue_id = :i AND a.classification_status = 'REVIEW'""")
+                .param("i", issueId).query(Long.class).single();
+    }
+
     public List<Long> memberArticleIds(long issueId) {
         return jdbc.sql("SELECT article_id FROM issue_article WHERE issue_id = :i ORDER BY article_id")
                 .param("i", issueId).query(Long.class).list();

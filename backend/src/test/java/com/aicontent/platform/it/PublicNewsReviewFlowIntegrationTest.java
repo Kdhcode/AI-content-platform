@@ -118,6 +118,10 @@ class PublicNewsReviewFlowIntegrationTest extends IntegrationTestBase {
         // exclude, then re-activate from the admin screen: the re-activation is the decision for its articles
         management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "EXCLUDED"), "admin", "보류", null);
         assertThat(publicArticles(pending)).isNull();
+        // nor can it be closed from EXCLUDED while its article is still waiting for review
+        assertThatThrownBy(() -> management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "CLOSED"), "admin", null, null))
+                .isInstanceOf(com.aicontent.platform.common.BusinessException.class);
+        assertThat(publicArticles(pending)).isNull();
         management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "ACTIVE"), "admin", "다시 활성화", null);
         assertThat(publicArticles(pending)).containsExactly(article(3));
         assertThat(jdbc.sql("SELECT classification_status FROM news_article WHERE id = :a").param("a", article(3))

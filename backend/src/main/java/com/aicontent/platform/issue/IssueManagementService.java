@@ -173,10 +173,12 @@ public class IssueManagementService {
             if (("ACTIVE".equals(patch.status()) || "REVIEW".equals(patch.status())) && head.articleCount() == 0) {
                 throw new BusinessException(ErrorCode.ISSUE_STATE_INVALID, "기사가 없는 이슈는 " + patch.status() + " 상태가 될 수 없습니다.");
             }
-            // CLOSED issues are public: an issue still waiting for review must be confirmed (ACTIVE) or excluded first.
-            if ("REVIEW".equals(head.status()) && "CLOSED".equals(patch.status())) {
+            // CLOSED issues are public: an issue still waiting for review must be confirmed (ACTIVE) or excluded first,
+            // and no issue may be closed while it still holds articles waiting for review (e.g. REVIEW -> EXCLUDED -> CLOSED).
+            if ("CLOSED".equals(patch.status())
+                    && ("REVIEW".equals(head.status()) || issues.countReviewMembers(issueId) > 0)) {
                 throw new BusinessException(ErrorCode.ISSUE_STATE_INVALID,
-                        "검수 대기 이슈는 바로 종료할 수 없습니다. 같은 사건으로 확정하거나 제외하세요.");
+                        "검수 대기 기사가 있는 이슈는 종료할 수 없습니다. 같은 사건으로 확정(다시 활성화)하거나 제외 상태로 두세요.");
             }
         }
         issues.updateFields(issueId, patch.title() == null ? null : patch.title().trim(), patch.summary(),
