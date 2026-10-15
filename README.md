@@ -15,6 +15,8 @@
 > **실제 OpenAI 검증(2026-10-14):** 별도 빈 DB에서 기사 1건의 실제 분석·임베딩과 `NO_CANDIDATE` 이슈 분류를 확인했습니다. 모델·토큰·명령·비용 미산정·미검증 항목은 [검증 기록](docs/OPENAI_ONE_ARTICLE_VERIFY.md)에 있습니다. 키 입력 파일 `.local/openai-one-article/secrets.json`은 Git에서 제외되며, 키를 채팅이나 로그에 출력하지 않습니다.
 > `live` 프로파일에 실제 연합뉴스·BBC RSS가 등록되고, `AI_PROVIDER=openai`로 LLM·임베딩 API를 연결할 수 있습니다. 실제 외부 AI 호출에는 별도 API 키가 필요합니다. 기본값 `none`은 AI 호출을 실패시키고 개발용 `stub`은 모델이 아닙니다. 검증 결과와 실행 방법은 [docs/VERIFY.md](docs/VERIFY.md)를 보세요.
 
+> 평소 실행 주소·DB 구성, `main` 병합 후 재시작·되돌리기는 [docs/RUNBOOK.md](docs/RUNBOOK.md), 로그인 없이 화면을 확인하는 검증 모드는 [docs/LOCAL_VERIFY.md](docs/LOCAL_VERIFY.md)를 보세요.
+
 ## 구성
 | 위치 | 내용 |
 |---|---|
