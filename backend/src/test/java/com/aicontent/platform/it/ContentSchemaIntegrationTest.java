@@ -80,8 +80,13 @@ class ContentSchemaIntegrationTest extends IntegrationTestBase {
     void linksNeedAnHttpUrlAndAKnownTypeAndGoAwayWithTheirContent() {
         long c = content("", "");
         jdbc.sql("INSERT INTO content_link (content_id, link_type, url) VALUES (" + c + ", 'MAP', 'https://map.example.test/x')").update();
-        assertThat(jdbc.sql("SELECT site_visible || '/' || blog_visible FROM content_link").query(String.class).single())
-                .isEqualTo("true/false");
+        assertThat(jdbc.sql("SELECT site_visible || '/' || blog_visible || '/' || display_position FROM content_link").query(String.class).single())
+                .isEqualTo("true/false/BODY_BOTTOM");                                      // V6 default
+        fails("INSERT INTO content_link (content_id, link_type, url, display_position) VALUES (" + c + ", 'MAP', 'https://x.test', 'SIDEBAR')");
+        fails("INSERT INTO content_link (content_id, link_type, url, display_position) VALUES (" + c + ", 'MAP', 'https://x.test', NULL)");
+        fails("INSERT INTO content_link (content_id, link_type, url) VALUES (" + c + ", 'MAP', 'https://')");          // V6: host
+        fails("INSERT INTO content_link (content_id, link_type, url) VALUES (" + c + ", 'MAP', 'https://x.test/a b')"); // V6: whitespace
+        jdbc.sql("INSERT INTO content_link (content_id, link_type, url, display_position) VALUES (" + c + ", 'OFFICIAL', 'https://x.test', 'SOURCES')").update();
         fails("INSERT INTO content_link (content_id, link_type, url) VALUES (" + c + ", 'MAP', 'ftp://x')");
         fails("INSERT INTO content_link (content_id, link_type, url) VALUES (" + c + ", 'COUPON', 'https://x.test')");
         jdbc.sql("INSERT INTO content_source (content_id, source_kind, issue_id, created_by) VALUES (" + c + ", 'ISSUE', 1, 't')").update();
