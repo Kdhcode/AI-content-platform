@@ -109,10 +109,10 @@
 - 400 `VALIDATION_ERROR`(키 없음·형식, 유형, 제목 200자 초과·줄바꿈), 400 `CONTENT_BODY_INVALID`(`details.violations[]: {path, message}`, 최대 20개).
 
 ### `GET /contents` — 목록 (OPERATOR+)
-`type`(NEWS|LIFE), `status`(DRAFT|REVIEW|APPROVED|HOLD|EXCLUDED|ARCHIVED), `issueId`, `q`(제목 검색, 200자 이하), `page`, `size`, `sort`(`updatedAt|createdAt|title|id`, 기본 최근 수정순). 항목: `id, contentType, status, title, version, originIssueId, originIssueTitle, originIssueStatus, updatedBy, updatedAt`.
+`type`(NEWS|LIFE), `status`(DRAFT|REVIEW|APPROVED|HOLD|EXCLUDED|ARCHIVED), `issueId`, `q`(제목 검색, 200자 이하), `updateNeeded`(true: 미확인 원천 변경만, false: 없는 것만 — 페이지 전에 적용), `page`, `size`, `sort`(`updatedAt|createdAt|title|id`, 기본 최근 수정순). 항목: `id, contentType, status, title, version, originIssueId, originIssueTitle, originIssueStatus, originChange, updatedBy, updatedAt`. `originChange` = `{unacknowledged, issueChangeSeq, acknowledgedSeq, issueChangedAt, acknowledgedAt, issueStatus, notice(MERGED|EXCLUDED|null), mergedIntoIssueId}` — `unacknowledged`는 확인 뒤 원천 이슈가 바뀌었는지, `notice`는 원천 이슈의 현재 상태 안내(확인해도 남음).
 
 ### `GET /contents/{id}` — 상세 (OPERATOR+)
-`id, contentType, status, title, body, version, originIssue{id, title, status, mergedIntoIssueId}, originCheckedAt, sources[]{id, kind, issueId, newsArticleId, externalUrl, label, role, checkedAt}, links[]{id, linkType, title, url, siteVisible, blogVisible, displayPosition, sortOrder, createdAt, updatedAt}, statusReason, createdBy/At, updatedBy/At, submittedAt, approvedBy/At`. 404 `CONTENT_NOT_FOUND`.
+`id, contentType, status, title, body, version, originIssue{id, title, status, mergedIntoIssueId}, originCheckedAt(마지막 확인 시각), originChange(목록과 같음), sources[]{id, kind, issueId, newsArticleId, externalUrl, label, role, checkedAt}, links[]{id, linkType, title, url, siteVisible, blogVisible, displayPosition, sortOrder, createdAt, updatedAt}, statusReason, createdBy/At, updatedBy/At, submittedAt, approvedBy/At`. 404 `CONTENT_NOT_FOUND`.
 
 ### `PATCH /contents/{id}` — 제목·본문 저장 (OPERATOR+) · 동기
 본문 `{version, title?, body?}` — 생략한 값은 유지, 둘 다 없으면 400. `version`은 편집기가 불러온 값.
@@ -136,6 +136,12 @@
 | `restore` 복귀 | EXCLUDED·ARCHIVED → DRAFT | **SYSTEM_ADMIN** | 필수 |
 
 오류: 403 `FORBIDDEN`(역할), 409 `CONTENT_STATE_INVALID`(`details{status, action, allowedFrom}` — 예: DRAFT에서 approve), 409 `CONTENT_VERSION_CONFLICT`(`details{currentVersion, sentVersion, updatedBy, updatedAt, status}`), 422 `CONTENT_NOT_READY`(submit·approve: `details.violations[]` — 제목, 섹션·소제목·문단, PRIMARY 출처), 400 `VALIDATION_ERROR`(version 없음, 필수 사유 없음, 사유 500자 초과), 404 `CONTENT_NOT_FOUND`. 감사 기록 `CONTENT_<동작>`(처리자, 전후 상태·version, 사유). 승인돼도 공개 API·뉴스룸에는 나오지 않는다.
+
+### `POST /contents/{id}/acknowledge-origin` — 원천 이슈 변경 확인 (A6, OPERATOR+)
+본문 `{version, originChangeSeq}` — `originChangeSeq`는 화면에 보여 준 `originChange.issueChangeSeq`. 그 번호까지 확인한 것으로 기록하고 version +1. 내용(제목·본문·출처·URL)·상태·검수 기록은 그대로이며 모든 상태(HOLD·EXCLUDED·ARCHIVED 포함)에서 가능.
+- 200 `{content, changed, statusChanged: false}` — 같은 번호를 다시 확인하면 `changed: false`(version·감사 기록 그대로).
+- 409 `CONTENT_ORIGIN_CHANGED`: 보여 준 뒤 원천 이슈가 다시 바뀜 — `details{currentChangeSeq, sentChangeSeq, acknowledgedSeq, issueChangedAt, issueStatus, mergedIntoIssueId}`. 다시 조회해 확인.
+- 409 `CONTENT_VERSION_CONFLICT`, 404 `CONTENT_NOT_FOUND`, 400 `VALIDATION_ERROR`(값 없음). 감사 기록 `CONTENT_ORIGIN_ACKNOWLEDGED`.
 
 ### 출처 (A4) — `.../contents/{id}/sources` (OPERATOR+)
 - `GET` — 목록(PRIMARY·SUPPORTING·REFERENCE 순, 같은 역할은 id 순).

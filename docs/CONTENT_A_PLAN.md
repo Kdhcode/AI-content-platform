@@ -8,8 +8,9 @@
 | A2 생성·조회·편집 | **구현됨** | `docs/API.md` "콘텐츠" |
 | A3 상태 전이 | **구현됨(2026-10-15)** | 4절 최종 표 |
 | A4 출처 관리 | **구현됨(2026-10-15)** | 5절 "출처 관리" |
-| A5 관련 URL | **구현됨(2026-10-15)** | 5절 "관련 URL", V6(표시 위치 값·URL 규칙) |
-| A6 업데이트 필요 표시 · A7 화면 · A8 분리 확인 | 계획만 있음 | 6절 |
+| A5 관련 URL | **구현됨(2026-10-15)** | 5절 "관련 URL", V6(표시 위치 값·URL 규칙), 콘텐츠당 500개 |
+| A6 원천 이슈 변경 표시 | **구현됨(2026-10-15)** | 5절 "원천 이슈 변경 표시(A6)", V7(`issue.change_seq`) |
+| A7 화면 · A8 분리 확인 | 계획만 있음 | 6절 |
 
 구현하면서 계획과 달라진 점: ① 생성 요청의 `body`는 선택이고 생략하면 빈 본문(기본 소제목 자동 채움은 7절 7번이 정해질 때까지 하지 않음) ② 같은 키의 다른 요청을 가리기 위해 `content.creation_fingerprint`(요청 해시) 열 추가 ③ 상태 동작 실패(검수 요청·승인 조건 미달)는 422 `CONTENT_NOT_READY`.
 
@@ -154,6 +155,7 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 
 **관련 URL(A5, 2026-10-15 구현):**
 - 종류 PRODUCT·OFFICIAL·MAP·RESERVATION·PURCHASE·REFERENCE·OTHER, 제목 0~200자(한 줄), URL은 출처와 같은 규칙, 사이트 노출 기본 true·블로그 노출 기본 false, 표시 위치 **BODY_TOP(본문 위)·BODY_BOTTOM(본문 아래, 기본)·SOURCES(출처 영역)** — 사용자 결정(10-15), V6에서 DB 제약.
+- 콘텐츠당 최대 500개(정렬 요청이 전체 id를 받으므로 같은 한도). 501번째는 409 `CONTENT_LINK_LIMIT_EXCEEDED`, 콘텐츠 행 잠금 안에서 센다.
 - 새 링크는 맨 뒤에 붙는다. 정렬은 `PUT .../links/order`에 이 콘텐츠의 링크 id를 **빠짐없이 한 번씩**: 중복·모르는 id(다른 콘텐츠 것 포함)·빠진 id가 하나라도 있으면 400(`details{duplicateIds, unknownIds, missingIds}`)이고 아무것도 바뀌지 않는다. 지금과 같은 순서면 변경 없음.
 - 노출 설정은 저장만 한다. 뉴스룸·블로그 노출은 Phase 3·5.
 
@@ -171,6 +173,16 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 - 동작: 관리자가 "확인함"을 누르면 `origin_checked_at`을 지금으로 바꾸고 감사 기록. 본문·출처는 건드리지 않는다. 승인 상태도 바꾸지 않는다(본문이 바뀐 것이 아니므로).
 - 이번에 하지 않음: 변경된 기사 목록 비교, 자동 재생성, 알림.
 
+**원천 이슈 변경 표시(A6, 2026-10-15 구현) — 위 제안을 다음처럼 바꿔 구현:**
+- 시각 비교(`updated_at`·`last_updated_at` vs `origin_checked_at`)는 쓰지 않는다. ① `now()`는 트랜잭션 **시작** 시각이라 확인 처리 뒤에 커밋된 변경이 더 이른 시각을 가질 수 있고 ② `last_updated_at`은 기사 **발행** 시각이라 예전 기사가 추가되면 움직이지 않으며 ③ `updated_at`은 중심 임베딩·집계 재계산에도 바뀐다.
+- 대신 V7에서 `issue.change_seq`(줄어들지 않는 변경 번호)를 두고 DB 트리거가 올린다: 이슈의 제목·요약·카테고리·상태·병합 대상·핵심 사실·엔티티가 바뀔 때, 기사가 들어오거나·빠지거나·옮겨질 때(`issue_article` 추가·삭제·이슈 변경). 서비스·배치·직접 SQL 어느 경로든 같다. 임베딩·집계 재계산만으로는 오르지 않는다.
+- 콘텐츠는 확인한 번호 `origin_ack_seq`를 가진다. **미확인 변경** = `issue.change_seq > content.origin_ack_seq`. 목록·필터·상세가 같은 SQL 식을 쓰고, `updateNeeded` 필터는 페이지 나누기 전에 쿼리에서 적용한다(행마다 추가 조회 없음).
+- **상태 안내**는 따로: 원천 이슈가 지금 MERGED·EXCLUDED면 `notice`(병합이면 `mergedIntoIssueId`). 확인 처리와 무관하게 항상 보인다. 확인 처리는 미확인 표시만 지운다. `origin_issue_id`는 병합 대상으로 바꾸지 않는다.
+- **확인 처리** `POST /contents/{id}/acknowledge-origin {version, originChangeSeq}`: 관리자가 본 번호(`originChange.issueChangeSeq`)를 보낸다. 잠금 순서는 콘텐츠 행(FOR UPDATE) → 원천 이슈(FOR SHARE). 이슈 변경이 먼저 커밋되면 번호가 달라 409 `CONTENT_ORIGIN_CHANGED`(현재 번호 등), 확인이 먼저면 이슈 변경이 기다렸다가 번호를 올려 다시 미확인이 된다 — 어느 쪽이든 변경을 놓치지 않는다. "현재 시각까지 확인"이 아니라 "본 번호까지 확인".
+- 확인 처리는 내용 수정이 아니다: 제목·본문·출처·URL·상태·검수 기록 그대로, `ContentChanges`(승인 해제 경로)를 쓰지 않는다. version +1(편집 중인 화면이 다시 불러오도록), 감사 기록 `CONTENT_ORIGIN_ACKNOWLEDGED`(처리자, 확인한 번호, 원천 이슈·상태·병합 대상). 같은 번호를 다시 확인하면 아무것도 쓰지 않는다.
+- **HOLD·EXCLUDED·ARCHIVED에서도 확인 처리 허용**(명세에 없음, 내용 변경과 구분한 정책: 확인 기록만 남기고 콘텐츠는 그대로이므로). 원천이 MERGED·EXCLUDED여도 검수 요청·승인은 막지 않는다(기존 정책).
+- 기존 콘텐츠의 시작값(V7): 모든 이슈 번호는 0에서 시작. 콘텐츠를 만든·확인한 뒤 이슈 행이 바뀌었거나(`updated_at > origin_checked_at`) 이슈가 MERGED·EXCLUDED이면 `origin_ack_seq = -1`(미확인), 아니면 0. 확인하지 않은 과거 변경을 확인 완료로 만들지 않는다(시각 비교의 한계 때문에 V7 이전 변경 판정은 최선 추정이며, 놓치기보다 미확인으로 남기는 쪽).
+
 **뉴스룸과 분리:** 공개 API(`/api/public/*`)는 지금처럼 이슈 테이블만 읽고 콘텐츠 테이블을 읽지 않는다. 승인된 콘텐츠가 있어도 공개 응답이 같다는 회귀 테스트를 넣는다. 콘텐츠 API는 `/api/admin/**`라 기존 인증 규칙을 그대로 받는다.
 
 ## 6. 작업 순서와 파일
@@ -182,7 +194,7 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 | A3 (구현됨) | 상태 전이 | `content/ContentStatusPolicy`, `ContentService` 상태 메서드 | `POST /api/admin/contents/{id}/{submit,approve,return,hold,resume,exclude,archive,restore}` | 표 전체 단위 테스트(허용·거부·역할), DRAFT 직접 승인 거부, 편집 시 승인 해제, version 불일치 409 | A2 |
 | A4 (구현됨) | 출처 | `content/ContentSourceRepository`, 서비스·컨트롤러 | `GET/POST/DELETE /api/admin/contents/{id}/sources` | 생성 시 원천 이슈를 PRIMARY로 자동 등록, 유형별 칸 검증, 중복 거부, 변경 시 승인 해제 | A2 (A3과 병행 가능) |
 | A5 (구현됨) | 관련 URL | `content/ContentLinkRepository`, 서비스·컨트롤러 | `POST/PATCH/DELETE /api/admin/contents/{id}/links` | 잘못된 URL 거부, 사이트만·블로그만·둘 다 저장(명세 09 §7), 변경 시 승인 해제 | A2 (병행 가능) |
-| A6 | 업데이트 필요 표시 | 조회 쿼리, `acknowledge` 동작 | `GET /api/admin/contents?updateNeeded=true`, `POST /api/admin/contents/{id}/acknowledge-origin` | 기사 추가·병합 후 표시, 확인 후 해제, 본문 불변 | A2 |
+| A6 (구현됨) | 원천 이슈 변경 표시 | 조회 쿼리, `acknowledge` 동작 | `GET /api/admin/contents?updateNeeded=true`, `POST /api/admin/contents/{id}/acknowledge-origin` | 기사 추가·병합 후 표시, 확인 후 해제, 본문 불변 | A2 |
 | A7 | 관리자 화면 | `admin-ui/src/lib/api.ts`, `app/contents/page.tsx`(목록: 유형 탭·상태·업데이트 필요 필터·검색), `app/contents/[id]/page.tsx`(편집: 섹션·문단 추가/삭제/순서, 자동저장, 충돌 안내, 상태 버튼, 출처, 관련 URL), `app/issues/[id]/page.tsx`("NEWS/LIFE 콘텐츠 만들기"), 메뉴 | 위 API | 타입 검사·빌드, 로컬 검증 모드에서 브라우저로 생성→편집→검수 요청→승인→수정 시 DRAFT 복귀→충돌 안내 확인 | A3~A6 |
 | A8 | 분리 확인·문서 | 공개 API 회귀 테스트, `docs/API.md`, `DECISIONS.md` | - | 승인 콘텐츠가 있어도 `/api/public/*` 응답 동일 | A7 |
 
@@ -201,3 +213,4 @@ CHECK: 유형에 맞는 칸 하나만 채움(ISSUE→issue_id만, NEWS_ARTICLE�
 9. **본인 승인 허용의 종료 시점:** 운영 인원이 늘면 작성자와 승인자를 분리할지.
 10. **원천 이슈 출처 삭제:** 지금은 삭제 불가(역할 변경만). 원천 이슈를 잘못 고른 콘텐츠는 새로 만들어야 한다. 원천 이슈를 바꾸는 별도 동작이 필요하면 결정 필요.
 11. **같은 URL의 관련 링크 중복:** 지금은 허용(같은 지도 링크를 위·아래에 둘 수 있음). 막을지 결정 필요.
+12. **원천 변경 내용 보기:** 지금은 "바뀌었음"과 번호·시각·상태만 준다. 무엇이 바뀌었는지(기사 목록 비교, 제목 전후)는 A7 이후 결정.

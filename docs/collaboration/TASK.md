@@ -380,3 +380,11 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 테스트(로컬 `aicontent_test`, stub): 새 테스트 8개(출처·링크 API 6, 동시성·원자성 2) + 스키마 V6 검사 포함 전체 `mvn package` **245개 통과**(기준: A4·A5 코드 커밋)
 - 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig6_fresh` V1~V6(기본값 BODY_BOTTOM, NOT NULL), `aicontent_mig5_upgrade` V5→V6(미리 넣은 NULL 위치 링크 → BODY_BOTTOM, 나머지 13개 테이블 행 동일), `aicontent_main` 새 복사본 `aicontent_mig6_upgrade` V3→V6(기존 11개 테이블 행 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
 - UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 18. 2026-10-15 A5 보완(링크 500개) · A6 원천 이슈 변경 표시 (`claude/content-a`, `main` 미병합)
+
+- A5 보완: 관련 URL 콘텐츠당 500개(정렬 요청 한도와 같음), 501번째 409 `CONTENT_LINK_LIMIT_EXCEEDED`, 콘텐츠 행 잠금 안에서 셈. 모든 DB에서 콘텐츠당 링크 최대 1개 → 기존 데이터 영향 없음
+- A6: 이슈 갱신 경로 점검 결과 시각 비교는 ① 트랜잭션 시작 시각(`now()`) 때문에 동시 변경을 놓치고 ② 예전 기사 추가를 놓치며 ③ 재계산만으로도 바뀜 → V7 `issue.change_seq`(트리거) + `content.origin_ack_seq`. 목록·상세 `originChange`, `updateNeeded` 필터(쿼리에서 적용), `POST .../acknowledge-origin {version, originChangeSeq}`. 규칙은 `CONTENT_A_PLAN.md` 5절
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 10개(링크 한도 2, 원천 변경 8) 포함 전체 `mvn package` **255개 통과**(기준: A6 코드 커밋). 대시보드 스키마 버전 기대값 6→7
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig7_fresh` V1~V7, `aicontent_mig6_upgrade` V6→V7(미리 넣은 콘텐츠 2건: 이슈 변경 뒤 확인한 것 → 확인됨, 그 전 것 → 미확인; 기존 14개 테이블 행 동일[새 열 제외]; 업그레이드 뒤 제목 변경은 번호 +1, 임베딩만 갱신은 그대로), `aicontent_main` 새 복사본 `aicontent_mig7_upgrade` V3→V7(기존 11개 테이블 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
