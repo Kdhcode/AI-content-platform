@@ -352,3 +352,25 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 확인된 문제: 검수 대기 이슈를 제외(EXCLUDED)한 뒤 API로 CLOSED로 바꾸면 검수 안 된 기사가 공개됐다(REVIEW→CLOSED만 막혀 있었음). 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가로 수정
 - 실행 스크립트: 혼합 검사를 끄는 잔여 변수(`APP_AI_EMBEDDINGGUARD*`)도 거부 목록에 추가
 - 전체 `mvn test` 205개 통과(UI 코드 변경 없음). 유료 호출 0
+
+## 14. 2026-10-15 main 병합 후 실행 확인
+
+- PR #1 병합: merge commit `8e0c6d7`(부모 `885b2f5`, `04cb5c9`). GitHub 웹 로그인이 없어 로컬에서 같은 merge commit을 만들어 push. PR #1은 병합 완료로 표시됨. 작업 브랜치 `claude/integration-review`는 유지. PR 제목 정리는 GitHub 로그인이 필요해 하지 못함
+- 사용자 작업 폴더: `feature/public-news` → `main`(`8e0c6d7`). 전환 전 미커밋 변경은 `.idea/db-forest-config.xml` 하나(백업과 동일). 추가 백업 `.local/idea-db-settings-backup-20261015-premerge/`. 전환 때 Git이 지운 `.idea/dataSources.xml`, `.idea/db-forest-config.xml`을 백업에서 복원(동일 확인, 이제 Git 무시). 미커밋 변경 없음
+- daily 실행(`scripts/run`, 사용자 작업 폴더 기준): 백엔드 127.0.0.1:8080, 화면 127.0.0.1:3000, DB `aicontent_main`, AI none, 프로필 default, 자동 수집 꺼짐, 관리자 인증 유지. PC별 경로 `.local/run/machine.ps1`(Git 제외) 생성
+- 확인 결과(유료 AI 호출 0):
+  - health `UP`
+  - 인증 없는 관리자 API 401(백엔드 직접·화면 경유·대시보드)
+  - 기존 관리자 계정 `viewer`로 대시보드·이슈 목록 조회 200(이슈 29개). 비밀번호는 `.local/view/viewer-password.txt`(Git 제외)에만 있음
+  - 비회원 `/news` 목록(29개)·상세 조회 정상, "로컬 검증 모드" 띠 없음
+  - 데이터 보존: `aicontent_main` 기사 35·이슈 29·`ai_log` openai 77(병합 전과 동일, 새 AI 호출 없음), 원본 `aicontent_view_20261014`·개발 DB `aicontent` 변동 없음
+- 8090/3090(10-14 보기용 서버)은 10-14 18:45 이후 꺼진 상태 그대로. 다시 띄우지 않음
+
+### 다음 재시작 방법 (사용자 PowerShell, 프로젝트 폴더에서)
+도구 세션에서 띄운 서버는 세션이 끝나면 함께 꺼질 수 있다(10-14 사례). 평소에는 직접 연 PowerShell 창에서 실행한다.
+1. `.\scripts\run\start-db.ps1` — DB(이미 실행 중이면 그대로)
+2. 창 1: `.\scripts\run\start-backend.ps1 -Target daily`
+3. 창 2: `.\scripts\run\start-ui.ps1 -Target daily` (화면 코드가 바뀌면 `-Rebuild`)
+4. 코드가 바뀌었을 때만 먼저 `.\scripts\run\build.ps1`(실행 중인 백엔드를 멈춘 뒤)
+5. 로그인: http://127.0.0.1:3000 , 아이디 `viewer`, 비밀번호는 `.local/view/viewer-password.txt`
+6. 멈출 때: 각 창에서 Ctrl+C. 이미 다른 창(또는 도구 세션)에서 8080/3000이 실행 중이면 새로 띄우기 전에 그 창을 먼저 멈춘다
