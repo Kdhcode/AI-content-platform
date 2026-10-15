@@ -33,7 +33,8 @@ async function main() {
       : { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } } });
 
   await assert.rejects(api('/api/admin/issues'), error => error.status === 401);
-  assert.equal(requests.length, 0);
+  // only the local-verify mode lookup may go out (answered "off" here); no admin request without credentials
+  assert.deepEqual(requests.map(r => r.url).filter(u => u !== '/api/local-verify/mode'), []);
   assert.equal(redirects.pop(), '/login');
 
   setCredentials(' operator ', 'test-only');

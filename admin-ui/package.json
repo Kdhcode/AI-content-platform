@@ -10,7 +10,8 @@
     "verify:flow": "node scripts/verify-flow.cjs",
     "verify:dashboard": "node scripts/verify-dashboard.cjs",
     "verify:ai-usage": "node scripts/verify-ai-usage.cjs",
-    "verify:auth-client": "node scripts/verify-auth-client.cjs"
+    "verify:auth-client": "node scripts/verify-auth-client.cjs",
+    "verify:content-session": "node scripts/verify-content-session.cjs"
   },
   "dependencies": {
     "next": "14.2.15",
