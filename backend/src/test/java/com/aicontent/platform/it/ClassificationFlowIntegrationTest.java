@@ -33,7 +33,7 @@ class ClassificationFlowIntegrationTest extends IntegrationTestBase {
         assertThat(jdbc.sql("SELECT method FROM classification_run ORDER BY id").query(String.class).list())
                 .containsExactly("NO_CANDIDATE", "LLM", "NO_CANDIDATE");
         // every AI call is logged with the prompt version
-        assertThat(count("SELECT count(*) FROM ai_log WHERE call_type = 'ARTICLE_ANALYSIS' AND success AND prompt_version = 'v1'")).isEqualTo(3);
+        assertThat(count("SELECT count(*) FROM ai_log WHERE call_type = 'ARTICLE_ANALYSIS' AND success AND prompt_version = 'v2'")).isEqualTo(3);
         assertThat(count("SELECT count(*) FROM ai_log WHERE call_type = 'EMBEDDING' AND success")).isEqualTo(3);
     }
 

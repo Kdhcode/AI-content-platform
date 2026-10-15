@@ -173,11 +173,19 @@ public class IssueManagementService {
             if (("ACTIVE".equals(patch.status()) || "REVIEW".equals(patch.status())) && head.articleCount() == 0) {
                 throw new BusinessException(ErrorCode.ISSUE_STATE_INVALID, "기사가 없는 이슈는 " + patch.status() + " 상태가 될 수 없습니다.");
             }
+            // CLOSED issues are public: an issue still waiting for review must be confirmed (ACTIVE) or excluded first,
+            // and no issue may be closed while it still holds articles waiting for review (e.g. REVIEW -> EXCLUDED -> CLOSED).
+            if ("CLOSED".equals(patch.status())
+                    && ("REVIEW".equals(head.status()) || issues.countReviewMembers(issueId) > 0)) {
+                throw new BusinessException(ErrorCode.ISSUE_STATE_INVALID,
+                        "검수 대기 기사가 있는 이슈는 종료할 수 없습니다. 같은 사건으로 확정(다시 활성화)하거나 제외 상태로 두세요.");
+            }
         }
         issues.updateFields(issueId, patch.title() == null ? null : patch.title().trim(), patch.summary(),
                 patch.category(), patch.status());
-        // Confirming a REVIEW issue (REVIEW -> ACTIVE) resolves its articles' REVIEW flag.
-        if ("REVIEW".equals(head.status()) && "ACTIVE".equals(patch.status())) {
+        // An admin making an issue ACTIVE (confirming a REVIEW issue, or re-activating an excluded / closed one that
+        // may hold articles still flagged REVIEW) is the decision for all its articles.
+        if ("ACTIVE".equals(patch.status()) && !"ACTIVE".equals(head.status())) {
             articles.setClassificationStatusBatch(issues.memberArticleIds(issueId), "CLASSIFIED");
         }
         audit.record(actor, "ISSUE_UPDATE", "ISSUE", issueId,

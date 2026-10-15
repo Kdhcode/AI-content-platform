@@ -3,6 +3,7 @@ package com.aicontent.platform.eval;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.aicontent.platform.eval.CaseResult.Gold;
+import com.aicontent.platform.issue.DecisionPolicy;
 import com.aicontent.platform.issue.DecisionPolicy.Decision;
 import com.aicontent.platform.issue.DecisionPolicy.Method;
 import com.aicontent.platform.issue.DecisionPolicy.RawDecision;
@@ -22,6 +23,70 @@ class EvalRunnerTest {
     /** Judge scripted per article id: an "LLM" with known behaviour. */
     private static Judge scripted(Map<String, RawDecision> byId) {
         return (article, candidates) -> byId.get(article.id());
+    }
+
+    /**
+     * The E09/E10 shape: the first report of an event is held for review; its follow-up must be able to join it
+     * (held, not auto-linked), while an unrelated article judged NEW stays apart. With the earlier policy (pending
+     * issues not offered) the follow-up has nothing to join and becomes a missed merge.
+     */
+    @Test
+    void followUpOfAPendingIssueIsHeldWithItAndOtherEventsStayApart() {
+        var cases = List.of(
+                c("first", "2000-01-01T00:00:00Z", "G1", false),   // no candidate -> NEW (issue 1)
+                c("other", "2000-01-02T00:00:00Z", "G2", false),   // judge: REVIEW -> pending issue 2
+                c("follow", "2000-01-03T00:00:00Z", "G2", false),  // judge: SAME as pending issue 2
+                c("unrelated", "2000-01-04T00:00:00Z", "G3", false)); // judge: NEW although issue 2 is pending
+        var judge = scripted(Map.of(
+                "other", new RawDecision(Decision.REVIEW, 0.5, null, "unsure"),
+                "follow", new RawDecision(Decision.SAME_ISSUE, 0.9, 2L, "same as the pending one"),
+                "unrelated", new RawDecision(Decision.NEW_ISSUE, 0.9, null, "different event")));
+
+        var now = new EvalRunner(judge, T, 5).run(cases);
+        assertEquals(Decision.REVIEW, now.get(2).decision());
+        assertEquals(CaseResult.Held.SAME_EVENT, now.get(2).held());
+        assertEquals(Decision.NEW_ISSUE, now.get(3).decision());
+        assertEquals(CaseResult.Held.NONE, now.get(3).held());
+        var m = EvalMetrics.compute(now);
+        assertEquals(1, m.heldWithSameEvent());
+        assertEquals(0, m.splitAsNew());
+
+        // earlier policy: issue 2 is not offered, the judge's id 2 is not a candidate -> guard REVIEW, nothing joined
+        var before = new EvalRunner(judge, T, 5, false).run(cases);
+        assertEquals(CaseResult.Held.NONE, before.get(2).held());
+        assertEquals(Method.GUARD_DOWNGRADE, before.get(2).method());
+    }
+
+    /**
+     * Replays the 2026-10-14 failure on the real v1 cases: the model said SAME for E09 (3분기) against the 2분기 issue and
+     * marked the period NOT_APPLICABLE, so the comparison check let it through. The code-side period rule must block it.
+     */
+    @Test
+    void periodRuleBlocksTheMergeTheModelsOwnComparisonMissed() throws Exception {
+        var cases = EvalDatasetLoader.load("eval/issue-eval-v1.json").stream()
+                .filter(c -> List.of("E07", "E08", "E09").contains(c.id())).toList();
+        var misjudged = new DecisionPolicy.Comparison(DecisionPolicy.Match.SAME, DecisionPolicy.Match.SAME,
+                DecisionPolicy.Match.NOT_APPLICABLE, DecisionPolicy.Match.NOT_APPLICABLE);
+        Judge judge = (article, candidates) -> new RawDecision(Decision.SAME_ISSUE, 0.9, candidates.get(0).issueId(),
+                "같은 회사의 실적 발표", misjudged);
+        var results = new EvalRunner(judge, T, 5).run(cases);
+
+        var e09 = results.stream().filter(r -> r.caseId().equals("E09")).findFirst().orElseThrow();
+        assertEquals(Decision.REVIEW, e09.decision());
+        assertEquals(Method.GUARD_DOWNGRADE, e09.method());
+        assertEquals(0, EvalMetrics.compute(results).wrongAutoSame());
+        // the same-quarter follow-up E08 is still linked automatically
+        var e08 = results.stream().filter(r -> r.caseId().equals("E08")).findFirst().orElseThrow();
+        assertEquals(Decision.SAME_ISSUE, e08.decision());
+    }
+
+    @Test
+    void pendingBundleIssueIsNeverOffered() {
+        var cases = List.of(
+                c("bundle", "2000-01-01T00:00:00Z", "X", true),      // pending issue 1, opened for a bundle
+                c("next", "2000-01-02T00:00:00Z", "G1", false));     // only candidate would be the bundle issue
+        var results = new EvalRunner(scripted(Map.of()), T, 5).run(cases);
+        assertEquals(Method.NO_CANDIDATE, results.get(1).method());
     }
 
     @Test

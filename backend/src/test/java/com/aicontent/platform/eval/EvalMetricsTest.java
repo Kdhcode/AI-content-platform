@@ -49,10 +49,58 @@ class EvalMetricsTest {
     }
 
     @Test
-    void ambiguousAutoDecisionIsNotCountedWrong() {
+    void ambiguousAutoDecisionIsNotCountedWrongOrRight() {
         var m = EvalMetrics.compute(List.of(r("1", Gold.SAME, true, Decision.NEW_ISSUE, Method.LLM, false)));
         assertEquals(0, m.wrongAuto());
-        assertEquals(0.0, m.adminEditRate(), 1e-9);
+        assertEquals(0, m.clear());
+        assertNull(m.adminEditRate());          // no clear auto decision: nothing to rate
+        assertEquals(1, m.ambiguous().autoNew());
+    }
+
+    /**
+     * Regression: the 2026-10-14 v2 runs printed recall=1.077. 13 clear gold-SAME cases (12 linked correctly, 1 split
+     * as NEW) plus 2 ambiguous cases also linked: the old numerator counted the ambiguous hits, the denominator did not.
+     */
+    @Test
+    void ambiguousHitsNoLongerInflateRecall() {
+        var results = new java.util.ArrayList<CaseResult>();
+        for (int i = 0; i < 12; i++) {
+            results.add(r("s" + i, Gold.SAME, false, Decision.SAME_ISSUE, Method.LLM, true));
+        }
+        results.add(r("miss", Gold.SAME, false, Decision.NEW_ISSUE, Method.LLM, false));
+        results.add(r("amb1", Gold.SAME, true, Decision.SAME_ISSUE, Method.LLM, true));
+        results.add(r("amb2", Gold.SAME, true, Decision.SAME_ISSUE, Method.LLM, true));
+        results.add(r("false", Gold.NEW, false, Decision.SAME_ISSUE, Method.LLM, false));
+        var m = EvalMetrics.compute(results);
+
+        assertEquals(13, m.goldSame());
+        assertEquals(12.0 / 13, m.recall(), 1e-9);       // was 14/13 = 1.077
+        assertEquals(12.0 / 13, m.precision(), 1e-9);    // 13 clear auto SAME, 12 right (was 14/15)
+        assertEquals(2, m.ambiguous().total());
+        assertEquals(2, m.ambiguous().autoSame());
+        // the gold-SAME breakdown always adds up
+        assertEquals(m.goldSame(), m.linkedCorrect() + m.linkedWrongIssue() + m.splitAsNew() + m.heldForReview());
+        assertEquals(1, m.splitAsNew());
+    }
+
+    @Test
+    void goldSameBreakdownSeparatesWrongIssueSplitAndHeld() {
+        var m = EvalMetrics.compute(List.of(
+                r("a", Gold.SAME, false, Decision.SAME_ISSUE, Method.LLM, true),
+                r("b", Gold.SAME, false, Decision.SAME_ISSUE, Method.LLM, false),          // linked to another event
+                r("c", Gold.SAME, false, Decision.NEW_ISSUE, Method.LLM, false),
+                new CaseResult("d", Gold.SAME, false, Decision.REVIEW, Method.LLM, false, CaseResult.Held.SAME_EVENT),
+                r("e", Gold.SAME, false, Decision.REVIEW, Method.GUARD_DOWNGRADE, false),
+                new CaseResult("f", Gold.NEW, false, Decision.REVIEW, Method.LLM, false, CaseResult.Held.OTHER_EVENT)));
+        assertEquals(5, m.goldSame());
+        assertEquals(1, m.linkedCorrect());
+        assertEquals(1, m.linkedWrongIssue());
+        assertEquals(1, m.splitAsNew());
+        assertEquals(2, m.heldForReview());
+        assertEquals(1, m.heldWithSameEvent());
+        assertEquals(1, m.errorTypes().get("HELD_WITH_OTHER_EVENT"));
+        assertEquals(1.0 / 5, m.recall(), 1e-9);
+        assertEquals(1.0 / 2, m.precision(), 1e-9);
     }
 
     @Test

@@ -36,7 +36,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       {@code app.classifier.lock-scope=CATEGORY} narrows it to one lock per analysed category (opt-in).</li>
  *   <li>The LLM call happens outside any database transaction; only the final apply step is transactional.</li>
  *   <li>REVIEW creates a provisional issue (status REVIEW) so no article is left unlinked; the admin merges or
- *       confirms it.</li>
+ *       confirms it. Pending issues are offered as candidates too (not ones opened for a bundle article): a confident,
+ *       consistent SAME_ISSUE to one attaches the article to it, still REVIEW, so a follow-up joins its event while
+ *       the admin decides. The pending issue is never made ACTIVE automatically.</li>
  *   <li>An article that is already linked is never moved automatically: re-classification only records a run.</li>
  * </ul>
  */
@@ -141,6 +143,12 @@ public class IssueClassificationService {
                         candidates.stream().map(IssueCandidate::id).collect(Collectors.toSet()),
                         new DecisionPolicy.Thresholds(props.classifier().sameIssueMinConfidence(),
                                 props.classifier().newIssueMinConfidence()));
+                if (outcome.decision() == Decision.SAME_ISSUE) {
+                    final long matchedId = outcome.matchedIssueId();
+                    IssueCandidate target = candidates.stream().filter(c -> c.id() == matchedId).findFirst().orElseThrow();
+                    outcome = DecisionPolicy.applyPeriodGuard(outcome, periodText(article.title(), analysis),
+                            periodText(target.title(), target.summary(), target.keyFacts()));
+                }
             } catch (AiOutputInvalidException e) {
                 outcome = DecisionPolicy.invalidOutput(String.join("; ", e.errors()));
             } catch (AiException e) {
@@ -159,9 +167,16 @@ public class IssueClassificationService {
         long articleId = article.id();
         Outcome effective = outcome;
         // The matched issue may have been merged/closed by an admin since retrieval: re-check under a row lock.
+        // A match to an issue that is itself waiting for review (REVIEW) is attached to it but stays REVIEW: the
+        // admin's confirm / merge / split / exclude of that issue then decides for the whole group. Nothing is made
+        // ACTIVE automatically here.
         if (effective.decision() == Decision.SAME_ISSUE && existingIssue.isEmpty()) {
             Optional<String> st = issues.lockStatus(effective.matchedIssueId());
-            if (st.isEmpty() || !"ACTIVE".equals(st.get())) {
+            if (st.isPresent() && "REVIEW".equals(st.get())) {
+                effective = new Outcome(Decision.REVIEW, Method.LLM, effective.matchedIssueId(), effective.confidence(),
+                        "검수 대기 ISSUE #" + effective.matchedIssueId() + "와 같은 사건으로 판단해 보류 연결 | " + effective.reason(),
+                        effective.rawDecision());
+            } else if (st.isEmpty() || !"ACTIVE".equals(st.get())) {
                 effective = new Outcome(Decision.REVIEW, Method.GUARD_DOWNGRADE, null, effective.confidence(),
                         "매칭된 ISSUE #" + effective.matchedIssueId() + "가 더 이상 ACTIVE가 아님 | " + effective.reason(),
                         effective.rawDecision());
@@ -205,7 +220,15 @@ public class IssueClassificationService {
                 articleClassification = "CLASSIFIED";
             }
             default -> {
-                issueId = createIssueFrom(article, analysis, "REVIEW");
+                if (effective.matchedIssueId() != null) {
+                    // held with a pending issue of the same event (see above)
+                    final long pendingId = effective.matchedIssueId();
+                    issueId = pendingId;
+                    similarity = candidates.stream().filter(c -> c.id() == pendingId)
+                            .map(IssueCandidate::similarity).findFirst().orElse(null);
+                } else {
+                    issueId = createIssueFrom(article, analysis, "REVIEW");
+                }
                 linkMethod = "LLM_REVIEW";
                 articleClassification = "REVIEW";
             }
@@ -242,10 +265,20 @@ public class IssueClassificationService {
         return ClassifierPromptVariables.build(input, candidateInputs);
     }
 
+    /** Text the period check reads: title, analysed summary and key facts (not the raw body). */
+    static String periodText(String title, JsonNode analysis) {
+        List<String> facts = new ArrayList<>();
+        analysis.path("keyFacts").forEach(n -> facts.add(n.asText()));
+        return periodText(title, analysis.path("summary").asText(""), facts);
+    }
+
+    static String periodText(String title, String summary, List<String> facts) {
+        return String.join("\n", title == null ? "" : title, summary == null ? "" : summary,
+                facts == null ? "" : String.join("\n", facts));
+    }
+
     private DecisionPolicy.RawDecision toRaw(JsonNode v) {
-        Long matched = v.hasNonNull("matchedIssueId") ? v.get("matchedIssueId").asLong() : null;
-        return new DecisionPolicy.RawDecision(Decision.valueOf(v.get("decision").asText()), v.get("confidence").asDouble(),
-                matched, v.get("reason").asText());
+        return RawDecisionParser.parse(v);
     }
 
     private String candidatesJson(List<IssueCandidate> candidates) {
@@ -253,6 +286,7 @@ public class IssueClassificationService {
         for (IssueCandidate c : candidates) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("issueId", c.id());
+            m.put("status", c.status());
             m.put("title", c.title());
             m.put("similarity", Math.round(c.similarity() * 10000.0) / 10000.0);
             m.put("articleCount", c.articleCount());

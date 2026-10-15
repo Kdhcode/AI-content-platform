@@ -1,0 +1,2 @@
+{ "key": "article-analysis", "version": "v2", "schemaVersion": "article-analysis.v1", "temperature": 0.0,
+  "description": "v1과 같은 스키마. category 값별 정의와 판단 기준(사건 내용 기준, OTHER 남용 금지) 추가" }

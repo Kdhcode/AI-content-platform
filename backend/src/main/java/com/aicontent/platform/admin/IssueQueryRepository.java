@@ -25,9 +25,15 @@ public class IssueQueryRepository {
                            int publisherCount, OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt,
                            Long mergedIntoIssueId) {}
 
+    /**
+     * {@code run*}: the classification run that linked the article here (null for manual links). {@code heldWithPendingIssue}:
+     * the article was attached, still REVIEW, to this already pending issue; otherwise a REVIEW article opened it.
+     * {@code candidates}: the issues the classifier compared it with (id, status, title, similarity).
+     */
     public record ArticleItem(long articleId, String title, String publisherName, OffsetDateTime publishedAt,
                               String classificationMethod, String llmDecision, Double llmConfidence, String llmReason,
-                              Double similarity, boolean manuallyCorrected) {}
+                              Double similarity, boolean manuallyCorrected, String runMethod, String runDecision,
+                              boolean heldWithPendingIssue, JsonNode candidates) {}
 
     public record Detail(long id, String title, String titleSource, String summary, String summarySource, String category, String status,
                          JsonNode keyFacts, JsonNode entities, int articleCount, int publisherCount,
@@ -94,14 +100,20 @@ public class IssueQueryRepository {
     private List<ArticleItem> articles(long id) {
         return jdbc.sql("""
                 SELECT a.id, a.title, a.publisher_name, a.published_at, ia.classification_method, ia.llm_decision,
-                       ia.llm_confidence, ia.llm_reason, ia.similarity_score, ia.manually_corrected
+                       ia.llm_confidence, ia.llm_reason, ia.similarity_score, ia.manually_corrected,
+                       r.method AS run_method, r.decision AS run_decision,
+                       (r.decision = 'REVIEW' AND r.matched_issue_id IS NOT NULL) AS held,
+                       CAST(r.candidates AS text) AS candidates
                 FROM issue_article ia JOIN news_article a ON a.id = ia.article_id
+                LEFT JOIN classification_run r ON r.id = ia.classification_run_id
                 WHERE ia.issue_id = :id AND ia.is_primary
                 ORDER BY COALESCE(a.published_at, a.collected_at), a.id""").param("id", id)
                 .query((rs, n) -> new ArticleItem(rs.getLong("id"), rs.getString("title"), rs.getString("publisher_name"),
                         Sql.odt(rs, "published_at"), rs.getString("classification_method"), rs.getString("llm_decision"),
                         Sql.doubleOrNull(rs, "llm_confidence"), rs.getString("llm_reason"),
-                        Sql.doubleOrNull(rs, "similarity_score"), rs.getBoolean("manually_corrected")))
+                        Sql.doubleOrNull(rs, "similarity_score"), rs.getBoolean("manually_corrected"),
+                        rs.getString("run_method"), rs.getString("run_decision"), rs.getBoolean("held"),
+                        json.parseOrNull(rs.getString("candidates"))))
                 .list();
     }
 }

@@ -5,6 +5,22 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fmt, type IssueDetail } from "@/lib/api";
 import { Badge, ErrorText, Shell } from "@/components/ui";
 
+type ArticleRow = IssueDetail["articles"][number];
+
+/** Why an article is waiting for review, from the classification run that linked it (see IssueClassificationService). */
+function reviewReason(a: ArticleRow): { label: string; cls: string } | null {
+  if (a.classificationMethod !== "LLM_REVIEW") return null;
+  const reason = a.llmReason ?? "";
+  if (a.heldWithPendingIssue) return { label: "보류 연결(같은 사건 판단)", cls: "warn" };
+  if (reason.startsWith("기간 규칙")) return { label: "기간 규칙", cls: "bad" };
+  if (a.runMethod === "MULTI_EVENT") return { label: "묶음 기사", cls: "warn" };
+  if (a.runMethod === "INVALID_OUTPUT") return { label: "AI 출력 오류", cls: "bad" };
+  if (reason.includes("LLM 비교에서 다름") || reason.includes("UNKNOWN")) return { label: "AI 비교 모순", cls: "bad" };
+  if (reason.includes("신뢰도")) return { label: "신뢰도 부족", cls: "warn" };
+  if (reason.includes("ACTIVE가 아님")) return { label: "대상 이슈 상태 변경", cls: "warn" };
+  return { label: "AI가 검수 요청", cls: "warn" };
+}
+
 export default function IssueDetailPage() {
   const id = Number(useParams<{ id: string }>().id);
   const [d, setD] = useState<IssueDetail | null>(null);
@@ -68,7 +84,7 @@ export default function IssueDetailPage() {
             <div className="row" style={{ marginTop: 8 }}>
               <input type="text" placeholder="변경 사유(선택, 감사 로그에 기록)" value={reason} onChange={(e) => setReason(e.target.value)} style={{ minWidth: 280 }} />
               <button className="primary" disabled={busy || !editable} onClick={save}>제목/요약 저장</button>
-              {d.status === "REVIEW" && <button disabled={busy} onClick={() => setStatus("ACTIVE")}>검수 확정(ACTIVE)</button>}
+              {d.status === "REVIEW" && <button disabled={busy} onClick={() => setStatus("ACTIVE")}>같은 사건으로 확정(ACTIVE)</button>}
               {editable && <button disabled={busy} onClick={() => setStatus("EXCLUDED")} className="danger">제외</button>}
               {(d.status === "CLOSED" || d.status === "EXCLUDED") && <button disabled={busy} onClick={() => setStatus("ACTIVE")}>다시 활성화</button>}
             </div>
@@ -76,9 +92,26 @@ export default function IssueDetailPage() {
             {d.entities.length > 0 && <div className="muted">{d.entities.map((e) => e.name).join(", ")}</div>}
           </div>
 
+          {d.status === "REVIEW" && (
+            <div className="card">
+              <h2 style={{ marginTop: 0 }}>검수 대기</h2>
+              <div>AI가 자동으로 확정하지 않은 이슈입니다. 아래 기사 {d.articles.length}건의 <strong>검수 사유</strong>와 <strong>비교 후보</strong>를 확인하세요.</div>
+              <ul>
+                <li><strong>같은 사건으로 확정</strong>: 이 이슈를 ACTIVE로 바꾸고 기사 {d.articles.length}건을 모두 분류 완료로 처리합니다. 공개 화면에는 확정 후에만 보입니다.</li>
+                <li><strong>별도 사건으로 분리</strong>: 다른 사건인 기사를 선택해 새 이슈로 떼어냅니다(새 이슈는 ACTIVE).</li>
+                <li><strong>병합</strong>: 이미 있는 이슈와 같은 사건이면 그 이슈 화면에서 이 이슈 번호(#{id})를 병합하세요.</li>
+              </ul>
+              {(() => {
+                const counts = new Map<string, number>();
+                d.articles.forEach((a) => { const r = reviewReason(a); if (r) counts.set(r.label, (counts.get(r.label) ?? 0) + 1); });
+                return counts.size > 0 && <div className="row">{Array.from(counts).map(([k, v]) => <span key={k} className="badge warn">{k} {v}건</span>)}</div>;
+              })()}
+            </div>
+          )}
+
           <h2>기사 ({d.articles.length})</h2>
           <table>
-            <thead><tr><th></th><th>ID</th><th>제목</th><th>언론사</th><th>발행</th><th>연결 방식</th><th>LLM 판단</th></tr></thead>
+            <thead><tr><th></th><th>ID</th><th>제목</th><th>언론사</th><th>발행</th><th>연결 방식</th><th>검수 사유 · AI 판단</th><th>비교 후보</th></tr></thead>
             <tbody>
               {d.articles.map((a) => (
                 <tr key={a.articleId}>
@@ -88,7 +121,16 @@ export default function IssueDetailPage() {
                   <td>{a.publisherName}</td>
                   <td>{fmt(a.publishedAt)}</td>
                   <td>{a.classificationMethod}{a.manuallyCorrected && " ✎"}{a.similarity != null && <div className="muted">유사도 {a.similarity}</div>}</td>
-                  <td>{a.llmDecision ? <>{a.llmDecision} ({a.llmConfidence})<div className="muted">{a.llmReason}</div></> : "-"}</td>
+                  <td>
+                    {(() => { const r = reviewReason(a); return r && <span className={`badge ${r.cls}`}>{r.label}</span>; })()}
+                    {a.llmDecision ? <>{" "}AI {a.llmDecision} ({a.llmConfidence})<div className="muted">{a.llmReason}</div></> : (!reviewReason(a) && "-")}
+                  </td>
+                  <td>
+                    {a.candidates && a.candidates.length > 0 ? a.candidates.map((c) => (
+                      <div key={c.issueId}><Link href={`/issues/${c.issueId}`}>#{c.issueId}</Link>{c.status && c.status !== "ACTIVE" && <> <Badge value={c.status} /></>}
+                        <span className="muted"> {c.similarity} · {c.title}</span></div>
+                    )) : <span className="muted">{a.runMethod === "NO_CANDIDATE" ? "후보 없음" : "-"}</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -97,7 +139,7 @@ export default function IssueDetailPage() {
           {editable && (
             <div className="grid2" style={{ marginTop: 14 }}>
               <div className="card">
-                <h2 style={{ marginTop: 0 }}>선택한 기사 분리</h2>
+                <h2 style={{ marginTop: 0 }}>선택한 기사 별도 사건으로 분리</h2>
                 <div className="muted">선택 {selected.size}건 · 원본에 기사가 1건 이상 남아야 합니다.</div>
                 <div className="row" style={{ marginTop: 8 }}>
                   <input type="text" placeholder="새 이슈 제목(비우면 첫 기사 제목)" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />

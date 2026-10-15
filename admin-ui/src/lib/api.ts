@@ -19,12 +19,30 @@ export function clearCredentials() {
   sessionStorage.removeItem(KEY);
 }
 export function hasCredentials(): boolean {
-  return typeof window !== "undefined" && !!sessionStorage.getItem(KEY);
+  return typeof window !== "undefined" && (!!sessionStorage.getItem(KEY) || bypassKnown);
+}
+
+/** Local screen-check mode (backend profile local-verify, loopback only, no paid AI): the admin API needs no login. */
+export type LocalVerifyMode = { loginBypass: boolean; dataLabel: string | null; aiProvider: string | null };
+const MODE_OFF: LocalVerifyMode = { loginBypass: false, dataLabel: null, aiProvider: null };
+let modeRequest: Promise<LocalVerifyMode> | null = null;
+let bypassKnown = false;
+
+/** Asked once per page load; any failure counts as "off", so the normal login stays in place. */
+export function localVerifyMode(): Promise<LocalVerifyMode> {
+  if (!modeRequest) {
+    modeRequest = fetch("/api/local-verify/mode")
+      .then((r) => r.json() as Promise<Envelope<LocalVerifyMode>>)
+      .then((e) => (e?.success && e.data ? e.data : MODE_OFF))
+      .catch(() => MODE_OFF)
+      .then((m) => { bypassKnown = m.loginBypass; return m; });
+  }
+  return modeRequest;
 }
 
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const token = sessionStorage.getItem(KEY);
-  if (!token) {
+  if (!token && !(await localVerifyMode()).loginBypass) {
     if (window.location.pathname !== "/login") window.location.replace("/login");
     throw new ApiFailure(401, "UNAUTHORIZED", "로그인이 필요합니다. 관리자 계정으로 로그인해 주세요.");
   }
@@ -83,7 +101,9 @@ export type IssueDetail = IssueListItem & {
   titleSource: string; summarySource: string; keyFacts: string[]; entities: { name: string; type: string }[]; mergedFromIssueIds: number[];
   articles: { articleId: number; title: string; publisherName: string; publishedAt: string | null;
     classificationMethod: string; llmDecision: string | null; llmConfidence: number | null; llmReason: string | null;
-    similarity: number | null; manuallyCorrected: boolean }[];
+    similarity: number | null; manuallyCorrected: boolean; runMethod: string | null; runDecision: string | null;
+    heldWithPendingIssue: boolean;
+    candidates: { issueId: number; status?: string; title: string; similarity: number; articleCount: number }[] | null }[];
 };
 export type Job = {
   id: number; jobType: string; status: string; payload: Record<string, unknown>; result: Record<string, unknown> | null;

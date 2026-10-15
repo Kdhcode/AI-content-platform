@@ -1,0 +1,2 @@
+{ "key": "issue-classifier", "version": "v3", "schemaVersion": "issue-classifier.v3", "temperature": 0.0,
+  "description": "v2 지시문 + 가장 가까운 후보와의 항목별 비교(comparison: actor/action/period/place). DecisionPolicy가 SAME_ISSUE와 비교 결과가 모순되면 REVIEW로 강등" }

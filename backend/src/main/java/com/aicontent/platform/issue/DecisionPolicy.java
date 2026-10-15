@@ -18,8 +18,18 @@ public final class DecisionPolicy {
 
     public record Thresholds(double sameIssueMinConfidence, double newIssueMinConfidence) {}
 
+    /** How the article compares with the chosen (or closest) candidate on each part of "the same event". */
+    public enum Match { SAME, DIFFERENT, UNKNOWN, NOT_APPLICABLE }
+
+    /** Itemised comparison reported by classifier prompts from v3 on; null for older prompt versions. */
+    public record Comparison(Match actor, Match action, Match period, Match place) {}
+
     /** Schema-valid LLM answer. */
-    public record RawDecision(Decision decision, double confidence, Long matchedIssueId, String reason) {}
+    public record RawDecision(Decision decision, double confidence, Long matchedIssueId, String reason, Comparison comparison) {
+        public RawDecision(Decision decision, double confidence, Long matchedIssueId, String reason) {
+            this(decision, confidence, matchedIssueId, reason, null);
+        }
+    }
 
     public record Outcome(Decision decision, Method method, Long matchedIssueId, Double confidence, String reason,
                           Decision rawDecision) {}
@@ -49,6 +59,10 @@ public final class DecisionPolicy {
                 if (raw.confidence() < t.sameIssueMinConfidence()) {
                     return downgrade(raw, "SAME_ISSUE 신뢰도 " + raw.confidence() + " < " + t.sameIssueMinConfidence());
                 }
+                String conflict = comparisonConflict(raw.comparison());
+                if (conflict != null) {
+                    return downgrade(raw, conflict);
+                }
                 return llm(raw, raw.matchedIssueId());
             }
             case NEW_ISSUE -> {
@@ -61,6 +75,49 @@ public final class DecisionPolicy {
                 return llm(raw, null);
             }
         }
+    }
+
+    /**
+     * A SAME_ISSUE the model's own comparison contradicts (a part marked DIFFERENT) or does not support (actor or action
+     * UNKNOWN) is not applied automatically. Period and place may be UNKNOWN: follow-up reports often omit them.
+     */
+    static String comparisonConflict(Comparison c) {
+        if (c == null) {
+            return null;
+        }
+        StringBuilder different = new StringBuilder();
+        if (c.actor() == Match.DIFFERENT) different.append(" 행위자");
+        if (c.action() == Match.DIFFERENT) different.append(" 행위");
+        if (c.period() == Match.DIFFERENT) different.append(" 대상 기간");
+        if (c.place() == Match.DIFFERENT) different.append(" 장소");
+        if (!different.isEmpty()) {
+            return "SAME_ISSUE인데 LLM 비교에서 다름:" + different;
+        }
+        if (c.actor() == Match.UNKNOWN || c.action() == Match.UNKNOWN) {
+            return "SAME_ISSUE인데 행위자·행위 일치 근거 부족(UNKNOWN)";
+        }
+        return null;
+    }
+
+    /**
+     * Applies the code-side period check ({@link PeriodGuard}) to an automatic SAME_ISSUE. A conflicting or unclear
+     * target period overrides the model: the article goes to REVIEW (GUARD_DOWNGRADE) with the extracted evidence in
+     * the reason. A consistent period only adds the evidence to the reason. Other outcomes are returned unchanged.
+     */
+    public static Outcome applyPeriodGuard(Outcome outcome, String articleText, String candidateText) {
+        if (outcome.decision() != Decision.SAME_ISSUE) {
+            return outcome;
+        }
+        PeriodGuard.Result check = PeriodGuard.compare(articleText, candidateText);
+        if (check.verdict() == PeriodGuard.Verdict.NOT_APPLICABLE) {
+            return outcome;
+        }
+        if (check.blocksAutoMerge()) {
+            return new Outcome(Decision.REVIEW, Method.GUARD_DOWNGRADE, null, outcome.confidence(),
+                    check.reason() + " | LLM 사유: " + outcome.reason(), outcome.rawDecision());
+        }
+        return new Outcome(outcome.decision(), outcome.method(), outcome.matchedIssueId(), outcome.confidence(),
+                outcome.reason() + " | " + check.reason(), outcome.rawDecision());
     }
 
     private static Outcome llm(RawDecision raw, Long matched) {

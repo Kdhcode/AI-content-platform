@@ -35,16 +35,21 @@ class EvalLlmIT {
     @Autowired StructuredOutputService structured;
     @Autowired AppProperties props;
 
+    /** {@code -Deval.dataset=eval/issue-eval-v2.json} picks another fixed set; v1 by default. */
+    private static String dataset() {
+        return System.getProperty("eval.dataset", "eval/issue-eval-v1.json");
+    }
+
     @Test
     void printsMetricsForTheFixedSet() throws Exception {
-        var cases = EvalDatasetLoader.load("eval/issue-eval-v1.json");
+        var cases = EvalDatasetLoader.load(dataset());
         var judge = new LlmJudge(prompts, structured, props.prompts().issueClassifierVersion(), props.ai().classifierMaxAttempts());
         var thresholds = new DecisionPolicy.Thresholds(props.classifier().sameIssueMinConfidence(), props.classifier().newIssueMinConfidence());
 
         var results = new EvalRunner(judge, thresholds, props.classifier().candidateLimit()).run(cases);
         var report = EvalMetrics.compute(results);
 
-        System.out.println("EVAL issue-eval-v1 provider=" + props.ai().provider() + " prompt=" + props.prompts().issueClassifierVersion());
+        System.out.println("EVAL " + dataset() + " provider=" + props.ai().provider() + " prompt=" + props.prompts().issueClassifierVersion());
         System.out.println(EvalMetrics.format(report));
         results.forEach(r -> System.out.println("  " + r));
         assertThat(report.total()).isEqualTo(cases.size());
@@ -54,7 +59,7 @@ class EvalLlmIT {
     @Test
     @EnabledIfSystemProperty(named = "eval.analysis", matches = "true")
     void printsBundleDetectionAndEndToEndMetrics() throws Exception {
-        var cases = EvalDatasetLoader.load("eval/issue-eval-v1.json");
+        var cases = EvalDatasetLoader.load(dataset());
         var detector = new LlmBundleDetector(prompts, structured, props.prompts().articleAnalysisVersion(),
                 props.ai().analysisMaxAttempts(), props.ai().maxAnalysisTextChars());
         var predicted = detector.detect(cases);
@@ -64,7 +69,7 @@ class EvalLlmIT {
         var thresholds = new DecisionPolicy.Thresholds(props.classifier().sameIssueMinConfidence(), props.classifier().newIssueMinConfidence());
         var results = new EvalRunner(judge, thresholds, props.classifier().candidateLimit()).run(cases, predicted);
 
-        System.out.println("EVAL issue-eval-v1 (analysis + classification) provider=" + props.ai().provider()
+        System.out.println("EVAL " + dataset() + " (analysis + classification) provider=" + props.ai().provider()
                 + " analysisPrompt=" + props.prompts().articleAnalysisVersion() + " classifierPrompt=" + props.prompts().issueClassifierVersion());
         System.out.println(MultiEventMetrics.format(bundles));
         System.out.println(EvalMetrics.format(EvalMetrics.compute(results)));

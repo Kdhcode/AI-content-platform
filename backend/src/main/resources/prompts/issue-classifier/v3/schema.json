@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "issue-classifier.v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "confidence", "matchedIssueId", "reason", "comparison"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["SAME_ISSUE", "NEW_ISSUE", "REVIEW"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "matchedIssueId": { "type": ["integer", "null"], "minimum": 1 },
+    "reason": { "type": "string", "minLength": 5, "maxLength": 1000 },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "action", "period", "place"],
+      "properties": {
+        "actor": { "enum": ["SAME", "DIFFERENT", "UNKNOWN", "NOT_APPLICABLE"] },
+        "action": { "enum": ["SAME", "DIFFERENT", "UNKNOWN", "NOT_APPLICABLE"] },
+        "period": { "enum": ["SAME", "DIFFERENT", "UNKNOWN", "NOT_APPLICABLE"] },
+        "place": { "enum": ["SAME", "DIFFERENT", "UNKNOWN", "NOT_APPLICABLE"] }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "SAME_ISSUE" } }, "required": ["decision"] },
+      "then": { "properties": { "matchedIssueId": { "type": "integer" } } },
+      "else": { "properties": { "matchedIssueId": { "type": "null" } } }
+    }
+  ]
+}

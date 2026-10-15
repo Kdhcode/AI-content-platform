@@ -96,7 +96,7 @@ public record AppProperties(
             @DefaultValue("5") int candidateLimit,
             @DefaultValue("0.60") double candidateMinSimilarity,
             @DefaultValue("30") int candidateWindowDays,
-            @DefaultValue("ACTIVE") List<String> candidateIssueStatuses,
+            @DefaultValue({"ACTIVE", "REVIEW"}) List<String> candidateIssueStatuses,
             @DefaultValue("0.85") double sameIssueMinConfidence,
             @DefaultValue("0.70") double newIssueMinConfidence,
             @DefaultValue("300") long lockWaitSeconds,
@@ -109,8 +109,8 @@ public record AppProperties(
             @DefaultValue("GLOBAL") String lockScope) {}
 
     public record Prompts(
-            @DefaultValue("v1") String articleAnalysisVersion,
-            @DefaultValue("v1") String issueClassifierVersion) {}
+            @DefaultValue("v2") String articleAnalysisVersion,
+            @DefaultValue("v3") String issueClassifierVersion) {}
 
     public record Admin(
             @DefaultValue("") String bootstrapUsername,
