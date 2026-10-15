@@ -1,6 +1,7 @@
 package com.aicontent.platform.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -99,5 +100,27 @@ class PublicNewsReviewFlowIntegrationTest extends IntegrationTestBase {
         assertThat(publicArticles(cause)).isNull();
         assertThat(publicIssueIds()).containsExactlyInAnyOrder(q2, fire, pending, split);
         assertThat(count("SELECT count(*) FROM news_article WHERE classification_status <> 'CLASSIFIED'")).isZero();
+    }
+
+    /** Leaving review by any other way than confirm must not publish a REVIEW issue or leave stale REVIEW flags. */
+    @Test
+    void aPendingIssueIsNeverClosedUnconfirmedAndReactivatingItResolvesItsArticles() throws Exception {
+        collect("round1", Q2);
+        collect("round2", Q3);
+        long pending = issueOf(article(3));
+        assertThat(jdbc.sql("SELECT status FROM issue WHERE id = :id").param("id", pending).query(String.class).single()).isEqualTo("REVIEW");
+
+        // closing would make it public without a decision
+        assertThatThrownBy(() -> management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "CLOSED"), "admin", null, null))
+                .isInstanceOf(com.aicontent.platform.common.BusinessException.class);
+        assertThat(publicArticles(pending)).isNull();
+
+        // exclude, then re-activate from the admin screen: the re-activation is the decision for its articles
+        management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "EXCLUDED"), "admin", "보류", null);
+        assertThat(publicArticles(pending)).isNull();
+        management.update(pending, new IssueManagementService.IssuePatch(null, null, null, "ACTIVE"), "admin", "다시 활성화", null);
+        assertThat(publicArticles(pending)).containsExactly(article(3));
+        assertThat(jdbc.sql("SELECT classification_status FROM news_article WHERE id = :a").param("a", article(3))
+                .query(String.class).single()).isEqualTo("CLASSIFIED");
     }
 }
