@@ -217,40 +217,79 @@ public class ContentRepository {
         return PageResponse.of(items, total, page);
     }
 
-    List<Link> links(long contentId) {
-        return jdbc.sql("""
-                SELECT id, link_type, title, url, site_visible, blog_visible, display_position, sort_order, created_at, updated_at
-                FROM content_link WHERE content_id = :id ORDER BY sort_order, id""").param("id", contentId)
-                .query((rs, n) -> new Link(rs.getLong("id"), rs.getString("link_type"), rs.getString("title"), rs.getString("url"),
-                        rs.getBoolean("site_visible"), rs.getBoolean("blog_visible"), rs.getString("display_position"),
-                        rs.getInt("sort_order"), Sql.odt(rs, "created_at"), Sql.odt(rs, "updated_at")))
-                .list();
-    }
-
+    /**
+     * The whole detail — content row, origin issue, sources and links — in ONE statement. A statement reads one
+     * snapshot, so a concurrent commit can never leave a source list from before it next to a version or link list
+     * from after it (separate queries could, even inside a READ COMMITTED transaction). Inside a changing transaction
+     * the statement sees that transaction's own writes. No extra locks are taken.
+     */
     public Optional<Detail> detail(long id) {
-        List<Source> sources = jdbc.sql("""
-                SELECT id, source_kind, issue_id, news_article_id, external_url, source_label, source_role, source_checked_at
-                FROM content_source WHERE content_id = :id
-                ORDER BY CASE source_role WHEN 'PRIMARY' THEN 0 WHEN 'SUPPORTING' THEN 1 ELSE 2 END, id""")
-                .param("id", id)
-                .query((rs, n) -> new Source(rs.getLong("id"), rs.getString("source_kind"), Sql.longOrNull(rs, "issue_id"),
-                        Sql.longOrNull(rs, "news_article_id"), rs.getString("external_url"), rs.getString("source_label"),
-                        rs.getString("source_role"), Sql.odt(rs, "source_checked_at")))
-                .list();
         return jdbc.sql("""
                 SELECT c.id, c.content_type, c.status, c.title, CAST(c.body AS text) AS body, c.version, c.origin_issue_id,
                        i.title AS issue_title, c.status_reason, c.created_by, c.created_at, c.updated_by, c.updated_at,
-                       c.submitted_at, c.approved_by, c.approved_at, """ + ORIGIN_COLUMNS + """
+                       c.submitted_at, c.approved_by, c.approved_at,
+                       (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
+                                   'id', s.id, 'kind', s.source_kind, 'issueId', s.issue_id, 'newsArticleId', s.news_article_id,
+                                   'externalUrl', s.external_url, 'label', s.source_label, 'role', s.source_role,
+                                   'checkedAt', s.source_checked_at)
+                               ORDER BY CASE s.source_role WHEN 'PRIMARY' THEN 0 WHEN 'SUPPORTING' THEN 1 ELSE 2 END, s.id),
+                               '[]'::jsonb) AS text)
+                        FROM content_source s WHERE s.content_id = c.id) AS sources_json,
+                       (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
+                                   'id', l.id, 'linkType', l.link_type, 'title', l.title, 'url', l.url,
+                                   'siteVisible', l.site_visible, 'blogVisible', l.blog_visible,
+                                   'displayPosition', l.display_position, 'sortOrder', l.sort_order,
+                                   'createdAt', l.created_at, 'updatedAt', l.updated_at)
+                               ORDER BY l.sort_order, l.id), '[]'::jsonb) AS text)
+                        FROM content_link l WHERE l.content_id = c.id) AS links_json,
+                       """ + ORIGIN_COLUMNS + """
 
                 FROM content c JOIN issue i ON i.id = c.origin_issue_id WHERE c.id = :id""").param("id", id)
                 .query((rs, n) -> new Detail(rs.getLong("id"), rs.getString("content_type"), rs.getString("status"),
                         rs.getString("title"), json.parse(rs.getString("body")), rs.getLong("version"),
                         new OriginIssue(rs.getLong("origin_issue_id"), rs.getString("issue_title"),
                                 rs.getString("issue_status"), Sql.longOrNull(rs, "merged_into_issue_id")),
-                        Sql.odt(rs, "origin_checked_at"), originChange(rs), sources, links(id), rs.getString("status_reason"),
+                        Sql.odt(rs, "origin_checked_at"), originChange(rs), sources(json.parse(rs.getString("sources_json"))),
+                        links(json.parse(rs.getString("links_json"))), rs.getString("status_reason"),
                         rs.getString("created_by"), Sql.odt(rs, "created_at"), rs.getString("updated_by"),
                         Sql.odt(rs, "updated_at"), Sql.odt(rs, "submitted_at"), rs.getString("approved_by"),
                         Sql.odt(rs, "approved_at")))
                 .optional();
+    }
+
+    private static List<Source> sources(JsonNode array) {
+        List<Source> out = new ArrayList<>();
+        for (JsonNode s : array) {
+            out.add(new Source(s.get("id").asLong(), s.get("kind").asText(), longOrNull(s, "issueId"),
+                    longOrNull(s, "newsArticleId"), textOrNull(s, "externalUrl"), textOrNull(s, "label"),
+                    s.get("role").asText(), timeOrNull(s, "checkedAt")));
+        }
+        return out;
+    }
+
+    private static List<Link> links(JsonNode array) {
+        List<Link> out = new ArrayList<>();
+        for (JsonNode l : array) {
+            out.add(new Link(l.get("id").asLong(), l.get("linkType").asText(), l.get("title").asText(), l.get("url").asText(),
+                    l.get("siteVisible").asBoolean(), l.get("blogVisible").asBoolean(), l.get("displayPosition").asText(),
+                    l.get("sortOrder").asInt(), timeOrNull(l, "createdAt"), timeOrNull(l, "updatedAt")));
+        }
+        return out;
+    }
+
+    private static Long longOrNull(JsonNode n, String field) {
+        JsonNode v = n.get(field);
+        return v == null || v.isNull() ? null : v.asLong();
+    }
+
+    private static String textOrNull(JsonNode n, String field) {
+        JsonNode v = n.get(field);
+        return v == null || v.isNull() ? null : v.asText();
+    }
+
+    /** jsonb renders timestamptz as ISO-8601 with offset, e.g. 2026-10-15T17:00:00.123456+09:00. */
+    private static OffsetDateTime timeOrNull(JsonNode n, String field) {
+        JsonNode v = n.get(field);
+        return v == null || v.isNull() ? null : OffsetDateTime.parse(v.asText());
     }
 }
