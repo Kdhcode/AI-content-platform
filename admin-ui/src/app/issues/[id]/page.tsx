@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmt, type IssueDetail } from "@/lib/api";
 import { Badge, ErrorText, Shell } from "@/components/ui";
+import { CreateContent } from "@/components/content/CreateContent";
 
 type ArticleRow = IssueDetail["articles"][number];
 
@@ -91,6 +92,8 @@ export default function IssueDetailPage() {
             {d.keyFacts.length > 0 && <><h2>핵심 사실</h2><ul>{d.keyFacts.map((f, i) => <li key={i}>{f}</li>)}</ul></>}
             {d.entities.length > 0 && <div className="muted">{d.entities.map((e) => e.name).join(", ")}</div>}
           </div>
+
+          <CreateContent issueId={id} issueStatus={d.status} mergedIntoIssueId={d.mergedIntoIssueId} />
 
           {d.status === "REVIEW" && (
             <div className="card">

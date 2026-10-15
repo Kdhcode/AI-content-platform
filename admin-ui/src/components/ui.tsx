@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { ApiFailure, clearCredentials, hasCredentials, localVerifyMode, type LocalVerifyMode } from "@/lib/api";
+import { ApiFailure, clearCredentials, currentUser, hasCredentials, hasLogin, localVerifyMode, type LocalVerifyMode, type Me } from "@/lib/api";
 
 const BAD = new Set(["FAILED", "EXCLUDED"]);
 const WARN = new Set(["REVIEW", "PENDING", "RUNNING", "DEGRADED", "ANALYSIS_PENDING", "NOT_CLASSIFIED"]);
@@ -41,6 +41,13 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [ready, setReady] = useState(false);
   const [bypass, setBypass] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+  const [loggedIn, setLoggedIn] = useState(false);
+  useEffect(() => {
+    if (!ready) return;
+    setLoggedIn(hasLogin());
+    currentUser().then(setMe).catch(() => setMe(null));
+  }, [ready]);
   useEffect(() => {
     let live = true;
     localVerifyMode().then((m) => {
@@ -67,6 +74,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {link("/", "대시보드", "◫")}
           {link("/issues", "이슈", "▤")}
           {link("/articles", "기사", "▥")}
+          {link("/contents", "콘텐츠", "✎")}
           {link("/sources", "뉴스 소스", "◎")}
           {link("/jobs", "작업", "⇄")}
           {link("/ai-usage", "AI 사용량", "◔")}
@@ -74,12 +82,12 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-note"><span className="status-dot" /> Phase 1 · 뉴스 이슈 엔진
           <p>수집에서 검수까지,<br />뉴스의 흐름을 한곳에서.</p></div>
-        <div className="sidebar-account"><span className="avatar">A</span><div>{bypass ? "local-verify" : "관리자"}<small>{bypass ? "로그인 생략(로컬 검증)" : "Editorial workspace"}</small></div>
-          {!bypass && <button aria-label="로그아웃" title="로그아웃" onClick={() => { clearCredentials(); router.replace("/login"); }}>↗</button>}</div>
+        <div className="sidebar-account"><span className="avatar">A</span><div>{me?.username ?? (bypass && !loggedIn ? "local-verify" : "관리자")}<small>{me && me.roles.length > 0 ? me.roles.join(", ") : bypass && !loggedIn ? "로그인 생략(로컬 검증)" : "Editorial workspace"}</small></div>
+          {(!bypass || loggedIn) && <button aria-label="로그아웃" title="로그아웃" onClick={() => { clearCredentials(); router.replace("/login"); }}>↗</button>}</div>
       </aside>
       <div className="workspace-content">
         <LocalVerifyBanner audience="admin" />
-        <header className="topbar"><span>워크스페이스 <span className="crumb-slash">/</span> <strong>{path === "/" ? "대시보드" : path.startsWith("/sources") ? "뉴스 소스" : path.startsWith("/articles") ? "기사 관리" : path.startsWith("/jobs") ? "작업 관리" : path.startsWith("/ai-usage") ? "AI 사용량" : "이슈 관리"}</strong></span>
+        <header className="topbar"><span>워크스페이스 <span className="crumb-slash">/</span> <strong>{path === "/" ? "대시보드" : path.startsWith("/sources") ? "뉴스 소스" : path.startsWith("/articles") ? "기사 관리" : path.startsWith("/contents") ? "콘텐츠 관리" : path.startsWith("/jobs") ? "작업 관리" : path.startsWith("/ai-usage") ? "AI 사용량" : "이슈 관리"}</strong></span>
           <span className="topbar-tag">NEWS INTELLIGENCE <span className="status-dot" /></span></header>
         <main className="workspace-main">{children}</main>
       </div>
