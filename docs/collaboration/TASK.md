@@ -361,3 +361,12 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig_fresh`에 V1~V4 적용. `aicontent_main`(V3)의 복사본 `aicontent_mig_upgrade`에 V4만 적용, 기존 11개 테이블 행 전체 md5 동일(데이터 보존). 원본 `aicontent_main`은 V3 그대로, daily 서버는 건드리지 않음
 - UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
 - A3 전에 정할 것: `CONTENT_A_PLAN.md` 7절(승인 권한, REVIEW 중 편집, 기본 소제목 등)
+
+## 16. 2026-10-15 콘텐츠 A3 상태 전이 + 기존 문제 2건 (`claude/content-a`, `main` 미병합)
+
+- 수정 ①: V4 `ck_content_source_one_ref`의 EXTERNAL_URL 조건이 NULL URL을 통과시킴(CHECK 결과가 NULL이면 PostgreSQL이 허용). V4가 이미 적용된 DB(`aicontent_test`, `aicontent_mig_fresh`, `aicontent_mig_upgrade`)가 있어 V4는 고치지 않고 V5로 제약 교체(URL 필수, `http(s)://호스트`, 공백 불가). 직접 삽입 회귀 테스트 추가
+- 수정 ②: `CONTENT_A_PLAN.md`의 "A1·A2 구현"과 "V4·코드 미구현" 모순 정리 → 맨 앞에 작업별 진행 상태 표
+- A3: `POST /api/admin/contents/{id}/{submit,approve,return,hold,resume,exclude,archive,restore}`, 전이·권한표와 검수 기록 칸 규칙은 계획 4절(최종). 승인·복귀 SYSTEM_ADMIN만(본인 작성분 승인 허용), 사유 필수(반려·보류·제외·복귀), 제출 조건 422, version 필수·행 잠금
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 12개(정책 표 3, 상태 API 6, 동시성·원자성 3) + 스키마 회귀 보강 포함 전체 `mvn package` **237개 통과**(기준: A3 코드 커밋). 대시보드 스키마 버전 기대값 4→5
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig5_fresh` V1~V5, `aicontent_mig_upgrade` V4→V5, `aicontent_main` 새 복사본 `aicontent_mig5_upgrade` V3→V5 — 두 업그레이드 모두 기존 11개 테이블 행 md5 동일, 업그레이드 DB에서 NULL URL 출처 삽입 거부 확인(확인용 콘텐츠 1건이 그 검증 DB에 남음). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0

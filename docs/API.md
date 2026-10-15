@@ -96,7 +96,7 @@
 
 ---
 
-## 콘텐츠 (NEWS·LIFE, A2 — 수동 작성)
+## 콘텐츠 (NEWS·LIFE, A2·A3 — 수동 작성·검수)
 
 관리자 전용(OPERATOR+). 공개 API(`/api/public/*`)와 뉴스룸은 콘텐츠를 읽지 않으며, 승인돼도 자동 공개되지 않는다. 본문 형식·한도는 `docs/CONTENT_A_PLAN.md` 2절.
 
@@ -118,8 +118,24 @@
 본문 `{version, title?, body?}` — 생략한 값은 유지, 둘 다 없으면 400. `version`은 편집기가 불러온 값.
 - 200 `{content, statusChanged}`: 저장되면 `version`+1, 감사 기록 `CONTENT_UPDATE`. REVIEW·APPROVED 콘텐츠는 DRAFT로 돌아가고(`statusChanged: true`, 승인·검수 요청 기록 지움) APPROVED였으면 `CONTENT_APPROVAL_REVOKED_BY_EDIT`도 기록. 값이 같으면 아무것도 바꾸지 않음(version 그대로).
 - 409 `CONTENT_VERSION_CONFLICT`: `details{currentVersion, sentVersion, updatedBy, updatedAt}` — 다시 불러와 확인. 검사와 저장은 행 잠금 안에서 함께 처리.
-- 409 `CONTENT_STATE_INVALID`: HOLD·EXCLUDED·ARCHIVED(복귀 동작은 A3).
+- 409 `CONTENT_STATE_INVALID`: HOLD·EXCLUDED·ARCHIVED(먼저 `resume`·`restore`).
 - 400 `CONTENT_BODY_INVALID` / `VALIDATION_ERROR`.
+
+### 상태 동작 `POST /contents/{id}/{submit|approve|return|hold|resume|exclude|archive|restore}` (A3) · 동기
+본문 `{version, reason?}`(사유는 앞뒤 공백 제거 후 1~500자). 응답은 바뀐 상세(version +1). 상태는 이 동작으로만 바뀌고 `PATCH`는 `status`를 받지 않는다. 전이·권한표는 `docs/CONTENT_A_PLAN.md` 4절.
+
+| 동작 | 시작 → 결과 | 역할 | 사유 |
+|---|---|---|---|
+| `submit` 검수 요청 | DRAFT → REVIEW | OPERATOR+ | 선택 |
+| `approve` 승인 | REVIEW → APPROVED | **SYSTEM_ADMIN**(본인 작성분 포함) | 선택 |
+| `return` 반려 | REVIEW → DRAFT | OPERATOR+ | 필수 |
+| `hold` 보류 | DRAFT·REVIEW·APPROVED → HOLD | OPERATOR+ | 필수 |
+| `resume` 보류 해제 | HOLD → DRAFT | OPERATOR+ | 선택 |
+| `exclude` 제외 | DRAFT·REVIEW·HOLD → EXCLUDED | OPERATOR+ | 필수 |
+| `archive` 보관 | APPROVED·HOLD → ARCHIVED | OPERATOR+ | 선택 |
+| `restore` 복귀 | EXCLUDED·ARCHIVED → DRAFT | **SYSTEM_ADMIN** | 필수 |
+
+오류: 403 `FORBIDDEN`(역할), 409 `CONTENT_STATE_INVALID`(`details{status, action, allowedFrom}` — 예: DRAFT에서 approve), 409 `CONTENT_VERSION_CONFLICT`(`details{currentVersion, sentVersion, updatedBy, updatedAt, status}`), 422 `CONTENT_NOT_READY`(submit·approve: `details.violations[]` — 제목, 섹션·소제목·문단, PRIMARY 출처), 400 `VALIDATION_ERROR`(version 없음, 필수 사유 없음, 사유 500자 초과), 404 `CONTENT_NOT_FOUND`. 감사 기록 `CONTENT_<동작>`(처리자, 전후 상태·version, 사유). 승인돼도 공개 API·뉴스룸에는 나오지 않는다.
 
 ---
 
