@@ -580,3 +580,18 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **미실행:** `verify:flow` 전체 흐름(실제 RSS 수집·유료 AI 호출을 포함하므로 이번에 실행하지 않음, 정상 설정은 서버 없이 사전 검사 통과까지만 확인), 백엔드 `mvn test`, 권한 화면 11단계·화면 전체 검증(관련 코드 변경 없음)
 - **남은 제한:** 확인 값·포트 제한은 실제 DB나 유료 AI 사용을 증명하지 않음(VERIFY.md). `verify:dashboard`·`verify:ai-usage`는 조회만 하므로 `localhost:3000` 기본값 그대로
 - `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+- 23-3절 작업은 `0456aee`로 커밋·`claude/operator-ui-check`에 일반 push
+
+## 24. 2026-10-19 밤 최소 GitHub Actions CI (`claude/ci-checks`, 기준 `0456aee`)
+
+- 브랜치: `origin/claude/operator-ui-check`(`0456aee`, fetch 후 변경 없음, 미커밋 없음)에서 `claude/ci-checks` 새로 만듦(같은 이름 로컬·원격 없음, 추적 대상은 새 원격 브랜치). 기존 `.github` 워크플로 없음 → 새로 작성. `main`·`claude/content-a`·`claude/operator-ui-check`에는 병합·커밋하지 않음
+- **실제 설정 확인:** Java 21(`pom.xml`, Spring Boot 3.3.5), 통합 테스트는 PostgreSQL + pgvector(`application-test.yml`의 `TEST_DB_URL`·`DB_USER`·`DB_PASSWORD`, V1이 `CREATE EXTENSION vector`), Redis는 테스트에 쓰이지 않음(잠금·Redis health 기본 꺼짐), surefire 필터 없음 → `mvn test`가 통합 테스트까지 실행. 통합 테스트는 stub AI·고정 데이터·로컬 `HttpServer` 모의 OpenAI(가짜 키)라 외부 네트워크·유료 호출 없음. 화면: Node `^18.18 || ^19.8 || >=20`(next 15.5), `package-lock.json` v3. 서버 없이 도는 검사는 `verify:content-session`·`verify:auth-client`(TypeScript 변환 + 백엔드 Java 상수 읽기)·`verify:write-target`, 그 밖의 `verify:*`는 실행 중인 서버·계정·실제 RSS가 필요해 제외
+- **`.github/workflows/ci.yml`:**
+  - `backend`(ubuntu): JDK 21 temurin(Maven 캐시), 서비스 `pgvector/pgvector:pg16`(DB `aicontent_test`, CI 컨테이너 안에서만 쓰는 비밀번호, health 확인) → `mvn -B -ntp test`. 실패 시에만 `backend/target/surefire-reports/`를 7일 보관 아티팩트로 올림(DB 덤프·비밀값 없음)
+  - `admin-ui`(ubuntu, Node 24, npm 캐시): `npm ci` → `typecheck` → `build` → `verify:content-session` → `verify:auth-client` → `verify:write-target`. `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`, Next 원격 통계 끔
+  - `run-scripts`(windows, Windows PowerShell 5.1): `scripts/run/test-run-scripts.ps1`
+  - 트리거: 모든 push + pull_request. 이 저장소 브랜치에서 온 PR은 같은 커밋의 push 실행으로 갈음하고 포크 PR만 pull_request로 실행(작업 `if`). 같은 브랜치·이벤트의 새 실행이 이전 실행을 취소(`concurrency`). 권한 `contents: read`만, 저장소 비밀값 없음. 실패를 무시하는 설정(`continue-on-error` 등)·테스트 건너뛰기 없음
+- **로컬 확인:** YAML 파싱(작업 3개, 트리거 push·pull_request). 이 브랜치의 깨끗한 임시 작업 트리(`node_modules`·`next-env.d.ts` 없음)에서 CI와 같은 명령: `npm ci`·`typecheck`·`build` 통과, `verify:content-session` 15/15, `verify:auth-client` 통과, `verify:write-target` 통과, `test-run-scripts.ps1`(PowerShell 5.1.26100) 통과. 빈 새 DB `aicontent_ci_sim`에 CI와 같은 변수로 `mvn -B -ntp test` → Flyway "Successfully applied 7 migrations … v7", **257개 통과, 실패·오류·건너뜀 0**
+- **GitHub Actions 실제 실행:** `8228f21` push → 실행 39260567544(https://github.com/Kdhcode/AI-content-platform/actions/runs/39260567544) **success**. `admin-ui` 46초(9단계 모두 성공), `run-scripts` 89초(성공), `backend` 91초(`mvn test` 성공, 실패 시 업로드 단계는 조건대로 건너뜀). 워크플로 파일 push·Actions 사용에 제한 없었음
+- **확인 못 한 것:** GitHub 작업 로그 본문은 로그인해야 보여서(내장 브라우저 미로그인) CI의 테스트 개수를 로그로 확인하지 못함 — 단계 성공과 같은 명령의 로컬 빈 DB 결과(257개)로만 판단. 실패할 때 아티팩트가 실제로 올라가는지는 일부러 실패시키지 않아 미확인. 포크 PR 실행 경로 미확인(포크 없음). PR은 인증 문제로 만들지 않음
+- `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
