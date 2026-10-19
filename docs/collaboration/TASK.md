@@ -504,3 +504,27 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **5-1절 리허설(daily·`aicontent_main` 미사용):** `aicontent_verify_real`(V3, 실제 데이터 복사본) → `aicontent_rehearsal_main`에서 5-1 순서 그대로: 백업(TABLE DATA 12개) → 이 브랜치 jar(AI `none`, 127.0.0.1:18097)로 기동 → V4~V7 적용 로그 4줄·`now at version v7`(0.2초) → 확인 SQL(1~7 `t`, 트리거 3개, 이슈·기사·연결 29/35/35 그대로) → 복원·이름 바꾸기 → V3, `content` 테이블·트리거 없음, 수 그대로. `aicontent_rehearsal_main_v7_failed`(V7) 보관
 - 새로 만든 검증 DB: `aicontent_verify_pagination_20261019`, `aicontent_rehearsal_main`(V3), `aicontent_rehearsal_main_v7_failed`(V7). 기존 테스트로 보장되는 항목(상태 전이·권한·동시성·공개 분리 등, 257개)은 22절 결과를 그대로 근거로 씀(이번에 백엔드·화면 코드 변경 없음 → 다시 돌리지 않음)
 - 남은 미실행: 22절과 같음(OPERATOR 화면 403, `verify:flow`, daily 실제 적용, Docker). `aicontent_main` V3·이슈 29 그대로, 유료 AI 호출 0, 실제 RSS 수집 0
+- 22-1절 작업은 `280d4c5`로 커밋·일반 push. PR은 여전히 인증 문제로 생성 못 함
+
+## 23. 2026-10-19 밤 OPERATOR 권한 실제 화면 검증 (`claude/operator-ui-check`, 기준 `280d4c5`)
+
+- 브랜치: `origin/claude/content-a`(`280d4c5`, fetch 후 변경 없음)에서 `claude/operator-ui-check`를 새로 만듦(같은 이름 로컬·원격 없음 확인, `content-a` 추적 해제). `main`·`claude/content-a`에는 커밋하지 않음. 내일 `content-a` 병합 전에 이 브랜치를 `content-a`로 합칠지 결정
+- **권한 정책(바꾸지 않음, `CONTENT_A_PLAN.md` 4절·`ContentStatusPolicy`·`SecurityConfig` 기준):**
+  - OPERATOR·SYSTEM_ADMIN 공통: 목록·상세, 생성(ACTIVE·CLOSED 이슈), 제목·본문 편집, 출처·관련 URL 변경, 원천 변경 확인, 검수 요청(DRAFT→REVIEW), 반려(REVIEW→DRAFT, 사유), 보류(DRAFT·REVIEW·APPROVED→HOLD, 사유), 보류 해제(HOLD→DRAFT), 제외(DRAFT·REVIEW·HOLD→EXCLUDED, 사유), 보관(APPROVED·HOLD→ARCHIVED)
+  - SYSTEM_ADMIN만: 승인(REVIEW→APPROVED, 본인 작성분 포함), 복귀(EXCLUDED·ARCHIVED→DRAFT, 사유). `SecurityConfig`(경로 `hasRole`)와 `ContentStatusPolicy`(서비스) 두 곳에서 검사. 기존 근거: `ContentStatusPolicyTest`(역할 표), `ContentStatusApiIntegrationTest`(OPERATOR approve·restore HTTP 403)
+  - 화면: `GET /api/admin/me`의 역할로 승인·복귀를 "(SYSTEM_ADMIN)" 표시와 함께 비활성화(서버가 다시 검사). 역할 조회는 로그인 정보(토큰)별로 캐시, 로그아웃은 `sessionStorage`의 인증 정보 삭제, 페이지마다 `Shell`이 다시 마운트되어 계정을 다시 읽음
+- **검증 환경(일반 인증 모드):** `aicontent_verify_content` 덤프 → `aicontent_verify_operator_20261019`(V7). 백엔드 127.0.0.1:18098(기본 프로필, 로그인 생략 꺼짐, stub, 작업자·스케줄러 끔), 그 주소로 빌드한 화면 13098(next 15.5.28). 시험 계정 `verify-operator`(OPERATOR)·`verify-sysadmin`(SYSTEM_ADMIN): 기동 시 `ADMIN_USERNAME`/`ADMIN_PASSWORD`로 각각 만든 뒤(기동 생성 계정은 항상 SYSTEM_ADMIN) `verify-operator`의 역할만 SQL로 OPERATOR로 바꿈. 비밀번호는 무작위 생성해 `.local/run/verify-operator.cred`(Git 제외)에만 두고 출력하지 않음, 서버·화면 로그 6개에 비밀번호 없음 확인
+- **재현 가능한 브라우저 검증 추가:** `admin-ui/scripts/verify-content-roles.cjs`(`npm run verify:content-roles`, `verify-dashboard`와 같은 방식: Playwright·Chrome, `VERIFY_UI_URL` 로컬만, 계정은 환경 변수 `OPERATOR_USERNAME`/`OPERATOR_PASSWORD`/`ADMIN_USERNAME`/`ADMIN_PASSWORD`). 연결된 DB의 첫 ACTIVE 이슈에 콘텐츠 2개를 만들므로 검증 DB 복사본에서만 실행
+- **결과(13098, 11단계 모두 통과, 브라우저 오류 0):**
+  1. OPERATOR 로그인 → 사이드바·`/api/admin/me`가 OPERATOR
+  2. 목록 → 이슈 #4에서 NEWS 생성 → 제목·섹션·문단 입력 → 자동저장(서버 본문 반영, `createdBy` = OPERATOR) → 검수 요청 → REVIEW
+  3. 승인 버튼 "승인 (SYSTEM_ADMIN)" 비활성·활성 "승인" 없음, **Next 프록시로 OPERATOR 인증 직접 `POST .../approve` → 403**, 상태·version·`submittedAt`·`approvedBy`·`approvedAt`·사유·제목 그대로
+  4. LIFE 생성 → 제외(사유) → EXCLUDED → "복귀 (SYSTEM_ADMIN)" 비활성, **직접 `POST .../restore` → 403**, 그대로
+  5. 로그아웃 → `sessionStorage` 인증 정보 없음, `/contents` 접근 시 `/login`, `/api/admin/me` 401
+  6. 같은 탭에서 SYSTEM_ADMIN 로그인 → 사이드바·`/me`가 SYSTEM_ADMIN → 승인 → APPROVED(`approvedBy` = 관리자) → 복귀(사유) → DRAFT
+  7. 다시 OPERATOR로 전환 → APPROVED 콘텐츠 보관 → ARCHIVED → 복귀 버튼 다시 비활성, 직접 요청 403·변경 없음(이전 관리자 권한·화면 상태 안 남음)
+- **검증이 실제로 잡는지 확인:** 13098 화면 복사본(저장소 아님)만 승인·복귀 버튼이 항상 활성이 되도록 바꿔 다시 빌드 → 이 검사가 3단계에서 **실패**. 복사본을 저장소 코드로 되돌려 다시 빌드 → 다시 11단계 통과. 실패 메시지가 막연해("false !== true") 해당 검사에 설명 문구를 붙임
+- **발견한 문제: 없음.** 앱 코드(백엔드·화면) 변경 없음. 바꾼 파일은 검증 스크립트·`package.json`의 스크립트 항목·이 기록뿐
+- 검증 DB에 남은 것: 콘텐츠 #5·#8(ARCHIVED, 승인 이력 있음), #6·#9(DRAFT), #7(REVIEW, 실패를 확인한 실행에서 중단된 것). 확인 뒤 18098·13098 종료
+- **미실행:** 백엔드 `mvn test`(백엔드 변경 없음 → 22절 257개 결과 유지), `typecheck`·`next build` 이외의 화면 검사(화면 코드 변경 없음; 13098 빌드는 통과), OPERATOR로 그 밖의 SYSTEM_ADMIN 전용 경로(작업 재시도·취소, 수동 수집)는 이번 범위(콘텐츠) 밖이라 확인 안 함, 두 브라우저 탭에서 동시에 다른 계정(같은 탭 전환만 확인; 인증 정보가 탭별 `sessionStorage`라 탭 사이에 공유되지 않음)
+- `aicontent_main` V3 그대로, daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
