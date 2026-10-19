@@ -145,6 +145,23 @@ Chrome 대신 Playwright Chromium을 사용하려면 `npx playwright install chr
 `VERIFY_TIMEOUT_SECONDS`(기본 180), `VERIFY_UI_URL`(기본 `http://localhost:3000`)도 설정할 수 있다.
 유료 모델의 모든 호출·토큰을 최종 확인하려면 DB에서 `ai_log.provider`, `model`, `success`를 함께 확인한다.
 
+### 콘텐츠 역할별 화면 검증 (`verify:content-roles`, 데이터를 씀)
+
+일반 로그인 모드에서 OPERATOR·SYSTEM_ADMIN의 콘텐츠 동작을 확인한다(생성·편집·검수 요청, 승인·복귀 버튼 제한과 Next 프록시 직접 요청 403, 로그아웃·계정 전환). 연결된 DB의 첫 ACTIVE 이슈에 콘텐츠 2개를 만들고 승인·보관까지 하므로 **검증 DB 복사본에 연결된 환경에서만** 실행한다(로그인 생략 모드가 아니라 실제 계정 로그인으로 확인하는 검사).
+
+```powershell
+cd admin-ui
+$env:VERIFY_UI_URL = 'http://127.0.0.1:13098'      # 검증 환경 화면 주소(기본값 없음)
+$env:VERIFY_CONFIRM_VERIFY_DB = '13098'            # 그 화면의 백엔드가 검증 DB 복사본임을 확인: 같은 포트를 다시 입력
+$env:OPERATOR_USERNAME = '...'; $env:OPERATOR_PASSWORD = '...'   # 그 검증 DB의 시험 계정(파일·Git·채팅에 남기지 않음)
+$env:ADMIN_USERNAME = '...'; $env:ADMIN_PASSWORD = '...'
+npm run verify:content-roles
+```
+
+브라우저를 띄우거나 요청을 보내기 전에 `scripts/lib/write-target.cjs`가 거부하는 경우: `VERIFY_UI_URL` 없음, URL 형식 오류, `http://`가 아님, 주소에 사용자 정보·경로·쿼리, 호스트가 `localhost`·`127.0.0.1`이 아님, 포트 생략, **포트 3000(daily UI → `aicontent_main`)·3001(dev UI → `aicontent`)**, `VERIFY_CONFIRM_VERIFY_DB` 없음 또는 화면 포트와 다름, 계정 값 없음. 오류에는 위 실행 예시만 나오고 비밀번호는 출력하지 않는다. 사전 검사 자체는 `npm run verify:write-target`(서버 불필요)으로 확인한다.
+
+**한계:** 포트 제한과 확인 값은 실수를 막는 장치일 뿐, 그 화면 뒤의 백엔드가 실제로 검증 DB에 연결됐다는 증명이 아니다. 스크립트는 백엔드의 DB를 알 수 없고(앱은 DB 이름을 알려 주는 API를 두지 않는다), 확인 값을 입력하는 사람이 그 환경의 DB를 알고 있어야 한다(검증 환경과 포트는 `docs/RUNBOOK.md`·`TASK.md`에 기록). 다른 포트로 daily DB에 연결한 서버를 띄웠다면 이 검사로는 막을 수 없다.
+
 ```sql
 SELECT job_type, status, count(*) FROM async_job GROUP BY 1,2;
 SELECT provider, model, call_type, success, count(*) FROM ai_log GROUP BY 1,2,3,4;

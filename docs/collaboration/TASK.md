@@ -528,3 +528,19 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 검증 DB에 남은 것: 콘텐츠 #5·#8(ARCHIVED, 승인 이력 있음), #6·#9(DRAFT), #7(REVIEW, 실패를 확인한 실행에서 중단된 것). 확인 뒤 18098·13098 종료
 - **미실행:** 백엔드 `mvn test`(백엔드 변경 없음 → 22절 257개 결과 유지), `typecheck`·`next build` 이외의 화면 검사(화면 코드 변경 없음; 13098 빌드는 통과), OPERATOR로 그 밖의 SYSTEM_ADMIN 전용 경로(작업 재시도·취소, 수동 수집)는 이번 범위(콘텐츠) 밖이라 확인 안 함, 두 브라우저 탭에서 동시에 다른 계정(같은 탭 전환만 확인; 인증 정보가 탭별 `sessionStorage`라 탭 사이에 공유되지 않음)
 - `aicontent_main` V3 그대로, daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+- 23절 작업은 `78a9fa6`으로 커밋, `claude/operator-ui-check`를 원격에 새로 push. PR은 인증 문제로 생성 못 함
+
+### 23-1. 2026-10-19 밤 `verify:content-roles` 실행 대상 보호 (기준 `78a9fa6`)
+
+- 확인된 문제: `verify-content-roles.cjs`는 콘텐츠를 생성·편집·승인·보관하는데 `VERIFY_UI_URL`이 없으면 `http://localhost:3000`(daily UI → `aicontent_main`)을 기본값으로 썼고, 호스트가 로컬인지 외에는 검사하지 않아 daily에서 실수로 실행되는 것을 막지 못함. 23절 실행은 모두 `VERIFY_UI_URL=http://127.0.0.1:13098`(검증 DB `aicontent_verify_operator_20261019`)로 했으므로 daily 데이터가 바뀌었다고 보지 않음(`aicontent_main` V3 그대로)
+- 수정:
+  - `admin-ui/scripts/lib/write-target.cjs`(새 파일, 순수 함수 `checkWriteTarget`): `VERIFY_UI_URL` 필수(기본값 없음), URL 형식, `http://`만, 사용자 정보 금지, 호스트 `localhost`·`127.0.0.1`만, 포트 명시 필수, **포트 3000(daily)·3001(dev, `aicontent`)은 두 호스트 모두 거부**, 경로·쿼리·조각 금지(화면 주소만), `VERIFY_CONFIRM_VERIFY_DB`(실행자가 그 화면의 백엔드가 검증 DB임을 확인하는 값, 화면 포트를 다시 입력) 필수·일치, 계정 환경 변수 존재. 오류에는 올바른 실행 예시만 붙이고 비밀번호는 출력하지 않음
+  - `verify-content-roles.cjs`: `main()`의 첫 줄에서 검사하고, 통과한 뒤에만 Playwright를 불러 브라우저를 띄움(그 전에는 요청 없음). 로그인 생략 모드를 요구하지 않음(일반 로그인 권한 검증 그대로). 앱 코드·API 변경 없음(DB 이름을 알려 주는 API를 만들지 않음)
+  - `admin-ui/scripts/verify-write-target.cjs`(`npm run verify:write-target`): 서버 없이 실행하는 사전 검사 시험
+  - `docs/VERIFY.md`에 실행 방법·거부 조건·한계(포트·확인 값은 실수 방지일 뿐 DB 증명이 아님) 추가
+- 검증:
+  - `npm run verify:write-target` **26개 통과**: 함수 19개(주소 없음, `localhost:3000`·`127.0.0.1:3000/`, 3001, 외부 호스트, `localhost.example.com`, 잘못된 URL 2종, `https`, 사용자 정보, 포트 생략, 경로, 쿼리, 확인 값 없음·다른 포트·`yes`, 비밀번호 없음은 거부 / `127.0.0.1:13098`+13098, `localhost:13093/`+13093은 통과) + 실제 스크립트 7개(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, 로컬 포트에 확인 값 없음·틀림, 외부 호스트, 잘못된 URL → 종료 코드 1, 실행 예시 안내, 가짜 비밀번호 미출력, 대상 포트에 둔 연결 계수기의 연결 **0**). 3000 계수기는 3000이 비어 있을 때만 이 시험이 직접 연 것(daily 서버 아님, 실행 전 3000 미사용 확인)
+  - 대조: 이전 `verify-content-roles.cjs`(`78a9fa6`)로 바꿔 돌리면 실제 스크립트 7개 모두 **실패**, 되돌린 뒤 통과
+  - 검증 DB 환경(18098·13098, `aicontent_verify_operator_20261019`)에서 `VERIFY_UI_URL=http://127.0.0.1:13098`, `VERIFY_CONFIRM_VERIFY_DB=13098`로 `npm run verify:content-roles` **11단계 모두 통과**(콘텐츠 #10·#11 추가 생성), 확인 뒤 서버 종료
+- **미실행·남은 제한:** daily 서버·`aicontent_main`에 접속하는 거부 시험은 하지 않음(지시대로 사전 검사 시험으로 대신). 다른 포트로 daily DB에 연결한 서버는 이 검사로 막을 수 없음(VERIFY.md 한계). **`verify:flow`도 데이터를 쓰면서(수집·이슈 상태 변경) `localhost:3000` 기본값을 쓰는데 이번 범위 밖이라 그대로 둠** — 같은 보호를 적용할지 결정 필요. 백엔드 `mvn test`·화면 빌드는 코드 변경이 없어 다시 돌리지 않음
+- `aicontent_main` V3 그대로, daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0

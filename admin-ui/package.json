@@ -12,7 +12,8 @@
     "verify:ai-usage": "node scripts/verify-ai-usage.cjs",
     "verify:auth-client": "node scripts/verify-auth-client.cjs",
     "verify:content-session": "node scripts/verify-content-session.cjs",
-    "verify:content-roles": "node scripts/verify-content-roles.cjs"
+    "verify:content-roles": "node scripts/verify-content-roles.cjs",
+    "verify:write-target": "node scripts/verify-write-target.cjs"
   },
   "dependencies": {
     "next": "15.5.28",

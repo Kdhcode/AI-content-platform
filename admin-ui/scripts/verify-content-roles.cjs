@@ -1,22 +1,24 @@
 // Content screens per role in normal login mode (no local-verify): what an OPERATOR can do, that approve / restore are
 // limited to SYSTEM_ADMIN in the screen AND refused (403) when sent directly through the Next proxy without changing the
 // content, and that logging out / switching accounts in the same tab leaves no rights or screen state behind.
-// Creates two contents on the first ACTIVE issue of the connected database: run it against a verify copy only.
-//   VERIFY_UI_URL=http://127.0.0.1:13098 OPERATOR_USERNAME=... OPERATOR_PASSWORD=... ADMIN_USERNAME=... ADMIN_PASSWORD=...
-//   node scripts/verify-content-roles.cjs
+// Creates two contents on the first ACTIVE issue of the connected database and approves / archives one, so it runs
+// only against a verify environment: there is no default address, the daily (3000) and dev (3001) UI ports are refused,
+// and the person running it must confirm the verify DB by repeating the port (scripts/lib/write-target.cjs, checked
+// before the browser starts or any request is sent). That is a guard against mistakes, not proof of the database.
+//   VERIFY_UI_URL=http://127.0.0.1:13098 VERIFY_CONFIRM_VERIFY_DB=13098 \
+//   OPERATOR_USERNAME=... OPERATOR_PASSWORD=... ADMIN_USERNAME=... ADMIN_PASSWORD=... npm run verify:content-roles
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { checkWriteTarget } = require("./lib/write-target.cjs");
 
-const base = (process.env.VERIFY_UI_URL || "http://localhost:3000").replace(/\/+$/, "");
-const operator = { user: process.env.OPERATOR_USERNAME, pw: process.env.OPERATOR_PASSWORD, role: "OPERATOR" };
-const admin = { user: process.env.ADMIN_USERNAME, pw: process.env.ADMIN_PASSWORD, role: "SYSTEM_ADMIN" };
 const REVIEW_FIELDS = ["status", "version", "submittedAt", "approvedBy", "approvedAt", "statusReason", "title"];
 
 async function main() {
-  assert(["localhost", "127.0.0.1"].includes(new URL(base).hostname), "Use a local development server");
-  assert(operator.user && operator.pw && admin.user && admin.pw, "Set OPERATOR_USERNAME/PASSWORD and ADMIN_USERNAME/PASSWORD");
+  const { base } = checkWriteTarget(process.env, ["OPERATOR_USERNAME", "OPERATOR_PASSWORD", "ADMIN_USERNAME", "ADMIN_PASSWORD"]);
+  const operator = { user: process.env.OPERATOR_USERNAME, pw: process.env.OPERATOR_PASSWORD, role: "OPERATOR" };
+  const admin = { user: process.env.ADMIN_USERNAME, pw: process.env.ADMIN_PASSWORD, role: "SYSTEM_ADMIN" };
+  const { chromium } = require("playwright");
   const output = path.resolve(__dirname, "../../.local/screenshots");
   fs.mkdirSync(output, { recursive: true });
   const browser = await chromium.launch({ channel: process.env.VERIFY_BROWSER_CHANNEL || "chrome", headless: true });
