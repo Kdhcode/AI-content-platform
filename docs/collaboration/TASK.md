@@ -427,7 +427,7 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - `mvn test`(`TEST_DB_URL` = `127.0.0.1:55432/aicontent_test`, stub AI): **257개 통과, 실패 0, 오류 0, 건너뜀 0**(surefire 보고서 합계, 19절과 같은 개수)
   - check-env: Java 21.0.8·Maven 3.9.9·프로젝트 PostgreSQL 정상. **`[MISSING]` node, admin-ui deps** → 이때는 `npm ci`·타입 검사 미실행(Node.js 미설치)
 - 사용자가 Node.js LTS 설치(v24.20.0, npm 11.19.0) 뒤 이어서 실행:
-  - `admin-ui`에서 `npm ci --no-audit --no-fund` **통과**(exit 0), `npm run typecheck`(`tsc --noEmit`) **통과**(exit 0). npm이 `next@14.2.15`에 보안 취약점 경고를 냄(업그레이드는 따로 판단)
+  - `admin-ui`에서 `npm ci --no-audit --no-fund` **통과**(exit 0), `npm run typecheck`(`tsc --noEmit`) **통과**(exit 0). npm이 `next@14.2.15`에 보안 취약점 경고를 냄 → 21절에서 업그레이드
   - `start-ui.ps1 -Target verify-content`: `next build` **Compiled successfully**, 127.0.0.1:13093 기동. `/`·`/contents`·`/news` 200. 내장 브라우저에서 `/contents` 목록이 백엔드 18093 데이터(콘텐츠 4건, 이전 PC 검증 데이터)를 표시하는 것 확인. 화면 기능 전체 재검증은 하지 않음(19절에서 이전 PC로 확인)
   - 기동 뒤에도 `aicontent_main` V3
 - DB 버전 확인(실행 전후 같음): `aicontent_main` **V3 그대로**, `aicontent_verify_content` V7, `aicontent_test` V7. daily 환경(8080·3000)·`aicontent_main` 실행 안 함
@@ -435,3 +435,20 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 이번 세션에서 띄운 PostgreSQL·백엔드는 도구 세션에서 시작돼 세션이 끝나면 함께 멈출 수 있음. 계속 쓰려면 사용자 터미널에서 `start-db.ps1`부터 다시 실행
 - 유료 AI 호출 0. 커밋·push·병합 안 함
 
+## 21. 2026-10-19 관리자 화면 Next.js 보안 업그레이드 14.2.15 → 15.5.28 (`claude/content-a` 기준, 미커밋)
+
+- 선정 이유: A 묶음(A1~A8)은 끝났고, B(LIFE 판정)·C(AI 생성)는 `NEXT_CONTENT_SCOPE.md` 6절 3·4·7·10·11번 결정이 필요해 임의로 시작하지 않음. 오늘 확인된 결함 중 남은 것이 `npm audit` **critical**(next 직접 권고 30개 이상). 그중 "Windows에서 실행하는 서버의 인증 없는 원격 코드 실행"(<15.5.24)은 이 프로젝트가 Windows에서 돌기 때문에 해당됨. 14.2.x 최신(14.2.35)으로는 대부분이 안 고쳐져서(수정 버전이 15.5.x) 15.5 최신으로 올림
+- 영향 범위 확인: 관리자 화면은 전부 클라이언트 컴포넌트, `middleware` 없음, 인증·검수·공개 조건은 모두 Spring 백엔드가 판단(Next는 `/api/*` 프록시만). 백엔드 코드 변경 없음 → 검수·공개 조건 우회 경로 변화 없음
+- 변경:
+  - `admin-ui/package.json`·`package-lock.json`: `next` 15.5.28, `react`·`react-dom` 19.1.10(Next 15 앱 라우터 기준), `@types/react` 19.1.17·`@types/react-dom` 19.1.11. 잠금 파일에 새로 들어온 것은 Next 15의 선택 의존성 `sharp`(+플랫폼별 바이너리)뿐
+  - `admin-ui/src/app/news/[id]/page.tsx`: Next 15는 페이지 `params`를 Promise로 넘기므로 다른 상세 페이지(`issues/[id]` 등)처럼 `useParams`로 읽게 바꿈. 화면·요청 동작은 같음
+- 검증(기준 `ad9d5a2` + 20절 패치 + 이 변경, Node 24.20.0, npm 11.19.0):
+  - `npm audit --omit=dev`: next 직접 권고 **0**. 남은 것은 next 안에 묶인 `postcss`(high, 빌드할 때 이 프로젝트의 CSS에만 쓰여 외부 입력이 들어가지 않음). 없애려면 next 16 필요 → 이번에는 하지 않음
+  - `npm ci`(잠금 파일로 처음부터 설치) **통과**, `npm run typecheck` **통과**
+  - `start-ui.ps1 -Target verify-content -Rebuild`: `next build`(Next.js 15.5.28) **Compiled successfully**, 14개 경로, 13093 기동
+  - `npm run verify:content-session` **15/15 통과**, `npm run verify:auth-client` **통과**
+  - 내장 브라우저(13093 → 백엔드 18093, local-verify): 대시보드, `/news`, `/news/4`(이번에 바꾼 페이지), `/issues/4`, `/contents/4` 표시, 콘솔 오류 0. `/contents/4`에 제목 입력 → 자동저장 `PATCH` 200 → 새로고침 뒤 유지(version 0→1, 검증 DB `aicontent_verify_content`에 남음)
+  - 공개 분리 재확인(새 프록시 경유): `/api/public/issues` 응답에 콘텐츠 제목 없음, `/api/public/contents` 403
+  - 백엔드 변경 없음 → `mvn test`는 20-1절 결과(257개 통과) 유지, 다시 돌리지 않음
+- **미실행:** `verify:dashboard`·`verify:ai-usage`(관리자 계정 비밀번호를 입력해야 함), `verify:public-news`(주소가 `localhost:3000` = daily 환경으로 고정돼 있고 daily 데이터를 기대함, daily는 실행 금지), `verify:flow`(실제 RSS·실제 AI 필요). 화면 기능 전체를 하나씩 다시 확인하지는 않음(19절 항목은 이전 PC에서 확인)
+- `aicontent_main` V3 그대로, daily 실행 안 함, 유료 AI 호출 0. 커밋·push·병합 안 함
