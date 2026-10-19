@@ -81,18 +81,27 @@ else { Report 'WARN' 'backend jar' 'not built yet: .\scripts\run\build.ps1' }
 
 # ---------------------------------------------------------------- Node / admin UI
 Section 'Node.js / admin-ui'
-$nodeMin = [version]'18.17.0'                     # next 14.2 needs Node 18.17 or later
+$nodeRule = '^18.18 || ^19.8 || >=20'             # next 15.5 "engines.node"
 $uiDir = Join-Path $ProjectRoot 'admin-ui'
 $nodeExe = if ($NodeDir) { Join-Path $NodeDir 'node.exe' } else { $null }
 $npmCmd = if ($NodeDir) { Join-Path $NodeDir 'npm.cmd' } else { $null }
 $nodeVer = if ($nodeExe -and (Test-Path $nodeExe)) { Get-Version (Get-FirstLine $nodeExe @('-v')) } else { $null }
+$nodeOk = $nodeVer -and ($nodeVer.Major -ge 20 -or ($nodeVer.Major -eq 19 -and $nodeVer.Minor -ge 8) -or
+    ($nodeVer.Major -eq 18 -and $nodeVer.Minor -ge 18))
 if (-not $nodeVer) { Report 'MISSING' 'node' 'not found (PATH or $NodeDir in machine.ps1); install Node.js LTS' }
-elseif ($nodeVer -lt $nodeMin) { Report 'MISSING' 'node' "$nodeVer at $nodeExe; need $nodeMin+" }
+elseif (-not $nodeOk) { Report 'MISSING' 'node' "$nodeVer at $nodeExe; need $nodeRule" }
 else { Report 'OK' 'node' "$nodeVer ($nodeExe)" }
 if ($npmCmd -and (Test-Path $npmCmd)) { Report 'OK' 'npm' "$(Get-FirstLine $npmCmd @('-v')) ($npmCmd)" }
 elseif ($nodeVer) { Report 'MISSING' 'npm' "npm.cmd not found next to node in $NodeDir" }
 if (-not (Test-Path (Join-Path $uiDir 'package-lock.json'))) { Report 'MISSING' 'package-lock.json' 'admin-ui has no lock file' }
-if (Test-Path (Join-Path $uiDir 'node_modules\next\package.json')) { Report 'OK' 'admin-ui deps' 'node_modules present' }
+$installedNext = Join-Path $uiDir 'node_modules\next\package.json'
+if (Test-Path $installedNext) {
+    # node_modules left from before a dependency change (e.g. next 14 after pulling next 15) is not good enough
+    $wantNext = try { (Get-Content (Join-Path $uiDir 'package.json') -Raw | ConvertFrom-Json).dependencies.next } catch { $null }
+    $haveNext = try { (Get-Content $installedNext -Raw | ConvertFrom-Json).version } catch { $null }
+    if ($wantNext -and $haveNext -ne $wantNext) { Report 'MISSING' 'admin-ui deps' "next ${haveNext} installed, package.json needs ${wantNext}: run `"npm ci`" in admin-ui" }
+    else { Report 'OK' 'admin-ui deps' "node_modules present (next $haveNext)" }
+}
 else { Report 'MISSING' 'admin-ui deps' 'run "npm ci" in admin-ui (uses package-lock.json)' }
 
 # ---------------------------------------------------------------- PostgreSQL

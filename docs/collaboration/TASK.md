@@ -452,3 +452,41 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 백엔드 변경 없음 → `mvn test`는 20-1절 결과(257개 통과) 유지, 다시 돌리지 않음
 - **미실행:** `verify:dashboard`·`verify:ai-usage`(관리자 계정 비밀번호를 입력해야 함), `verify:public-news`(주소가 `localhost:3000` = daily 환경으로 고정돼 있고 daily 데이터를 기대함, daily는 실행 금지), `verify:flow`(실제 RSS·실제 AI 필요). 화면 기능 전체를 하나씩 다시 확인하지는 않음(19절 항목은 이전 PC에서 확인)
 - `aicontent_main` V3 그대로, daily 실행 안 함, 유료 AI 호출 0. 커밋·push·병합 안 함
+
+## 22. 2026-10-19 밤 `claude/content-a` → `main` 병합 전 검토와 PR 준비
+
+**20·21절 이후 실제 상태(위 절의 "미커밋·push 안 함"은 그 시점 기록):** 20절 패치는 `9762eb0`, 21절은 `9fee68b`로 커밋해 같은 날 `origin/claude/content-a`에 일반 push함. 검토 시작 시 원격 `9fee68b`, `main` `8e0c6d7`(변경 없음), 이 브랜치의 PR 없음(GitHub API 조회). 브랜치는 `main`보다 21커밋 앞, 뒤처짐 0, 67개 파일
+
+**검토 범위와 결과(main 대비 전체 diff):**
+- 상태 전이: `ContentStatusPolicy` 표가 `CONTENT_A_PLAN.md` 4절 최종 표와 같음(출발 상태·결과·사유 필수·SYSTEM_ADMIN 전용). 검수 기록 칸(`submitted_at`·`approved_*`·`status_reason`)도 4절 표대로(`storesReason`이 아닌 동작의 사유는 감사 기록에만). 상태는 이 동작과 편집 규칙으로만 바뀌고 `PATCH`는 `status`를 받지 않음
+- 권한: 승인·복귀는 `SecurityConfig`(경로)와 서비스 정책(역할) 두 곳에서 SYSTEM_ADMIN 검사. 콘텐츠 API는 모두 `/api/admin/**`, 공개 경로에 콘텐츠 없음
+- 검수·공개 우회: 제목·본문·출처·URL 변경이 모두 `ContentChanges` 한 경로(행 잠금 → 잠금 상태 409 → version 409 → 실제 변경 시에만 version +1, REVIEW·APPROVED → DRAFT, 승인 해제 기록). 원천 이슈 출처 삭제 불가. 확인 처리(acknowledge)는 승인 상태를 바꾸지 않는 별도 경로(계획 5절)
+- 중복 요청·동시 수정: 생성은 `creation_key` UNIQUE + 요청 지문, 상태·편집은 같은 행 잠금·version. 화면은 요청 큐 하나로 순서대로 보냄(`verify:content-session`)
+- 마이그레이션: V4(새 테이블 3개만) → V5(V4 CHECK 교체) → V6(링크 위치 값·URL 규칙) → V7(`issue.change_seq`·트리거, `content.origin_ack_seq`). V3 DB에 적용 시 기존 테이블 행은 바뀌지 않음(15~18절에서 `aicontent_main` 복사본으로 행 md5 비교). 영향: V7 이후 `issue` 갱신마다 BEFORE 트리거, `issue_article` 추가·삭제·이동마다 해당 `issue` 행 UPDATE(그 행 잠금)가 추가됨 — 기존 동시성 테스트는 통과. 한 번 적용하면 Flyway 기록이 V7이 되므로, 예전 코드(V3)로 그 DB를 띄울 때는 Flyway가 "미래 버전"으로 보고 넘어가지만 트리거는 남음(되돌리는 마이그레이션 없음)
+- Next.js 15·React 19: 모든 페이지가 클라이언트 컴포넌트, `middleware` 없음, 인증은 브라우저 `sessionStorage`의 Basic 헤더를 Next `rewrites`가 백엔드로 넘김. 15에서 바뀐 것 중 해당은 페이지 `params`(21절 `news/[id]`)뿐
+- **찾은 문제와 수정:**
+  1. `check-env.ps1` Node 기준이 next 14.2 값(18.17+) 그대로였음 → next 15.5 `engines`(`^18.18 || ^19.8 || >=20`)로 수정
+  2. `check-env.ps1`이 `node_modules` 폴더만 있으면 OK → 다른 PC가 next 15 커밋을 받고 `npm ci`를 안 하면(next 14 남음) 통과로 보였음. 설치된 next와 `package.json`의 next가 다르면 `[MISSING]`. `test-run-scripts.ps1`에 2개 추가(**17개**), 이전 `check-env.ps1`로 바꾸면 새 2개 실패 확인
+  3. `verify-public-news.cjs` 주소가 `localhost:3000`(daily) 고정, 첫 페이지 카드 12개·페이지 넘김을 항상 기대 → 기본값은 그대로 두고 `VERIFY_UI_URL`로 검증 환경 지정(다른 verify 스크립트와 같은 방식, 로컬 주소만 허용). 카드 수는 `min(12, 전체)`, 페이지 넘김은 12개 넘을 때만(건너뛰면 결과 줄에 표시). daily에서는 전과 같은 검사
+  4. RUNBOOK 3절 Node 기준·의존성 변경 뒤 `npm ci`·`-Rebuild` 안내 갱신
+- 백엔드 코드에서 결함은 찾지 못함(변경 없음)
+
+**postcss 권고(남은 high 1건) 판단:**
+- 경로: `next@15.5.28` → `postcss@8.4.31`(next가 정확한 버전으로 고정, 직접 의존성 아님). 권고 4건: GHSA-qx2v-qp2m-jg93(<8.5.10, 문자열화 출력에 `</style>` 미이스케이프 → XSS), GHSA-6g55-p6wh-862q(≤8.5.11)·GHSA-fxqj-rqcc-2cmp(≤8.5.22)·GHSA-r28c-9q8g-f849(≤8.5.17)(CSS 주석의 `sourceMappingURL`로 임의 `.map` 파일 읽기)
+- 성립 조건: 공격자가 PostCSS에 넣는 CSS를 정할 수 있어야 함(그 결과를 HTML `<style>`에 넣거나, source map을 읽게 하는 경우)
+- 이 프로젝트: next 안에서 postcss를 부르는 코드는 빌드용(webpack CSS 로더·글꼴 로더·CSS 압축)뿐이고, 빌드 결과 서버 코드(`.next/server`)에는 postcss가 없음. 처리되는 CSS는 저장소의 `globals.css`·`news/news.css` 2개(사람이 커밋, `sourceMappingURL` 없음, postcss 설정 파일 없음). 사용자 입력은 CSS로 처리되지 않고 텍스트로만 렌더링(A7 규칙). 따라서 실행 중 서버로는 성립하지 않고, 빌드 입력을 바꿀 수 있는 사람은 이미 저장소 쓰기 권한(빌드 스크립트 실행)을 가진 경우뿐
+- 판단: **이번 PR의 병합 차단 아님**, 후속 작업. 해결 방법은 ① postcss 8.5.23 이상을 쓰는 next 15.5.x가 나오면 올림 ② next 16 이전(주 버전 변경, 별도 작업·검증) ③ `overrides`로 postcss 강제(next가 8.4.31로 고정해 호환성 미검증이라 이번에는 하지 않음). `npm audit fix --force`(next 16 설치)는 실행하지 않음
+
+**검증(기준: `9fee68b` + 이 절의 미커밋 변경, Node 24.20.0, Windows PowerShell 5.1):**
+- `mvn test`(`aicontent_test`, stub): **257개 통과, 실패·오류·건너뜀 0**(21:09 새로 실행, surefire 합계)
+- `test-run-scripts.ps1` **17개 통과**, `check-env.ps1` 필수 누락 0(next 15.5.28 인식)
+- `npm ci`·`typecheck` 통과(21절), `next build` 15.5.28 통과(13093, 그리고 아래 13094 복사본)
+- `verify:content-session` 15/15, `verify:auth-client` 통과(21절, UI 코드는 그 뒤 변경 없음)
+- **검증 모드**(verify-content, 18093·13093, 로그인 생략): `verify:public-news`를 `VERIFY_UI_URL=http://127.0.0.1:13093`으로 **통과**(이슈 5개라 페이지 넘김은 건너뜀으로 표시), 콘텐츠 편집기 자동저장 PATCH 200·새로고침 유지(21절), 빈 본문 검수 요청 → 422 `CONTENT_NOT_READY`가 화면 경고로 표시되고 상태 안 바뀜
+- **일반(로그인) 모드**: 검증 DB 복사본 `aicontent_verify_auth_20261019`(V7)에 기본 프로필 백엔드 127.0.0.1:18094(로그인 생략 꺼짐, stub, 작업자·스케줄러 끔)와 그 주소로 빌드한 화면 13094. 시험용 SYSTEM_ADMIN은 기동 시 `ADMIN_USERNAME`/`ADMIN_PASSWORD`로 만들고 비밀번호는 `.local/run/verify-auth.cred`(Git 제외)에만 둠, 백엔드 로그에 비밀번호 없음 확인
+  - 백엔드 직접·Next 프록시 경유 각각: 로그인 생략 꺼짐, 인증 없이 `/api/admin/me`·목록·PATCH 401, 틀린 비밀번호 401, 시험 계정 200(SYSTEM_ADMIN), 공개 이슈 200. `/api/public/contents`는 인증 없이 401(경로 없음 → `denyAll`; 로그인 생략 모드에서는 이미 인증된 요청이라 403) — 어느 쪽이든 열리지 않음
+  - 프록시 경유 로그인 흐름: 생성 201 → 같은 `Idempotency-Key` 재요청 200·같은 id → 편집 200 → 오래된 version 409 → 검수 요청 REVIEW → 승인 APPROVED → 공개 이슈 상세에 콘텐츠 제목 없음 → 승인 후 편집 DRAFT(`statusChanged=true`). 콘텐츠 #5가 그 복사본 DB에 남음
+  - `verify:dashboard`·`verify:ai-usage`(`VERIFY_UI_URL=http://127.0.0.1:13094`, 시험 계정): **둘 다 통과**(브라우저 오류 0·API 실패 0)
+  - 확인 뒤 18094·13094 종료
+- **미실행:** OPERATOR 계정으로 승인·복귀 403 화면 확인(시험 계정은 SYSTEM_ADMIN 하나뿐, `ContentStatusApiIntegrationTest`가 서비스·보안 두 곳의 403을 검사), `verify:flow`(실제 RSS·실제 AI 필요), daily(8080·3000)·`aicontent_main`(실행 금지), Docker compose 구성(노트북에 Docker 없음)
+- `aicontent_main` V3 그대로, 유료 AI 호출 0

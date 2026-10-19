@@ -94,6 +94,17 @@ Write-Output "PGBIN=$PgBin"; Write-Output "PGDATA=$PgData"; Write-Output "PORT=$
     Check 'check-env names blocked variables' ($r.Out -match 'blocked variables.*SPRING_PROFILES_ACTIVE') $r.Out
     $leaked = @($secrets.Keys | Where-Object { $_ -ne 'SPRING_PROFILES_ACTIVE' -and $r.Out.Contains($secrets[$_]) })
     Check 'check-env prints no secret values' ($leaked.Count -eq 0) "leaked: $($leaked -join ', ')"
+
+    # 7. node_modules from before a dependency change (another PC pulled the next 15 upgrade) is reported, not OK
+    $nm = Join-Path $root 'admin-ui\node_modules\next'
+    New-Item -ItemType Directory -Force $nm | Out-Null
+    Set-Content (Join-Path $root 'admin-ui\package.json') -Encoding ASCII -Value '{"dependencies":{"next":"15.5.28"}}'
+    Set-Content (Join-Path $nm 'package.json') -Encoding ASCII -Value '{"name":"next","version":"14.2.15"}'
+    $r = Invoke-Copy 'check-env.ps1'
+    Check 'check-env reports stale admin-ui deps' ($r.Out -match '\[MISSING\] admin-ui deps\s+next 14\.2\.15 installed, package\.json needs 15\.5\.28') $r.Out
+    Set-Content (Join-Path $nm 'package.json') -Encoding ASCII -Value '{"name":"next","version":"15.5.28"}'
+    $r = Invoke-Copy 'check-env.ps1'
+    Check 'check-env accepts matching admin-ui deps' ($r.Out -match '\[OK\s*\] admin-ui deps\s+node_modules present \(next 15\.5\.28\)') $r.Out
 } finally {
     Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
 }

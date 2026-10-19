@@ -14,19 +14,28 @@ async function main() {
     page.on('request', request => {
       if (request.url().includes('/api/public/') && request.headers().authorization) credentialSent = true;
     });
-    const base = 'http://localhost:3000';
+    // Default stays the daily UI; a verify environment is given as e.g. VERIFY_UI_URL=http://127.0.0.1:13093
+    const base = (process.env.VERIFY_UI_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    assert(['localhost', '127.0.0.1'].includes(new URL(base).hostname), 'Use a local development server');
     const output = path.resolve(__dirname, '../../.local/screenshots');
     fs.mkdirSync(output, { recursive: true });
     await page.goto(base + '/news');
     await page.locator('.news-card').first().waitFor();
-    assert.equal(await page.locator('.news-card').count(), 12);
+    // 12 per page: a full first page when there are more issues, otherwise all of them; pagination only with more
+    const total = Number((await page.locator('.news-results').textContent()).replace(/[^0-9]/g, ''));
+    assert.equal(await page.locator('.news-card').count(), Math.min(12, total));
     await page.screenshot({ path: path.join(output, 'public-news-desktop.png'), fullPage: true });
     const firstTitle = await page.locator('.news-card h2').first().textContent();
     const firstHref = await page.locator('.news-card').first().getAttribute('href');
-    await page.getByRole('button', { name: '다음 →', exact: true }).click();
-    await page.locator('.news-pagination').getByText(/^2 \/ /).waitFor();
-    await page.getByRole('button', { name: '이전', exact: false }).click();
-    await page.locator('.news-pagination').getByText(/^1 \/ /).waitFor();
+    if (total > 12) {
+      await page.getByRole('button', { name: '다음 →', exact: true }).click();
+      await page.locator('.news-pagination').getByText(/^2 \/ /).waitFor();
+      await page.getByRole('button', { name: '이전', exact: false }).click();
+      await page.locator('.news-pagination').getByText(/^1 \/ /).waitFor();
+    } else {
+      assert.equal(await page.locator('.news-pagination').count(), 0);
+      console.log(`pagination not checked: ${total} issue(s) fit on one page`);
+    }
     await page.getByRole('textbox', { name: '이슈 검색', exact: true }).fill('no-results-' + Date.now());
     await page.getByRole('button', { name: '검색 ↗', exact: true }).click();
     await page.getByRole('heading', { name: '검색 결과가 없습니다.' }).waitFor();
@@ -58,7 +67,7 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(base + '/news');
     await page.locator('.news-card').first().waitFor();
-    console.log('PASS: public list, pagination, search, empty results, details, source links, 404, mobile, no auth headers');
+    console.log(`PASS: public list, ${total > 12 ? 'pagination' : 'single page (pagination not checked)'}, search, empty results, details, source links, 404, mobile, no auth headers`);
     if (visible) await new Promise(resolve => browser.on('disconnected', resolve));
   } finally { await browser.close(); }
 }
