@@ -15,10 +15,7 @@ $cfg = Get-RunEnv $Target
 if (-not (Test-Path $BackendJar)) { throw "no backend jar: run .\scripts\run\build.ps1 first" }
 
 # Leftovers that command-line arguments cannot fully neutralise (extra profiles / config files / JVM properties)
-$risky = @(Get-ChildItem Env: | Where-Object {
-    $_.Name -match '^(SPRING_PROFILES_|SPRING_CONFIG_|SPRING_APPLICATION_JSON$|SPRING_DATASOURCE_|SERVER_ADDRESS$|APP_LOCAL_?VERIFY|APP_AI_PROVIDER$|APP_AI_OPENAI_|APP_AI_EMBEDDING_?GUARD)' -or
-    ($_.Name -match '^(JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$' -and $_.Value -match '-D')
-} | ForEach-Object { $_.Name })
+$risky = @(Get-RiskyEnvNames)
 if ($risky.Count -gt 0) {
     throw "these environment variables could change the environment; clear them in this terminal first (Remove-Item Env:NAME): $($risky -join ', ')"
 }
@@ -38,7 +35,7 @@ $args2 = @('-jar', $BackendJar,
     "--spring.profiles.active=$springProfile",                  # live (paid AI only) brings the model prices and RSS sources
     "--app.local-verify.login-bypass=$(if ($cfg.Profile -eq 'local-verify') { 'true' } else { 'false' })",
     "--app.ai.provider=$provider",
-    "--spring.datasource.url=jdbc:postgresql://127.0.0.1:55432/$($cfg.Db)",
+    "--spring.datasource.url=jdbc:postgresql://127.0.0.1:$DbPort/$($cfg.Db)",
     '--server.address=127.0.0.1',
     "--server.port=$($cfg.BackendPort)",
     '--app.news.scheduler-enabled=false')                 # collection only by hand from the admin screen

@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-13 KST · 기준 커밋 `191bc8b` + 이번 커밋 9개(아래 6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달). `main` 병합은 PC 검증 후 (GitHub `Kdhcode/AI-content-platform`)
+최종 갱신: 2026-10-19 KST · 20절(새 노트북 점검·실행 스크립트) 추가, 기준 `claude/content-a` `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -402,3 +402,36 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 브라우저 검증 중 고친 것: 출처 역할 선택이 예전 값을 보내던 문제(비동기 요청이 React가 되돌린 값을 읽음), 버튼 연타 시 여러 번 전송(상태 대신 ref로 막음), 같은 값 저장 시 "바꿨습니다" 대신 "바뀐 내용 없음"
 - 실제 한글 IME는 자동화로 칠 수 없어 composition 이벤트로 확인. 이탈 확인 창은 사용자 조작이 없으면 브라우저가 띄우지 않아 처리기 동작(`beforeunload` 취소 여부)으로 확인
 - 유료 AI 호출 0. `aicontent_main`(V3)·daily 서버(3000·8080) 그대로
+
+## 20. 2026-10-19 새 노트북 이전 점검 · 실행 스크립트 PC별 경로 (`claude/content-a` 기준 패치, 미커밋)
+
+- 기준: 노트북 작업 폴더 `main` = `8e0c6d7`(10-19 13:01 clone, fetch 완료, 미커밋 변경 없음). **다른 PC의 최신 작업이 `main`에 없음**: `origin/claude/content-a` 19커밋(`ad9d5a2`, 15~19절), `origin/claude/post-merge-check` 1커밋(`6c75b16`, 14절 문서). 두 브랜치 모두 `main` 위에서 갈라져 뒤처짐 0. 서로는 `TASK.md`에서 충돌(병합 시 14절과 15절 이후를 둘 다 남기면 됨). `main`에서 중복 구현하지 않고 `content-a`(`ad9d5a2`) 기준으로 작업
+- 저장소에 `AGENTS.md` 없음(15절과 같음) → `RULES.md`·이 문서 기준
+- 노트북 환경(파일 목록으로 확인, 이 세션은 노트북 터미널 입력 불가): JDK 21.0.8·17.0.10(`C:\Program Files\Java`), Git 있음. **Node.js·npm 없음, Maven 없음(저장소에 wrapper 없음), Docker Desktop 없음, PostgreSQL 없음.** `.local/`(프로젝트 PostgreSQL·pgvector·Maven·`machine.ps1`·계정 비밀번호 파일)과 이전 PC의 DB 데이터(`aicontent_main` 등)는 Git에 없어 넘어오지 않음. IntelliJ 설정 폴더는 표준 위치(`Program Files`, `AppData\Roaming`)에서 찾지 못함
+- 확인된 결함(새 PC에서 실행을 막음): `common.ps1`이 `machine.ps1`을 **기본값보다 먼저** 읽어 `$PgBin`·`$PgData`·`$MavenCmd`를 덮어써도 되돌아감(`.local` 경로만 가능). DB 포트 `55432`가 `start-db.ps1`·`start-backend.ps1`에 고정돼 docker compose(5432)와 함께 쓸 수 없음. 도구가 없으면 "명령을 찾을 수 없음"으로만 실패
+- 수정: `common.ps1`(기본값 → `machine.ps1` 순서, `$DbPort` 추가·검증, `$MavenCmd`가 없으면 PATH의 `mvn`, 금지 변수 검사를 `Get-RiskyEnvNames`로 옮겨 공유), `start-db.ps1`(도구가 없을 때 포트가 열려 있으면 외부 DB로 인정, 아니면 안내와 함께 중단, 클러스터 없음 안내), `start-backend.ps1`(DB URL에 `$DbPort`, 주소는 `127.0.0.1` 고정 유지), `build.ps1`(Maven 없음 안내)
+- 추가: `check-env.ps1`(읽기 전용 점검. Git 브랜치·미커밋·현재 브랜치에 없는 원격 커밋, Java·Maven·Node·`node_modules`, DB 포트·환경별 DB·pgvector·스키마 버전, Docker, 환경 변수는 설정 여부만, 실행 중인 서버·health. 필수 누락 시 종료 코드 1), `test-run-scripts.ps1`(임시 폴더 복사본으로 위 동작 15개 확인, 서버·DB·Maven·Node 불필요). RUNBOOK 3절 갱신
+- 테스트(클라우드 Linux, PowerShell 7.4.6): `test-run-scripts.ps1` 15개 통과. 이전 `common.ps1`로 되돌리면 9개 실패, `check-env`가 비밀값을 출력하도록 일부러 바꾸면 1개 실패 확인. 6개 스크립트 구문 오류 0. 별도로 가짜 Java·Node·Maven과 임시 PostgreSQL 16(pgvector 없음/있음)으로 `check-env.ps1` 출력 확인(비밀값 미출력, pgvector 없는 서버 `[MISSING]`)
+- **미실행:** Windows PowerShell 5.1에서의 실행(노트북 터미널 입력 불가), `mvn package`·`npm ci`·타입 검사·`next build`(클라우드에서 Maven Central·npm 레지스트리 차단, 노트북에는 Maven·Node 없음). 백엔드·화면 코드는 바꾸지 않음. 유료 AI 호출 0
+
+### 20-1. 2026-10-19 오후 노트북 실행 결과 (Windows PowerShell 5.1.26100, JDK 21.0.8)
+
+- 기준 커밋: `claude/content-a` = `ad9d5a2`(origin과 같음) + 위 패치(미커밋). 이전 PC의 `.local`(pg16·pgdata·Maven·m2)을 복사해 옴, `machine.ps1`은 `JAVA_HOME = jdk-21`만 지정
+- 실행 명령: `powershell -ExecutionPolicy Bypass -File .\.local\setup-laptop.ps1`(브랜치 전환 → 패치 적용 → 자체 점검 → check-env → npm ci → DB 시작 → `build.ps1` → `mvn test` → check-env). 1회차 로그는 `.local\setup-laptop.run1.log`, 2회차는 `.local\setup-laptop.log`(Git 밖)
+- 1회차에서 나온 문제 2건과 수정:
+  - `test-run-scripts.ps1`이 4개 통과 뒤 중단: Windows PowerShell 5.1은 `$ErrorActionPreference = 'Stop'` 상태에서 네이티브 명령의 stderr를 `2>&1`로 받으면 종료 오류로 바꿈(클라우드 PowerShell 7에서는 안 생김). 자식 셸 실행부(`Invoke-Copy`)만 `Continue`로 바꿈 → **15개 통과**(수정 전 같은 PC에서 실패 확인). 검사 내용은 바꾸지 않음
+  - DB 시작 단계에서 멈춤: `setup-laptop.ps1`이 `start-db.ps1` 출력을 파이프로 받는데, `pg_ctl`이 띄운 postgres가 그 파이프 핸들을 물려받아 파이프가 닫히지 않음. DB는 정상 기동(이전 PC에서 비정상 종료된 데이터라 자동 복구 후 `accepting connections`). `.local\setup-laptop.ps1`(Git 밖)에서 이 단계만 별도 숨김 창으로 실행하도록 바꿈. `start-db.ps1`을 터미널에서 직접 실행하는 경우는 해당 없음
+- 2회차 결과:
+  - 자체 점검 `test-run-scripts.ps1` **15개 통과**
+  - `build.ps1`(`mvn package -DskipTests`) **BUILD SUCCESS**, `.local\run\platform-backend.jar` 갱신(15:10)
+  - `mvn test`(`TEST_DB_URL` = `127.0.0.1:55432/aicontent_test`, stub AI): **257개 통과, 실패 0, 오류 0, 건너뜀 0**(surefire 보고서 합계, 19절과 같은 개수)
+  - check-env: Java 21.0.8·Maven 3.9.9·프로젝트 PostgreSQL 정상. **`[MISSING]` node, admin-ui deps** → 이때는 `npm ci`·타입 검사 미실행(Node.js 미설치)
+- 사용자가 Node.js LTS 설치(v24.20.0, npm 11.19.0) 뒤 이어서 실행:
+  - `admin-ui`에서 `npm ci --no-audit --no-fund` **통과**(exit 0), `npm run typecheck`(`tsc --noEmit`) **통과**(exit 0). npm이 `next@14.2.15`에 보안 취약점 경고를 냄(업그레이드는 따로 판단)
+  - `start-ui.ps1 -Target verify-content`: `next build` **Compiled successfully**, 127.0.0.1:13093 기동. `/`·`/contents`·`/news` 200. 내장 브라우저에서 `/contents` 목록이 백엔드 18093 데이터(콘텐츠 4건, 이전 PC 검증 데이터)를 표시하는 것 확인. 화면 기능 전체 재검증은 하지 않음(19절에서 이전 PC로 확인)
+  - 기동 뒤에도 `aicontent_main` V3
+- DB 버전 확인(실행 전후 같음): `aicontent_main` **V3 그대로**, `aicontent_verify_content` V7, `aicontent_test` V7. daily 환경(8080·3000)·`aicontent_main` 실행 안 함
+- 검증 환경 `verify-content`: 백엔드 `start-backend.ps1 -Target verify-content`(127.0.0.1:18093, stub, 작업자 끔) **기동 확인**: `/actuator/health` UP, `/api/local-verify/mode` = loginBypass true·aiProvider stub, Flyway "V7, 마이그레이션 없음", 기동 뒤에도 `aicontent_main` V3. 화면 13093은 처음엔 Node.js가 없어 못 띄웠고, 설치 뒤 기동(위 항목)
+- 이번 세션에서 띄운 PostgreSQL·백엔드는 도구 세션에서 시작돼 세션이 끝나면 함께 멈출 수 있음. 계속 쓰려면 사용자 터미널에서 `start-db.ps1`부터 다시 실행
+- 유료 AI 호출 0. 커밋·push·병합 안 함
+
