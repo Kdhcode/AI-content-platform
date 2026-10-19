@@ -24,6 +24,8 @@ const USAGE = [
 ].join("\n");
 
 class TargetError extends Error {}
+// Messages never repeat what was typed: a mistyped URL can still hold a user name, password or token (in the user
+// info, host, scheme, path or query). Only the port is shown, which the URL parser accepts as digits only.
 const refuse = (why) => { throw new TargetError(`${why}\n${USAGE}`); };
 
 /**
@@ -35,10 +37,10 @@ function checkWriteTarget(env, credentialNames = []) {
   const raw = (env.VERIFY_UI_URL || "").trim();
   if (!raw) refuse("VERIFY_UI_URL is not set: this script writes data and has no default address.");
   let url;
-  try { url = new URL(raw); } catch { refuse(`VERIFY_UI_URL is not a valid URL: ${JSON.stringify(raw)}`); }
-  if (url.protocol !== "http:") refuse(`VERIFY_UI_URL must use http:// (local UI), got ${url.protocol}`);
+  try { url = new URL(raw); } catch { refuse("VERIFY_UI_URL is not a valid URL (value not shown)."); }
+  if (url.protocol !== "http:") refuse("VERIFY_UI_URL must use http:// (local UI).");
   if (url.username || url.password) refuse("VERIFY_UI_URL must not contain a user name or password.");
-  if (!ALLOWED_HOSTS.has(url.hostname)) refuse(`VERIFY_UI_URL host must be localhost or 127.0.0.1, got ${url.hostname}`);
+  if (!ALLOWED_HOSTS.has(url.hostname)) refuse("VERIFY_UI_URL host must be localhost or 127.0.0.1.");
   if (!url.port) refuse("VERIFY_UI_URL needs an explicit port of a verify environment (e.g. :13098).");
   if (REFUSED_PORTS.has(url.port)) refuse(`VERIFY_UI_URL port ${url.port} is the ${REFUSED_PORTS.get(url.port)}, not a verify environment.`);
   if (url.pathname !== "/" || url.search || url.hash) refuse("VERIFY_UI_URL must be the UI origin only (no path, query or fragment).");
