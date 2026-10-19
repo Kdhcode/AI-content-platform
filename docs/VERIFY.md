@@ -87,6 +87,20 @@ DB를 중지/시작하려면 프로젝트 루트에서 다음 명령을 사용�
 & .local/pg16/pgsql/bin/pg_ctl.exe -D .local/pgdata -l .local/postgres-server.log -o '-p 55432 -h 127.0.0.1' -w start
 ```
 
+## CI (GitHub Actions, `.github/workflows/ci.yml`, 2026-10-19)
+
+**실행 조건:** 모든 브랜치 push. pull_request는 포크에서 온 PR만 따로 돌린다(이 저장소 브랜치의 PR은 같은 커밋의 push 실행 결과가 PR에 표시됨). 같은 브랜치에 새로 push하면 이전 실행은 취소된다. 권한은 `contents: read`만, 저장소 비밀값은 쓰지 않는다.
+
+| 작업 | 실행 환경 | 검사 |
+|---|---|---|
+| `backend` | ubuntu, JDK 21(temurin), 서비스 컨테이너 `pgvector/pgvector:pg16`(DB `aicontent_test`, CI 안에서만 쓰는 비밀번호) | `mvn -B -ntp test` — 단위·통합 테스트 전체(통합 테스트는 stub AI·로컬 모의 서버·고정 데이터, 실제 RSS·유료 AI 없음). Redis는 테스트에 필요 없어 띄우지 않음 |
+| `admin-ui` | ubuntu, Node 24 | `npm ci` → `npm run typecheck` → `npm run build` → `verify:content-session` → `verify:auth-client` → `verify:write-target` |
+| `run-scripts` | windows, Windows PowerShell 5.1 | `scripts/run/test-run-scripts.ps1` |
+
+CI에 넣지 않은 검사: `verify:flow`(실제 RSS·실제 AI), `verify:dashboard`·`verify:ai-usage`·`verify:public-news`·`verify:content-roles`(실행 중인 백엔드·화면과 계정이 필요), daily·`aicontent_main` 관련 작업 전부.
+
+**실패 확인:** GitHub 저장소 → Actions → 해당 실행 → 실패한 작업의 단계 로그. `backend`가 실패하면 그 실행의 Artifacts에 `backend-surefire-reports`(테스트 보고서 XML·TXT, 7일 보관)가 올라간다. DB 덤프·비밀값은 올리지 않는다. 같은 검사를 로컬에서 다시 돌리려면 위 "표준 재실행"의 `mvn test`(빈 테스트 DB에서도 Flyway가 V1~V7을 만든다)와 `admin-ui`의 같은 npm 명령, `.\scripts\run\test-run-scripts.ps1`.
+
 ## 실제 OpenAI 연결
 
 어댑터는 [Chat Completions 공식 API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)와
