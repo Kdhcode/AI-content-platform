@@ -17,6 +17,8 @@ const { checkWriteTarget, TargetError } = require("./lib/write-target.cjs");
 const FAKE = "fake-secret-7f3a91";   // made-up marker; no real credential is used anywhere in this test
 const CREDS = { OPERATOR_USERNAME: "op-user", OPERATOR_PASSWORD: `op-${FAKE}`, ADMIN_USERNAME: "admin-user", ADMIN_PASSWORD: `admin-${FAKE}` };
 const CRED_NAMES = Object.keys(CREDS);
+const FLOW_CREDS = { ADMIN_USERNAME: CREDS.ADMIN_USERNAME, ADMIN_PASSWORD: CREDS.ADMIN_PASSWORD };   // verify:flow uses only these
+const FLOW_CRED_NAMES = Object.keys(FLOW_CREDS);
 const CHILD_TIMEOUT_MS = 30000;
 let failures = 0;
 const check = async (name, fn) => {
@@ -68,6 +70,20 @@ async function functionCases() {
     assert.deepEqual(checkWriteTarget({ ...CREDS, VERIFY_UI_URL: "http://localhost:13093/", VERIFY_CONFIRM_VERIFY_DB: " 13093 " }, CRED_NAMES),
       { base: "http://localhost:13093", port: "13093" });
   });
+  // verify:flow's call: its own command and admin account only in the usage; no OPERATOR account required
+  const flow = (env) => () => checkWriteTarget(env, FLOW_CRED_NAMES, "npm run verify:flow");
+  await check("flow: refusal shows the verify:flow usage with admin variables only", () => {
+    assert.throws(flow({ ...FLOW_CREDS }), (e) => e instanceof TargetError && /ADMIN_USERNAME=\.\.\. ADMIN_PASSWORD=\.\.\. npm run verify:flow/.test(e.message)
+      && !/verify:content-roles|OPERATOR_/.test(e.message) && !e.message.includes(FAKE));
+  });
+  await check("flow: missing admin password", () => {
+    assert.throws(flow({ ...FLOW_CREDS, ADMIN_PASSWORD: "", VERIFY_UI_URL: "http://127.0.0.1:13098", VERIFY_CONFIRM_VERIFY_DB: "13098" }),
+      (e) => /Set ADMIN_PASSWORD/.test(e.message) && /npm run verify:flow/.test(e.message));
+  });
+  await check("flow: allowed with admin account only (no OPERATOR variables)", () => {
+    assert.deepEqual(flow({ ...FLOW_CREDS, VERIFY_UI_URL: "http://127.0.0.1:13098", VERIFY_CONFIRM_VERIFY_DB: "13098" })(),
+      { base: "http://127.0.0.1:13098", port: "13098" });
+  });
 }
 
 // ---------------------------------------------------------------- 2. connection counting with real child processes
@@ -113,12 +129,14 @@ const settle = () => new Promise((r) => setTimeout(r, 300));
 async function scriptCases() {
   const target = await counter(0);
   assert(target, "could not open a local test listener");
-  const daily = await counter(3000);          // only when this test can open 3000 itself
-  const counters = [target, daily].filter(Boolean);
+  const daily = await counter(3000);          // only when this test can open 3000 / 3001 itself
+  const dev = await counter(3001);
+  const counters = [target, daily, dev].filter(Boolean);
   const base = { ...process.env };
   for (const k of ["VERIFY_UI_URL", "VERIFY_CONFIRM_VERIFY_DB", ...CRED_NAMES]) delete base[k];
   const families = (c) => `127.0.0.1${c.v6 ? " + ::1" : " only (no IPv6 here)"}`;
-  console.log(`listeners: test port ${target.port} on ${families(target)}; port 3000 ${daily ? "on " + families(daily) : "not opened (in use here)"}`);
+  const opened = (c) => (c ? "on " + families(c) : "not opened (in use here)");
+  console.log(`listeners: test port ${target.port} on ${families(target)}; port 3000 ${opened(daily)}; port 3001 ${opened(dev)}`);
   try {
     // positive controls: a test-only child that does connect MUST be counted, over 127.0.0.1 and over "localhost"
     const connector = `const net=require("net");const [h,p]=process.argv.slice(1);const s=net.connect({host:h,port:Number(p)},()=>{s.end();process.exit(0)});s.on("error",e=>{console.error(e.code);process.exit(2)});`;
@@ -133,24 +151,34 @@ async function scriptCases() {
       });
     }
 
-    // the real script with wrong settings: exits 1, shows the usage, prints no secret, never connects
+    // the real entry points with wrong settings: exit 1, show their own usage, print no secret, never connect
+    const ROLES = ["verify-content-roles.cjs", "npm run verify:content-roles"];
+    const FLOW = ["verify-flow.cjs", "npm run verify:flow"];
     const cases = [
-      ["script: no VERIFY_UI_URL", { ...CREDS }, target],
-      ["script: daily http://127.0.0.1:3000 with confirm", { ...CREDS, VERIFY_UI_URL: "http://127.0.0.1:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
-      ["script: daily http://localhost:3000 with confirm", { ...CREDS, VERIFY_UI_URL: "http://localhost:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
-      ["script: local test port without confirm", { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}` }, target],
-      ["script: localhost test port without confirm", { ...CREDS, VERIFY_UI_URL: `http://localhost:${target.port}` }, target],
-      ["script: local test port with wrong confirm", { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: "1" }, target],
-      ["script: external host", { ...CREDS, VERIFY_UI_URL: `http://example.com:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
-      ["script: invalid URL with a fake password", { ...CREDS, VERIFY_UI_URL: `http://admin:${FAKE}@[bad:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
-      ["script: user info with a fake password", { ...CREDS, VERIFY_UI_URL: `http://admin:${FAKE}@127.0.0.1:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
-      ["script: fake token in the query", { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}/?token=${FAKE}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["script: no VERIFY_UI_URL", ROLES, { ...CREDS }, target],
+      ["script: daily http://127.0.0.1:3000 with confirm", ROLES, { ...CREDS, VERIFY_UI_URL: "http://127.0.0.1:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
+      ["script: daily http://localhost:3000 with confirm", ROLES, { ...CREDS, VERIFY_UI_URL: "http://localhost:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
+      ["script: local test port without confirm", ROLES, { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}` }, target],
+      ["script: localhost test port without confirm", ROLES, { ...CREDS, VERIFY_UI_URL: `http://localhost:${target.port}` }, target],
+      ["script: local test port with wrong confirm", ROLES, { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: "1" }, target],
+      ["script: external host", ROLES, { ...CREDS, VERIFY_UI_URL: `http://example.com:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["script: invalid URL with a fake password", ROLES, { ...CREDS, VERIFY_UI_URL: `http://admin:${FAKE}@[bad:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["script: user info with a fake password", ROLES, { ...CREDS, VERIFY_UI_URL: `http://admin:${FAKE}@127.0.0.1:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["script: fake token in the query", ROLES, { ...CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}/?token=${FAKE}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["flow script: no VERIFY_UI_URL (former default was the daily UI)", FLOW, { ...FLOW_CREDS }, daily || target],
+      ["flow script: daily http://127.0.0.1:3000 with confirm", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: "http://127.0.0.1:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
+      ["flow script: daily http://localhost:3000 with confirm", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: "http://localhost:3000", VERIFY_CONFIRM_VERIFY_DB: "3000" }, daily],
+      ["flow script: dev http://127.0.0.1:3001 with confirm", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: "http://127.0.0.1:3001", VERIFY_CONFIRM_VERIFY_DB: "3001" }, dev],
+      ["flow script: external host", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: `http://example.com:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
+      ["flow script: local test port without confirm", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: `http://127.0.0.1:${target.port}` }, target],
+      ["flow script: local test port with wrong confirm", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: `http://localhost:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: "13098" }, target],
+      ["flow script: user info with a fake password", FLOW, { ...FLOW_CREDS, VERIFY_UI_URL: `http://admin:${FAKE}@127.0.0.1:${target.port}`, VERIFY_CONFIRM_VERIFY_DB: target.port }, target],
     ];
-    for (const [name, env, listener] of cases) {
-      if (!listener) { console.log(`SKIP ${name} (port 3000 is in use here; the function cases above cover it)`); continue; }
+    for (const [name, [file, command], env, listener] of cases) {
+      if (!listener) { console.log(`SKIP ${name} (that port is in use here; the function cases above cover it)`); continue; }
       await check(name, async () => {
         const before = counters.map((c) => c.hits());
-        const r = await run([path.join(__dirname, "verify-content-roles.cjs")], { ...base, ...env });
+        const r = await run([path.join(__dirname, file)], { ...base, ...env });
         await settle();
         assert.equal(r.error, null, r.error);
         // the safety property first, so a failure says whether anything reached a listener
@@ -159,6 +187,8 @@ async function scriptCases() {
         assert(!r.out.includes(FAKE), "a secret was printed");
         assert.equal(r.code, 1, `exit ${r.code}`);
         assert.match(r.out, /VERIFY_UI_URL=http:\/\/127\.0\.0\.1:13098 VERIFY_CONFIRM_VERIFY_DB=13098/);
+        assert(r.out.includes(command), `the usage does not name ${command}`);
+        if (file === FLOW[0]) assert.doesNotMatch(r.out, /verify:content-roles|OPERATOR_/, "verify:flow's usage mentions the role check");
         assert.doesNotMatch(r.out, /PASS /);
       });
     }

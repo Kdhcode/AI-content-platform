@@ -556,8 +556,27 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **이전 기록 구분:** 23-1절의 "연결 계수기 연결 **0**"은 `spawnSync` 방식으로 잰 값이라, 그 방식만으로는 연결이 없었다는 근거가 되지 못함(이벤트 루프가 멈춰 있었음). 23-1의 사전 검사가 브라우저를 띄우기 전에 종료한다는 판단은 코드 순서와 아래 비동기 측정으로 다시 확인함
 - **검증(기준 `df5a06c` + 이 절의 미커밋 변경, Node 24.20.0):**
   - `node --check`: `lib/write-target.cjs`·`verify-write-target.cjs`·`verify-content-roles.cjs` 통과
-  - `npm run verify:write-target` **41개 통과**: 함수 27개(가짜 비밀값 `fake-secret-…`이 든 잘못된 URL·`Bearer` 값·사용자 정보 비밀번호(로컬·외부 호스트)·쿼리·경로·호스트·스킴 8개 추가 — 모두 거부되고 메시지에 비밀값 없음, 허용 2개 통과) + 양성 대조 3개 + 실제 스크립트 11개(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, 시험 포트 `127.0.0.1`·`localhost` 확인 값 없음, 확인 값 틀림, 외부 호스트, 가짜 비밀번호 든 잘못된 URL, 가짜 비밀번호 든 사용자 정보, 가짜 토큰 쿼리 → 모두 종료 코드 1, **비동기 측정으로 연결 0**(IPv4+IPv6), 비밀값 미출력, 실행 예시 안내)
+  - `npm run verify:write-target` **40개 통과, 실패 0, 건너뜀 0**(23-3에서 정정: 처음에 41개·실제 스크립트 11개로 잘못 적음. 같은 코드를 다시 실행해 PASS 줄을 센 결과 함수 27 + 양성 대조 3 + 실제 스크립트 10 = 40): 함수 27개(가짜 비밀값 `fake-secret-…`이 든 잘못된 URL·`Bearer` 값·사용자 정보 비밀번호(로컬·외부 호스트)·쿼리·경로·호스트·스킴 8개 추가 — 모두 거부되고 메시지에 비밀값 없음, 허용 2개 통과) + 양성 대조 3개 + 실제 스크립트 10개(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, 시험 포트 `127.0.0.1`·`localhost` 확인 값 없음, 확인 값 틀림, 외부 호스트, 가짜 비밀번호 든 잘못된 URL, 가짜 비밀번호 든 사용자 정보, 가짜 토큰 쿼리 → 모두 종료 코드 1, **비동기 측정으로 연결 0**(IPv4+IPv6), 비밀값 미출력, 실행 예시 안내)
   - 대조 ①: 이전 `write-target.cjs`(`df5a06c`)로 바꾸면 6개 **실패**(입력 원문 출력: 문자열 아닌 값, 가짜 비밀번호 든 잘못된 URL, `Bearer` 값, 호스트·스킴의 가짜 비밀값, 스크립트 출력의 가짜 비밀번호)
-  - 대조 ②: 보호 전 `verify-content-roles.cjs`(`78a9fa6`)로 바꾸면 실제 스크립트 10개 **실패**, 그중 8개는 계수기가 직접 잡음(주소 없음·3000 경우 → 이 시험의 3000 리스너에 새 연결 2회, 시험 포트 경우 → 2회; 나머지 2개는 예전 스크립트도 거부했으나 안내 문구가 없어 실패). 되돌린 뒤 41개 통과
+  - 대조 ②: 보호 전 `verify-content-roles.cjs`(`78a9fa6`)로 바꾸면 실제 스크립트 10개 **실패**, 그중 8개는 계수기가 직접 잡음(주소 없음·3000 경우 → 이 시험의 3000 리스너에 새 연결 2회, 시험 포트 경우 → 2회; 나머지 2개는 예전 스크립트도 거부했으나 안내 문구가 없어 실패). 되돌린 뒤 40개 통과(정정 전 41)
 - **미실행:** 백엔드 `mvn test`, 권한 화면 11단계(이번 변경은 사전 검사·시험 코드뿐, 23-1에서 통과), 저장소에 `npm run verify`라는 스크립트는 없어 `verify:write-target`과 구문 검사로 대신함. `verify:flow` 보호는 별도 후속 항목(이번에 섞지 않음)
 - `aicontent_main`·daily 미사용, 유료 AI 호출 0
+- 23-2절 작업은 `6ef7b96`으로 커밋·`claude/operator-ui-check`에 일반 push
+
+### 23-3. 2026-10-19 밤 `verify:flow` 실행 대상 보호와 23-2 개수 정정 (기준 `6ef7b96`)
+
+- **23-2 개수 정정:** `6ef7b96`의 `npm run verify:write-target`을 다시 실행해 결과 줄을 셈 → **40개 통과(함수 27, 양성 대조 3, 실제 스크립트 10), 실패 0, 건너뜀 0.** 23-2에 적은 "41개·실제 스크립트 11개"는 틀린 숫자라 그 자리에 정정 표시를 남기고 고침(`cases` 배열이 10개). 숫자를 맞추려고 시험을 더하지 않음
+- **`verify:flow` 확인:** `package.json`의 `verify:flow` → `scripts/verify-flow.cjs`. 주소 기본값이 `http://localhost:3000`(daily UI → `aicontent_main`)이었고 로컬 호스트 여부만 검사. 브라우저 실행은 `chromium.launch`, 첫 요청은 `/login` 이동, 실제 RSS 수집은 "지금 수집" 클릭(`POST .../collect`), 상태 변경은 이슈 `PATCH`(REVIEW) 뒤 확정. 계정 변수는 `ADMIN_USERNAME`·`ADMIN_PASSWORD`만 씀
+- **수정:**
+  - `verify-flow.cjs`: 기본 주소 제거. `main()` 첫 줄에서 `checkWriteTarget(process.env, ["ADMIN_USERNAME", "ADMIN_PASSWORD"], "npm run verify:flow")` — 통과한 뒤에만 Playwright를 불러 브라우저를 띄움(그 전 요청 없음). OPERATOR 계정은 요구하지 않음. 수집·분석·임베딩·분류 대기, `VERIFY_REQUIRE_REAL_AI` 검사, 실패 시 이슈 상태 복원 등 기존 검증 로직은 그대로
+  - `lib/write-target.cjs`: 거부 안내를 호출 스크립트에 맞춤 — `checkWriteTarget(env, 계정 변수, 실행 명령)`의 계정 변수·명령으로 예시를 만듦(`verify:flow`는 `ADMIN_USERNAME=... ADMIN_PASSWORD=... npm run verify:flow`, 역할 검사는 기존대로). 검사 규칙(필수 값, 3000·3001 거부, 확인 값 일치, 입력 원문 미출력)은 그대로. 주석에 "유료 AI 사용 승인도 아님" 추가
+  - `verify-content-roles.cjs`: 실행 명령을 명시해 넘김(동작 같음)
+  - `verify-write-target.cjs`: `verify:flow` 함수 3개(안내가 `verify:flow`·`ADMIN_*`만 보이고 역할 검사·OPERATOR를 말하지 않음, 관리자 비밀번호 없으면 거부, 관리자 계정만으로 사전 검사 통과)와 실제 `verify-flow.cjs` 실행 8개 추가. 계수기를 3001에도(시험이 직접 열 수 있을 때만)
+  - `docs/VERIFY.md`: `verify:flow` 실행 방법(필수 변수), 한계(실수 방지일 뿐 DB 증명·유료 AI 승인이 아님, 유료 호출은 백엔드 실행 설정이 정함)
+- **검증(기준 `6ef7b96` + 이 절의 미커밋 변경, Node 24.20.0):**
+  - `node --check`: `lib/write-target.cjs`·`verify-write-target.cjs`·`verify-content-roles.cjs`·`verify-flow.cjs` 통과
+  - `npm run verify:write-target` **51개 통과, 실패 0, 건너뜀 0** = 함수 30(기존 27 + `verify:flow` 3) + 양성 대조 3(`127.0.0.1`·`localhost`·`::1` 연결 모두 계수) + 역할 검사 스크립트 10(기존 보호 유지) + `verify-flow.cjs` 8(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, `127.0.0.1:3001`+확인 값, 외부 호스트, 확인 값 없음, 확인 값 불일치, 가짜 비밀번호 든 사용자 정보 → 모두 종료 코드 1, `verify:flow` 안내, 비밀값 미출력, **연결 0**). 리스너는 이 시험이 직접 연 것만(시험 포트·3000·3001 각각 `127.0.0.1`+`::1`, 실행 전후 3000·3001 미사용 확인)
+  - 대조: 보호 전 `verify-flow.cjs`(`6ef7b96`)로 바꾸면 `verify-flow.cjs` 8개 모두 **실패**, 그중 7개는 계수기가 직접 잡음(주소 없음·3000 → 이 시험의 3000 리스너에 새 연결 2회, 3001 → 2회, 시험 포트 → 2회; 외부 호스트는 예전 스크립트도 거부했으나 안내 문구가 없어 실패). 되돌린 뒤 51개 통과
+- **미실행:** `verify:flow` 전체 흐름(실제 RSS 수집·유료 AI 호출을 포함하므로 이번에 실행하지 않음, 정상 설정은 서버 없이 사전 검사 통과까지만 확인), 백엔드 `mvn test`, 권한 화면 11단계·화면 전체 검증(관련 코드 변경 없음)
+- **남은 제한:** 확인 값·포트 제한은 실제 DB나 유료 AI 사용을 증명하지 않음(VERIFY.md). `verify:dashboard`·`verify:ai-usage`는 조회만 하므로 `localhost:3000` 기본값 그대로
+- `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0

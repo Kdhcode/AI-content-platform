@@ -123,15 +123,17 @@ mvn spring-boot:run '-Dspring-boot.run.profiles=live'
 
 ## 브라우저 흐름 재검증
 
-**로컬 개발 DB에만 실행한다.** 뉴스 수집과 이슈 상태 변경·확정을 수행한다.
-관리자 서버를 실행한 상태에서 별도 터미널을 사용한다.
+**검증 DB 복사본에 연결된 검증 환경에만 실행한다.** `verify:flow`는 실제 RSS 수집과 이슈 상태 변경·확정을 수행한다.
+관리자 서버를 실행한 상태에서 별도 터미널을 사용한다. 2026-10-19부터 주소 기본값(`http://localhost:3000` = daily)이 없고, `verify:content-roles`와 같은 사전 검사(`scripts/lib/write-target.cjs`)를 브라우저·요청보다 먼저 한다: `VERIFY_UI_URL`(로컬 `http://` 화면 주소, 포트 명시, 3000·3001 거부)과 `VERIFY_CONFIRM_VERIFY_DB`(같은 포트를 다시 입력) 필수, 계정은 이 스크립트가 쓰는 `ADMIN_USERNAME`·`ADMIN_PASSWORD`만.
 
 ```powershell
 cd admin-ui
+$env:VERIFY_UI_URL = 'http://127.0.0.1:<검증 환경 화면 포트>'
+$env:VERIFY_CONFIRM_VERIFY_DB = '<같은 포트>'
 $env:ADMIN_USERNAME = 'admin'
 $env:ADMIN_PASSWORD = '<실행 중인 관리자 비밀번호>'
 $env:VERIFY_SOURCE_NAME = 'bbc-world' # 또는 yonhap-latest
-npm run verify:flow
+npm run verify:flow   # 데이터를 씀: 검증 환경에서만
 # 화면·실제 DB 집계·모바일·캡처 검증(기사 상태를 변경하지 않음):
 npm run verify:dashboard
 # AI 사용량 화면(1440px·390px)과 API 합계 일치 확인(조회만 함):
@@ -142,7 +144,8 @@ npm run verify:ai-usage
 stub 흐름만 확인할 때는 `VERIFY_REQUIRE_REAL_AI=false`를 명시한다.
 Chrome 대신 Playwright Chromium을 사용하려면 `npx playwright install chromium` 후
 `VERIFY_BROWSER_CHANNEL=chromium`을 설정한다.
-`VERIFY_TIMEOUT_SECONDS`(기본 180), `VERIFY_UI_URL`(기본 `http://localhost:3000`)도 설정할 수 있다.
+`VERIFY_TIMEOUT_SECONDS`(기본 180)도 설정할 수 있다. `verify:dashboard`·`verify:ai-usage`(조회만 함)는 지금처럼 `VERIFY_UI_URL` 기본값 `http://localhost:3000`을 쓴다.
+**`verify:flow` 사전 검사의 한계:** 주소 확인 값과 포트 제한은 실수 방지일 뿐, 그 화면의 백엔드가 실제로 검증 DB에 연결됐다는 증명이 아니고 **유료 AI 호출을 승인하는 것도 아니다.** 유료 호출 여부·한도는 백엔드 실행 설정(`-Ai openai`, `AI_DAILY_MAX_CALLS` 등, RUNBOOK 4절)이 정하며, 이 스크립트의 `VERIFY_REQUIRE_REAL_AI` 검사(실제 임베딩 모델 요구)는 그대로다.
 유료 모델의 모든 호출·토큰을 최종 확인하려면 DB에서 `ai_log.provider`, `model`, `success`를 함께 확인한다.
 
 ### 콘텐츠 역할별 화면 검증 (`verify:content-roles`, 데이터를 씀)

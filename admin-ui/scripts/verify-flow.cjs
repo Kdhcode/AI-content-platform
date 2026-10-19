@@ -1,13 +1,16 @@
-// Run only against a local development DB: this collects news and confirms one issue.
+// Run only against a verify environment: this collects news (real RSS) and confirms one issue. There is no default
+// address: VERIFY_UI_URL and VERIFY_CONFIRM_VERIFY_DB are required, the daily (3000) and dev (3001) UI ports are
+// refused (scripts/lib/write-target.cjs), all before the browser starts or any request is sent. That is a guard
+// against mistakes, not proof of the database or an approval of paid AI calls (those limits stay on the server).
+//   VERIFY_UI_URL=http://127.0.0.1:<port> VERIFY_CONFIRM_VERIFY_DB=<port> ADMIN_USERNAME=... ADMIN_PASSWORD=... npm run verify:flow
 const assert = require("node:assert/strict");
-const { chromium } = require("playwright");
+const { checkWriteTarget } = require("./lib/write-target.cjs");
 
 async function main() {
-  const base = process.env.VERIFY_UI_URL || "http://localhost:3000";
+  const { base } = checkWriteTarget(process.env, ["ADMIN_USERNAME", "ADMIN_PASSWORD"], "npm run verify:flow");
+  const { chromium } = require("playwright");
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
-  assert(username && password, "Set ADMIN_USERNAME and ADMIN_PASSWORD");
-  assert(["localhost", "127.0.0.1"].includes(new URL(base).hostname), "Use a local development server");
   const sourceName = process.env.VERIFY_SOURCE_NAME || "bbc-world";
   const headers = { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` };
   const json = async (path, method = "GET", body) => {

@@ -15,7 +15,8 @@ const { checkWriteTarget } = require("./lib/write-target.cjs");
 const REVIEW_FIELDS = ["status", "version", "submittedAt", "approvedBy", "approvedAt", "statusReason", "title"];
 
 async function main() {
-  const { base } = checkWriteTarget(process.env, ["OPERATOR_USERNAME", "OPERATOR_PASSWORD", "ADMIN_USERNAME", "ADMIN_PASSWORD"]);
+  const { base } = checkWriteTarget(process.env, ["OPERATOR_USERNAME", "OPERATOR_PASSWORD", "ADMIN_USERNAME", "ADMIN_PASSWORD"],
+    "npm run verify:content-roles");
   const operator = { user: process.env.OPERATOR_USERNAME, pw: process.env.OPERATOR_PASSWORD, role: "OPERATOR" };
   const admin = { user: process.env.ADMIN_USERNAME, pw: process.env.ADMIN_PASSWORD, role: "SYSTEM_ADMIN" };
   const { chromium } = require("playwright");
