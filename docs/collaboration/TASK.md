@@ -490,3 +490,17 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 확인 뒤 18094·13094 종료
 - **미실행:** OPERATOR 계정으로 승인·복귀 403 화면 확인(시험 계정은 SYSTEM_ADMIN 하나뿐, `ContentStatusApiIntegrationTest`가 서비스·보안 두 곳의 403을 검사), `verify:flow`(실제 RSS·실제 AI 필요), daily(8080·3000)·`aicontent_main`(실행 금지), Docker compose 구성(노트북에 Docker 없음)
 - `aicontent_main` V3 그대로, 유료 AI 호출 0
+- 22절 작업은 `ff04064`로 커밋·일반 push. PR은 생성 못 함(노트북에 `gh`·토큰 없음, 내장 브라우저 GitHub 미로그인) — 제목·본문은 `.local/pr-content-a.md`(Git 제외)
+
+### 22-1. 2026-10-19 밤 남은 검증 보완과 병합 절차 (기준 `ff04064` + 아래 미커밋)
+
+- 시작 상태: 원격 `ff04064`(22절 이후 변경 없음), 미커밋 없음, `main` `8e0c6d7`, 이 브랜치 PR 없음. 저장소에 `.github/workflows`가 없어 GitHub Actions 실행 기록이 없는 것이 정상(CI 없음)
+- **공개 뉴스 페이지 넘김(22절에서 이슈 5개라 건너뜀):** 재현 스크립트 `docs/verify/public-news-pagination.sql` 추가 — `aicontent_verify_*` DB에서만 실행(다른 DB면 오류로 멈춤, `aicontent_main`에서 실제로 거부되고 아무것도 안 바뀐 것 확인), 가상 ACTIVE 이슈 10개 + 기사 각 1개(`example.com`), 다시 실행하면 추가 없음. `aicontent_verify_content` 덤프 → `aicontent_verify_pagination_20261019`(V7) → 스크립트 → 공개 이슈 **15개**. 그 DB로 백엔드 127.0.0.1:18095(기본 프로필, stub, 작업자·스케줄러 끔) + 화면 13095(next 15.5.28 빌드)
+  - `VERIFY_UI_URL=http://127.0.0.1:13095 node scripts/verify-public-news.cjs` **통과, 페이지 넘김 실행됨**(결과 줄 "pagination", 건너뜀 표시 없음)
+  - 내장 브라우저 추가 확인: 1쪽 12개 → "다음" → "2 / 2"·3개(1쪽과 겹치는 제목 0) · 마지막 쪽에서 "다음" 비활성 → "이전" → 1쪽 12개가 처음과 같은 순서
+  - 확인 뒤 18095·13095 종료
+- **예전 코드로 되돌릴 때 DB 상태(사실 확인):** `main` `8e0c6d7`을 임시 작업 트리(확인 뒤 삭제)에서 빌드해 V7 DB 복사본(`aicontent_verify_pagination_20261019`)에 띄움 → Flyway "Schema "public" has a version (7) that is newer than the latest available migration (3)" **경고만 내고 시작**(health 200, 공개 API 200). 트리거 그대로, 이슈 제목 변경 시 `change_seq` 0→1, `content` 테이블 남음 → **코드만 되돌려서는 DB가 V3로 돌아가지 않음**
+- **RUNBOOK 5-1절 추가:** V3→V7 영향(새 테이블·열·함수·트리거, 되돌리는 마이그레이션 없음), 순서(daily 멈춤 → `pg_dump -Fc` 백업과 확인 → 권장 리허설 → 코드·빌드 → daily 기동 시 자동 적용), 적용 후 확인 SQL·화면, 복원(새 DB로 `pg_restore` → V3·행 수 확인 → 이름 바꾸기 → 예전 코드, 백업 뒤 데이터는 실패 DB에서 확인, 지우지 않음). 5·6절은 PR #1 기준임을 표시
+- **5-1절 리허설(daily·`aicontent_main` 미사용):** `aicontent_verify_real`(V3, 실제 데이터 복사본) → `aicontent_rehearsal_main`에서 5-1 순서 그대로: 백업(TABLE DATA 12개) → 이 브랜치 jar(AI `none`, 127.0.0.1:18097)로 기동 → V4~V7 적용 로그 4줄·`now at version v7`(0.2초) → 확인 SQL(1~7 `t`, 트리거 3개, 이슈·기사·연결 29/35/35 그대로) → 복원·이름 바꾸기 → V3, `content` 테이블·트리거 없음, 수 그대로. `aicontent_rehearsal_main_v7_failed`(V7) 보관
+- 새로 만든 검증 DB: `aicontent_verify_pagination_20261019`, `aicontent_rehearsal_main`(V3), `aicontent_rehearsal_main_v7_failed`(V7). 기존 테스트로 보장되는 항목(상태 전이·권한·동시성·공개 분리 등, 257개)은 22절 결과를 그대로 근거로 씀(이번에 백엔드·화면 코드 변경 없음 → 다시 돌리지 않음)
+- 남은 미실행: 22절과 같음(OPERATOR 화면 403, `verify:flow`, daily 실제 적용, Docker). `aicontent_main` V3·이슈 29 그대로, 유료 AI 호출 0, 실제 RSS 수집 0
