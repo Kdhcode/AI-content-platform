@@ -21,6 +21,7 @@ function load(name) {
 const { ContentSession, SessionBlocked } = load('contentSession');
 const body = load('contentBody');
 const { draftKey, draftStorage } = load('contentDraft');
+const { createBackGuard } = load('backGuard');
 
 // objects made inside the vm have other prototypes; compare plain copies
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -276,6 +277,136 @@ test('new ids are valid and unique within the body', () => {
   const id = body.newId('s', b, () => seq[n++]);
   assert.match(id, /^[a-z0-9-]{1,40}$/);
   assert.notEqual(id, 's-00000000');
+});
+
+
+/** Browser history as far as the guard sees it: entries, Back/Forward that fire popstate afterwards (async). */
+function fakeHistory(urls) {
+  const entries = urls.map((url) => ({ url, state: { __NA: true } }));
+  let index = entries.length - 1;
+  const listeners = new Set();
+  const asked = [];
+  let answer = true;
+  const go = (delta) => {
+    const next = index + delta;
+    if (next < 0 || next >= entries.length) return;
+    index = next;
+    setImmediate(() => listeners.forEach((fn) => fn(entries[index].state)));
+  };
+  const env = {
+    state: () => entries[index].state,
+    href: () => entries[index].url,
+    pushState: (data, url) => { entries.splice(index + 1); entries.push({ url, state: { __NA: true, ...data } }); index++; },
+    back: () => go(-1),
+    onPopState: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+    confirm: (m) => { asked.push(m); return answer; },
+  };
+  return { env, asked, answer: (v) => { answer = v; }, back: async () => { go(-1); await settle(); }, forward: async () => { go(1); await settle(); },
+    jump: async (delta) => { go(delta); await settle(); },
+    url: () => entries[index].url, length: () => entries.length, index: () => index, listeners };
+}
+
+const EDITOR = 'http://127.0.0.1:13093/contents/1';
+const LIST = 'http://127.0.0.1:13093/contents';
+
+test('back guard: no extra history entry until something is unsaved, then exactly one', () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  let unsaved = false;
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => unsaved, message: 'leave?' });
+  assert.equal(h.length(), 2);
+  assert.equal(g.armed(), false);
+  unsaved = true; g.arm(); g.arm();
+  assert.equal(h.length(), 3, 'one guard entry however often it is armed');
+  assert.equal(h.url(), EDITOR, 'same URL');
+  assert.equal(h.env.state().__NA, true, 'the router state stays on the entry');
+});
+
+test('back guard: Back with unsaved edits asks; staying keeps the URL and re-arms', async () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  g.arm();
+  h.answer(false);
+  await h.back();
+  assert.equal(h.asked.length, 1);
+  assert.equal(h.url(), EDITOR);
+  assert.equal(g.armed(), true, 'the guard entry is back on top');
+  assert.equal(h.length(), 3);
+  await h.back();                              // asks again, every time
+  assert.equal(h.asked.length, 2);
+  assert.equal(h.url(), EDITOR);
+});
+
+test('back guard: Back with unsaved edits and "leave" goes to the previous page in one press', async () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  g.arm();
+  h.answer(true);
+  await h.back();
+  assert.equal(h.asked.length, 1);
+  assert.equal(h.url(), LIST);
+  assert.equal(g.armed(), false);
+});
+
+test('back guard: once everything is saved, Back leaves without asking and still in one press', async () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  let unsaved = true;
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => unsaved, message: 'leave?' });
+  g.arm();
+  unsaved = false;                             // the autosave finished
+  await h.back();
+  assert.equal(h.asked.length, 0);
+  assert.equal(h.url(), LIST);
+});
+
+test('back guard: Forward to another page is not intercepted', async () => {
+  const h = fakeHistory([LIST, EDITOR, 'http://127.0.0.1:13093/issues/4']);
+  await h.back();                              // now on the editor, with the issue page ahead
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  // no guard entry pushed: Forward goes to the issue page
+  await h.forward();
+  assert.equal(h.asked.length, 0);
+  assert.equal(h.url(), 'http://127.0.0.1:13093/issues/4');
+  assert.equal(g.armed(), false);
+});
+
+test('back guard: jumping several entries back (history menu) is not intercepted and pushes nothing', async () => {
+  const h = fakeHistory(['http://127.0.0.1:13093/', LIST, EDITOR]);
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  g.arm();
+  h.answer(false);
+  await h.jump(-3);                            // from the guard entry straight to the dashboard
+  assert.equal(h.asked.length, 0, 'the page has already changed; asking could not keep it');
+  assert.equal(h.url(), 'http://127.0.0.1:13093/');
+  assert.equal(h.length(), 4, 'no guard entry pushed for another page');
+  assert.equal(g.armed(), false);
+});
+
+test('back guard: opened on a guard entry left by an earlier visit, Back still takes one press', async () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  h.env.pushState({ contentBackGuard: 'content-1' }, EDITOR);   // left from before
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => false, message: 'leave?' });
+  assert.equal(g.armed(), true);
+  await h.back();
+  assert.equal(h.url(), LIST);
+  assert.equal(h.asked.length, 0);
+});
+
+test('back guard: a guard entry of another content is not taken as its own', () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  h.env.pushState({ contentBackGuard: 'content-2' }, EDITOR);
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  assert.equal(g.armed(), false);
+});
+
+test('back guard: after dispose nothing is intercepted', async () => {
+  const h = fakeHistory([LIST, EDITOR]);
+  const g = createBackGuard(h.env, { id: 'content-1', isUnsaved: () => true, message: 'leave?' });
+  g.arm();
+  g.dispose();
+  assert.equal(h.listeners.size, 0);
+  await h.back();
+  assert.equal(h.asked.length, 0);
+  assert.equal(h.url(), EDITOR, 'only stepped off the guard entry; the page is gone anyway');
 });
 
 let current = null;

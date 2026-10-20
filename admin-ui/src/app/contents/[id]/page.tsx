@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, ApiFailure, currentUser, fmt, localVerifyMode, type ContentChangeResult, type ContentDetail, type Me } from "@/lib/api";
 import { sameJson, saveViolations, type Doc } from "@/lib/contentBody";
+import { createBackGuard } from "@/lib/backGuard";
 import { draftKey, draftStorage, type Draft } from "@/lib/contentDraft";
 import { ContentSession, type SessionSnapshot } from "@/lib/contentSession";
 import { Badge, ErrorText, Shell } from "@/components/ui";
@@ -34,6 +35,9 @@ export default function ContentEditorPage() {
     </Shell>
   );
 }
+
+const LEAVE_MESSAGE = "저장되지 않은 편집이 있습니다. 이 화면을 떠날까요?\n"
+  + "(떠나면 남은 편집을 바로 저장해 봅니다. 저장하지 못해도 이 브라우저의 임시 보관본에 남아 다시 열면 복원할 수 있습니다.)";
 
 const SAVE_LABEL: Record<SessionSnapshot<ContentDetail>["state"], string> = {
   saved: "저장됨", dirty: "저장 안 됨 — 입력을 멈추면 2초 뒤 저장", saving: "저장 중…", error: "저장 실패", conflict: "충돌 — 자동 저장 중지",
@@ -108,18 +112,39 @@ function Editor({ content: initial, me, env }: { content: ContentDetail; me: Me;
       if (!session.unsaved || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!a || a.target === "_blank" || a.origin !== window.location.origin) return;
-      if (!window.confirm("저장되지 않은 편집이 있습니다. 이 화면을 떠날까요?\n(입력한 내용은 이 브라우저의 임시 보관본에 남아 있어 다시 열면 복원할 수 있습니다.)")) {
+      if (!window.confirm(LEAVE_MESSAGE)) {
         e.preventDefault(); e.stopPropagation();
       }
     };
+    // Back/Forward: see lib/backGuard.ts. The guard entry is added only once something is unsaved.
+    const guard = createBackGuard({
+      state: () => window.history.state,
+      href: () => window.location.href,
+      pushState: (data, url) => window.history.pushState(data, "", url),
+      back: () => window.history.back(),
+      onPopState: (fn) => {
+        const listener = (e: PopStateEvent) => fn(e.state);
+        window.addEventListener("popstate", listener);
+        return () => window.removeEventListener("popstate", listener);
+      },
+      confirm: (message) => window.confirm(message),
+    }, { id: `content-${id}`, isUnsaved: () => session.unsaved, message: LEAVE_MESSAGE });
+    const armWhenUnsaved = () => { if (session.unsaved) guard.arm(); };
+    const unsubscribe = session.subscribe(armWhenUnsaved);
+    armWhenUnsaved();
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", click, true);
     return () => {
+      unsubscribe();
+      guard.dispose();
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", click, true);
       session.dispose();
+      // Left inside the app (link or Back, after confirming): send what the 2-second timer would have sent. The
+      // request outlives the page; if it fails the browser draft (not removed here) still holds the edits.
+      if (session.dirty && session.snapshot().conflict === null) void session.flush();
     };
-  }, [session]);
+  }, [session, id]);
 
   // ---- editing gate ---------------------------------------------------------------------------------------------
   const gateKey = `${content.status}|${content.submittedAt}|${content.approvedAt}`;

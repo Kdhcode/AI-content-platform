@@ -595,3 +595,18 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **GitHub Actions 실제 실행:** `8228f21` push → 실행 39260567544(https://github.com/Kdhcode/AI-content-platform/actions/runs/39260567544) **success**. `admin-ui` 46초(9단계 모두 성공), `run-scripts` 89초(성공), `backend` 91초(`mvn test` 성공, 실패 시 업로드 단계는 조건대로 건너뜀). 워크플로 파일 push·Actions 사용에 제한 없었음
 - **확인 못 한 것:** GitHub 작업 로그 본문은 로그인해야 보여서(내장 브라우저 미로그인) CI의 테스트 개수를 로그로 확인하지 못함 — 단계 성공과 같은 명령의 로컬 빈 DB 결과(257개)로만 판단. 실패할 때 아티팩트가 실제로 올라가는지는 일부러 실패시키지 않아 미확인. 포크 PR 실행 경로 미확인(포크 없음). PR은 인증 문제로 만들지 않음
 - `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+
+## 23. 2026-10-16 콘텐츠 편집기 뒤로 가기 보호 (다른 PC, `claude/content-a` `ad9d5a2` 기준 · 10-20에 `280d4c5` 위로 옮겨 커밋)
+
+- 시작 상태: `main` `8e0c6d7`(원격과 같음, 미커밋 없음), `claude/content-a` `ad9d5a2`(main보다 19개 앞섬, 미병합), `claude/post-merge-check` 문서 커밋 1개 미병합. `AGENTS.md` 없음(협업 규칙은 `docs/collaboration/RULES.md`)
+- 검수 대기 이슈 EXCLUDED→CLOSED 우회: `main`에 방어 있음(`af174d9`, 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가, 회귀 테스트 `PublicNewsReviewFlowIntegrationTest`). 다른 CLOSED 경로도 확인 — 자동 종료는 ACTIVE만, 집계 재계산은 기사 0개일 때만, 병합·분리·이동으로 ACTIVE 이슈에 들어간 기사는 CLASSIFIED. 오늘 이슈 코드는 바꾸지 않음
+- 선정: A7 요구사항 "페이지 이동 시 미저장 손실 방지" 중 브라우저 뒤로/앞으로 가기가 빠져 있었음(10-15 보고에 남은 문제로 적음). 다음 계획 B(LIFE 판정)는 카테고리 목록·기준점수·판정 대상 결정(NEXT_CONTENT_SCOPE 6절 3·4)과 노션 07 출력 형식이 필요해 보류
+- 변경: `admin-ui/src/lib/backGuard.ts`(새 파일, 순수 로직), `app/contents/[id]/page.tsx`(가드 연결, 떠날 때 남은 편집 저장, 확인 문구), `scripts/verify-content-session.cjs`(가드 테스트 9개). 서버 코드·DB 변경 없음
+- 테스트(기준 `ad9d5a2` + 위 변경):
+  - `node scripts/verify-content-session.cjs` **24/24 통과**(기존 15 + 가드 9). 가드 코드를 일부러 깨뜨린 5가지(머무를 때 다시 쌓지 않음, 뒤로 가기를 잇지 않음, 같은 주소 검사 제거, 남은 가드 항목 무시, 저장됐는데도 물음) 모두 실패로 잡힘
+  - `tsc --noEmit` 통과, `next build` 통과(verify-content UI 다시 빌드), `verify-auth-client` 통과
+  - 전체 `mvn test` **257개 통과**(백엔드 변경 없음, 기준 확인용)
+  - `verify-public-news`는 **미실행**: 주소가 `localhost:3000`(daily)으로 고정돼 있는데 daily 서버가 꺼져 있었음. 편집기와 무관
+- 브라우저 확인(내장 브라우저, verify-content 13093, 로그인 생략 모드): 저장 대기 중 뒤로 가기 → 확인 창, "머무르기" 2번 모두 주소·입력 그대로; "떠나기" → 목록으로 한 번에; 저장이 끝난 뒤 뒤로 가기 → 묻지 않고 한 번에; 앞으로 가기로 남은 가드 항목에 돌아온 뒤 뒤로 가기 → 한 번에; 저장 대기 0.3초 만에 링크로 떠남 → 서버에 저장됨; 저장이 끝나지 못한 채 떠남 → 다시 열 때 보관본 복원 화면; 링크 확인 "머무르기"·`beforeunload` 처리 기존대로
+- 미검증: 실제 뒤로 가기 키·버튼. 내장 브라우저에서 Alt+← 가 기록 이동을 일으키지 않아 `history.back()`으로 확인(같은 popstate 경로). Chrome은 사용자 조작 없이 쌓인 기록 항목을 뒤로 가기 버튼에서 건너뛸 수 있다. 가드 항목은 입력(사용자 조작) 뒤에 쌓이지만, "머무르기" 뒤 다시 쌓는 항목이 버튼에서 건너뛰어지는지는 실제 Chrome에서 확인 필요(건너뛰어도 보관본과 떠날 때 저장은 그대로)
+- DB: 오늘 세션 시작 시 PostgreSQL·daily 서버가 모두 꺼져 있었음. 프로젝트 스크립트(`start-db.ps1`)로 DB만 켜고 daily 서버는 띄우지 않음. 유료 AI 호출 0
