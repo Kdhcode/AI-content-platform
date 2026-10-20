@@ -626,9 +626,9 @@ class ReviewToolTest(unittest.TestCase):
         self.assertIn('전체 내용 포함 1개', self.report(sha).read_text(encoding='utf-8'))
 
     def test_secret_in_an_unchanged_line_of_a_changed_file_blocks_sending(self):
-        secret_line = 'admin_password = ' + self.SECRET + ' # production'
-        self.commit('deploy/app.ini', secret_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(20)) + '\n', 'v1')
-        sha = self.commit('deploy/app.ini', secret_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(19)) +
+        first_line = 'admin_password = ' + self.SECRET + ' # production'
+        self.commit('deploy/app.ini', first_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(20)) + '\n', 'v1')
+        sha = self.commit('deploy/app.ini', first_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(19)) +
                           '\nk19 = changed\n', 'v2')
         with self.assertRaises(RuntimeError) as ctx:
             cr.review(self.repo, sha)
