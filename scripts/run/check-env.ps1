@@ -19,6 +19,16 @@ function Section([string]$Title) { Write-Host ''; Write-Host "== $Title" }
 function Get-FirstLine([string]$Exe, [string[]]$Arguments) {
     try { $out = & $Exe @Arguments 2>&1 | Select-Object -First 1; if ($null -eq $out) { return $null }; return "$out".Trim() } catch { return $null }
 }
+# First output line matching $Pattern (a JVM can print warnings before the version: JDK 24+ "WARNING: A restricted
+# method ...", "Picked up JAVA_TOOL_OPTIONS"), else the first line; $null when the command cannot run
+function Get-MatchingLine([string]$Exe, [string[]]$Arguments, [string]$Pattern) {
+    try {
+        $lines = @(& $Exe @Arguments 2>&1 | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        if ($lines.Count -eq 0) { return $null }
+        $hit = $lines | Where-Object { $_ -match $Pattern } | Select-Object -First 1
+        if ($hit) { return $hit } else { return $lines[0] }
+    } catch { return $null }
+}
 function Get-Version([string]$Text) {
     if ($Text -match '(\d+)\.(\d+)(\.(\d+))?') { return [version]("{0}.{1}.{2}" -f $Matches[1], $Matches[2], $(if ($Matches[4]) { $Matches[4] } else { 0 })) }
     return $null
@@ -37,11 +47,19 @@ $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | 
 if (-not $git) {
     Report 'MISSING' 'git' 'not on PATH'
 } else {
-    if ($Fetch) {
-        & $git.Source -C $ProjectRoot fetch --prune origin 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { Report 'OK' 'git fetch' 'origin updated (nothing merged)' } else { Report 'WARN' 'git fetch' "failed ($LASTEXITCODE): remote comparison below uses the last fetch" }
-    }
     $branch = Get-FirstLine $git.Source @('-C', $ProjectRoot, 'branch', '--show-current')
+    # The remote to compare with: the current branch's upstream remote (a clone made by Fork or another tool may not
+    # call it "origin"), else "origin", else the only remote there is
+    $remoteNames = @(& $git.Source -C $ProjectRoot remote 2>$null | Where-Object { $_ })
+    $remote = if ($branch) { Get-FirstLine $git.Source @('-C', $ProjectRoot, 'config', "branch.$branch.remote") } else { $null }
+    if (-not $remote -or $remoteNames -notcontains $remote) {
+        $remote = if ($remoteNames -contains 'origin') { 'origin' } elseif ($remoteNames.Count -eq 1) { $remoteNames[0] } else { $null }
+    }
+    if (-not $remote) { Report 'WARN' 'remote' "cannot tell which remote to compare with (remotes: $(if ($remoteNames) { $remoteNames -join ', ' } else { 'none' }))" }
+    if ($Fetch -and $remote) {
+        & $git.Source -C $ProjectRoot fetch --prune $remote 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Report 'OK' 'git fetch' "$remote updated (nothing merged)" } else { Report 'WARN' 'git fetch' "failed ($LASTEXITCODE): remote comparison below uses the last fetch" }
+    }
     $head = Get-FirstLine $git.Source @('-C', $ProjectRoot, 'log', '-1', '--format=%h %ci %s')
     Report 'INFO' 'branch' "$(if ($branch) { $branch } else { '(detached)' }) @ $head"
     $tracking = Get-FirstLine $git.Source @('-C', $ProjectRoot, 'status', '-sb')
@@ -50,12 +68,13 @@ if (-not $git) {
     if ($dirty.Count -eq 0) { Report 'OK' 'uncommitted changes' 'none' }
     else { Report 'WARN' 'uncommitted changes' ("{0} file(s): {1}" -f $dirty.Count, (($dirty | Select-Object -First 8 | ForEach-Object { $_.Substring(3) }) -join ', ')) }
     # Remote branches with commits the current branch does not have (work done on another PC, not yet here)
-    $remotes = @(& $git.Source -C $ProjectRoot for-each-ref refs/remotes/origin --format='%(refname:short)' 2>$null | Where-Object { $_ -and $_ -ne 'origin/HEAD' -and $_ -ne 'origin' })
+    # Full ref names: a short "main/main" can be ambiguous when the remote and a local branch share a name
+    $remotes = if ($remote) { @(& $git.Source -C $ProjectRoot for-each-ref "refs/remotes/$remote" --format='%(refname)' 2>$null | Where-Object { $_ -and $_ -ne "refs/remotes/$remote/HEAD" }) } else { @() }
     foreach ($r in $remotes) {
         $n = Get-FirstLine $git.Source @('-C', $ProjectRoot, 'rev-list', '--count', "HEAD..$r")
         if ($n -and [int]$n -gt 0) {
             $last = Get-FirstLine $git.Source @('-C', $ProjectRoot, 'log', '-1', '--format=%ci %s', $r)
-            Report 'WARN' $r "$n commit(s) not in this branch (last: $last)"
+            Report 'WARN' ($r -replace '^refs/remotes/', '') "$n commit(s) not in this branch (last: $last)"
         }
     }
 }
@@ -64,14 +83,14 @@ if (-not $git) {
 Section 'Java / Maven'
 $pom = Get-Content (Join-Path $ProjectRoot 'backend\pom.xml') -Raw -ErrorAction SilentlyContinue
 $javaRequired = if ($pom -match '<java\.version>(\d+)</java\.version>') { [int]$Matches[1] } else { 21 }
-$javaLine = Get-FirstLine $JavaExe @('-version')
+$javaLine = Get-MatchingLine $JavaExe @('-version') 'version "'
 $javaVer = if ($javaLine -match 'version "([^"]+)"') { Get-Version $Matches[1] } else { $null }
 if (-not $javaVer) { Report 'MISSING' 'java' "not found ($JavaExe); need JDK $javaRequired+ (set JAVA_HOME or `$env:JAVA_HOME in machine.ps1)" }
 elseif ($javaVer.Major -lt $javaRequired) { Report 'MISSING' 'java' "$javaVer at $JavaExe; pom.xml needs $javaRequired+" }
 else { Report 'OK' 'java' "$javaVer ($JavaExe; pom.xml needs $javaRequired+)" }
 if (-not (Test-Var 'JAVA_HOME')) { Report 'WARN' 'JAVA_HOME' 'not set: Maven and the run scripts then use the java on PATH' }
 if (Test-Path $MavenCmd) {
-    $mvnLine = Get-FirstLine $MavenCmd @('-v')
+    $mvnLine = Get-MatchingLine $MavenCmd @('-v') 'Apache Maven'
     if ($mvnLine -match 'Apache Maven') { Report 'OK' 'maven' "$mvnLine ($MavenCmd)" } else { Report 'MISSING' 'maven' "$MavenCmd does not run: $mvnLine" }
 } else {
     Report 'MISSING' 'maven' "not found ($MavenCmd, nor mvn on PATH); the repo has no Maven wrapper. Install Maven 3.9+ or set `$MavenCmd in machine.ps1"

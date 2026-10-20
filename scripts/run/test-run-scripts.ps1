@@ -105,6 +105,40 @@ Write-Output "PGBIN=$PgBin"; Write-Output "PGDATA=$PgData"; Write-Output "PORT=$
     Set-Content (Join-Path $nm 'package.json') -Encoding ASCII -Value '{"name":"next","version":"15.5.28"}'
     $r = Invoke-Copy 'check-env.ps1'
     Check 'check-env accepts matching admin-ui deps' ($r.Out -match '\[OK\s*\] admin-ui deps\s+node_modules present \(next 15\.5\.28\)') $r.Out
+
+    # 8. Maven whose JVM prints a warning before the version (JDK 24+: "WARNING: A restricted method ...") still counts
+    $fakeMvn = Join-Path $root 'fake-maven\mvn.cmd'
+    New-Item -ItemType Directory -Force (Split-Path $fakeMvn) | Out-Null
+    Set-Content $fakeMvn -Encoding ASCII -Value "@echo off`r`necho WARNING: A restricted method in java.lang.System has been called 1>&2`r`necho Apache Maven 3.9.9 (fake)"
+    Set-Machine "`$MavenCmd = '$fakeMvn'`r`n`$PgBin = '$nowhere\pg'`r`n`$DbPort = $closedPort"
+    $r = Invoke-Copy 'check-env.ps1'
+    Check 'check-env finds Maven behind a JVM warning' ($r.Out -match '\[OK\s*\] maven\s+Apache Maven 3\.9\.9') $r.Out
+
+    # 9. remote commits are found when the remote is not called "origin" (a clone made by Fork named it after the repo)
+    $gitExe = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $gitExe) {
+        Write-Host 'SKIP  check-env compares with the upstream remote (git not on PATH)'
+    } else {
+        $g = $gitExe.Source
+        $other = Join-Path ([IO.Path]::GetTempPath()) ("run-scripts-remote-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        $ErrorActionPreference = 'Continue'       # git writes progress to stderr
+        try {
+            $id = @('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false')
+            & $g init -q -b trunk $other 2>&1 | Out-Null
+            & $g -C $other @id commit -q --allow-empty -m one 2>&1 | Out-Null
+            & $g init -q -b trunk $root 2>&1 | Out-Null
+            & $g -C $root remote add main $other 2>&1 | Out-Null
+            & $g -C $root fetch -q main 2>&1 | Out-Null
+            & $g -C $root reset -q --soft main/trunk 2>&1 | Out-Null
+            & $g -C $root branch -q -u main/trunk 2>&1 | Out-Null
+            & $g -C $other @id commit -q --allow-empty -m 'done on another PC' 2>&1 | Out-Null
+            & $g -C $root fetch -q main 2>&1 | Out-Null
+        } finally { $ErrorActionPreference = 'Stop' }
+        try {
+            $r = Invoke-Copy 'check-env.ps1'
+            Check 'check-env compares with the upstream remote, not only "origin"' ($r.Out -match '\[WARN\s*\] main/trunk\s+1 commit\(s\) not in this branch \(last: .*done on another PC\)') $r.Out
+        } finally { Remove-Item -Recurse -Force $other -ErrorAction SilentlyContinue }
+    }
 } finally {
     Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
 }
