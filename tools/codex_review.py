@@ -165,6 +165,14 @@ def lines_of(text):
     return [line for line in text.splitlines() if line]
 
 
+def changed_paths(repo, *diff_args):
+    """Paths as stored, from `git diff --name-only -z`. Without -z, Git quotes and escapes non-ASCII
+    names (core.quotePath), and such a name cannot be passed back to `git show REV:path`."""
+    out = subprocess.check_output(['git', '-C', str(repo), 'diff', '--name-only', '-z', '--no-renames', *diff_args],
+                                  text=True, encoding='utf-8', errors='replace')
+    return [path for path in out.split('\0') if path]
+
+
 def reviews_dir(repo):
     out = Path(repo) / '.local' / 'collaboration' / 'reviews'
     out.mkdir(parents=True, exist_ok=True)
@@ -182,9 +190,8 @@ def commit_diff(repo, sha):
         kind, base = 'normal', parents[0]
     else:
         kind, base = 'merge', parents[0]
-    changed = lines_of(git(repo, 'diff', '--name-only', '--no-renames', base, sha))
-    included = lines_of(git(repo, 'diff', '--name-only', '--no-renames', base, sha,
-                            '--', '.', *EXCLUDE_PATHSPECS))
+    changed = changed_paths(repo, base, sha)
+    included = changed_paths(repo, base, sha, '--', '.', *EXCLUDE_PATHSPECS)
     excluded = sorted(set(changed) - set(included))
     patch = git(repo, 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames',
                 base, sha, '--', '.', *EXCLUDE_PATHSPECS) if included else ''
@@ -197,9 +204,8 @@ def range_diff(repo, base_ref, head_ref='HEAD'):
     """Review input for everything from merge-base(base_ref, head) to head (like a PR diff)."""
     head = git(repo, 'rev-parse', head_ref + '^{commit}')
     base = git(repo, 'merge-base', git(repo, 'rev-parse', base_ref + '^{commit}'), head)
-    changed = lines_of(git(repo, 'diff', '--name-only', '--no-renames', base, head))
-    included = lines_of(git(repo, 'diff', '--name-only', '--no-renames', base, head,
-                            '--', '.', *EXCLUDE_PATHSPECS))
+    changed = changed_paths(repo, base, head)
+    included = changed_paths(repo, base, head, '--', '.', *EXCLUDE_PATHSPECS)
     excluded = sorted(set(changed) - set(included))
     patch = git(repo, 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames',
                 base, head, '--', '.', *EXCLUDE_PATHSPECS) if included else ''
@@ -218,7 +224,10 @@ def full_files(repo, d):
         try:
             text = git(repo, 'show', d['sha'] + ':' + path, quiet=True)
         except subprocess.CalledProcessError:
-            continue                                   # deleted in this change
+            listed = git(repo, 'ls-tree', '-z', '--name-only', d['sha'], '--', ':(literal)' + path, quiet=True)
+            if listed.strip('\0'):
+                omitted.append((path, '읽기 실패'))      # exists at the reviewed commit but could not be read
+            continue                                   # otherwise deleted in this change
         if '\0' in text:
             omitted.append((path, '바이너리'))
         elif len(text) > FULL_FILE_MAX_CHARS:
@@ -448,13 +457,25 @@ def settings_section(requested, logged):
         got = '- 실행 로그에서 확인된 설정: ' + ', '.join(k + ' `' + v + '`' for k, v in logged.items())
     else:
         got = '- 실행 로그에서 확인된 설정: (로그에서 찾지 못함)'
-    diffs = []
-    if logged.get('model') and logged['model'] != requested['model']:
-        diffs.append('모델 요청 `' + requested['model'] + '` / 로그 `' + logged['model'] + '`')
-    if logged.get('reasoning effort') and logged['reasoning effort'] != requested['effort']:
-        diffs.append('추론 수준 요청 `' + requested['effort'] + '` / 로그 `' + logged['reasoning effort'] + '`')
-    return '## 실행 설정\n\n' + req + '\n' + got + '\n- 요청과 로그의 차이: ' + \
-        ('; '.join(diffs) if diffs else '없음') + '\n\n'
+    diffs, unknown, checks = [], [], []
+    for label, want, field in (('모델', requested['model'], 'model'), ('추론 수준', requested['effort'], 'reasoning effort')):
+        seen = logged.get(field)
+        if not seen:
+            unknown.append(label)
+            checks.append(label + ' 확인 불가')
+        elif seen != want:
+            diffs.append(label + ' 요청 `' + want + '` / 로그 `' + seen + '`')
+            checks.append(label + ' 불일치')
+        else:
+            checks.append(label + ' 일치')
+    if diffs:
+        summary = '; '.join(diffs) + ('' if not unknown else ' (' + ', '.join(unknown) + '는 로그에서 확인 불가)')
+    elif unknown:
+        summary = '확인 불가 (' + ', '.join(unknown) + '를 실행 로그에서 찾지 못함 — 일치 여부를 알 수 없음)'
+    else:
+        summary = '없음'
+    return '## 실행 설정\n\n' + req + '\n' + got + '\n- 항목별 비교: ' + ', '.join(checks) + \
+        '\n- 요청과 로그의 차이: ' + summary + '\n\n'
 
 
 def kill_process_tree(proc):

@@ -58,11 +58,12 @@ FAKE_CODEX = textwrap.dedent('''\
     model = args[args.index('-m') + 1] if '-m' in args else 'unknown'
     effort = next((a.split('=', 1)[1] for a in args if a.startswith('model_reasoning_effort=')), 'none')
     print('OpenAI Codex v9.9.9-fake')
-    print('model: ' + model)
-    print('provider: openai')
-    print('approval: never')
-    print('sandbox: read-only')
-    print('reasoning effort: ' + os.environ.get('FAKE_CODEX_LOG_EFFORT', effort))
+    if not os.environ.get('FAKE_CODEX_NO_HEADER'):
+        print('model: ' + model)
+        print('provider: openai')
+        print('approval: never')
+        print('sandbox: read-only')
+        print('reasoning effort: ' + os.environ.get('FAKE_CODEX_LOG_EFFORT', effort))
     with open(out, 'w', encoding='utf-8') as f:
         f.write('' if mode == 'empty' else 'fake review body')
     print('tokens used')
@@ -122,7 +123,8 @@ class ReviewToolTest(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {
             'PATH': str(bindir) + os.pathsep + os.environ['PATH'], 'CODEX_HOME': str(self.codex_home),
             'FAKE_CODEX_RECORD': str(self.record), 'FAKE_CODEX_MODE': 'ok'})
-        for name in ('FAKE_CODEX_FEATURES_ON', 'FAKE_CODEX_FEATURES_MISSING', 'FAKE_CODEX_LOG_EFFORT'):
+        for name in ('FAKE_CODEX_FEATURES_ON', 'FAKE_CODEX_FEATURES_MISSING', 'FAKE_CODEX_LOG_EFFORT',
+                     'FAKE_CODEX_NO_HEADER'):
             os.environ.pop(name, None)
         self.env.start()
         self.commit('README.md', 'readme\n', 'initial')
@@ -653,6 +655,70 @@ class ReviewToolTest(unittest.TestCase):
         run(['git', 'commit', '-q', '-m', 'env and app'], self.repo)
         cr.review(self.repo, cr.git(self.repo, 'rev-parse', 'HEAD'))
         self.assertNotIn('PLAIN_ENV_MARKER', self.calls()[0]['prompt'])
+
+    # regression (range review 2026-10-20 #1): non-ASCII paths came back quoted from `git diff --name-only`
+
+    def test_korean_path_is_sent_as_a_full_file(self):
+        path = '문서 폴더/한글 파일.md'
+        sha = self.commit(path, 'KOREAN_PATH_BODY\n', 'korean path')
+        d = cr.commit_diff(self.repo, sha)
+        self.assertEqual(d['included'], [path])                  # not '"\\353..."'
+        cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        self.assertIn('--- ' + path + ' (검토 대상 시점 전체 내용)\nKOREAN_PATH_BODY', prompt)
+        self.assertIn('전체 내용 포함 1개', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_korean_excluded_path_is_listed_by_its_real_name(self):
+        (self.repo / '설정').mkdir()
+        (self.repo / '설정' / '.env').write_text('X=1\n', encoding='utf-8')
+        (self.repo / 'app.py').write_text('x = 1\n', encoding='utf-8')
+        run(['git', 'add', '-f', '설정/.env', 'app.py'], self.repo)
+        run(['git', 'commit', '-q', '-m', 'korean env'], self.repo)
+        cr.review(self.repo, cr.git(self.repo, 'rev-parse', 'HEAD'))
+        self.assertIn('제외: 설정/.env', self.calls()[0]['prompt'])
+
+    def test_full_file_that_cannot_be_read_is_listed_not_dropped(self):
+        sha = self.commit('src/x.py', 'x = 1\n', 'x')
+        real_git = cr.git
+
+        def failing_show(repo, *args, quiet=False):
+            if args[:1] == ('show',) and args[1].endswith(':src/x.py'):
+                raise subprocess.CalledProcessError(128, 'git show')
+            return real_git(repo, *args, quiet=quiet)
+        with mock.patch.object(cr, 'git', failing_show):
+            cr.review(self.repo, sha)
+        self.assertIn('src/x.py: 읽기 실패', self.calls()[0]['prompt'])
+        self.assertIn('전체 내용 생략 1개: src/x.py (읽기 실패)', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_deleted_file_is_neither_sent_nor_listed_as_omitted(self):
+        self.commit('gone.py', 'g = 1\n', 'add')
+        run(['git', 'rm', '-q', 'gone.py'], self.repo)
+        run(['git', 'commit', '-q', '-m', 'remove'], self.repo)
+        sha = cr.git(self.repo, 'rev-parse', 'HEAD')
+        cr.review(self.repo, sha)
+        text = self.report(sha).read_text(encoding='utf-8')
+        self.assertIn('전체 내용 포함 0개', text)
+        self.assertIn('전체 내용 생략 0개', text)
+
+    # regression (range review 2026-10-20 #2): missing log fields were reported as "no difference"
+
+    def test_settings_missing_from_the_log_are_not_reported_as_matching(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        os.environ['FAKE_CODEX_NO_HEADER'] = '1'
+        cr.review(self.repo, sha)
+        text = self.report(sha).read_text(encoding='utf-8')
+        self.assertNotIn('요청과 로그의 차이: 없음', text)
+        self.assertIn('요청과 로그의 차이: 확인 불가 (모델, 추론 수준를 실행 로그에서 찾지 못함', text)
+        self.assertIn('항목별 비교: 모델 확인 불가, 추론 수준 확인 불가', text)
+
+    def test_settings_summary_per_field(self):
+        req = {'model': 'm', 'effort': 'medium', 'cli': 'x', 'features': {'hooks': 'false'}, 'cache_default': 'low'}
+        self.assertIn('차이: 없음', cr.settings_section(req, {'model': 'm', 'reasoning effort': 'medium'}))
+        partial = cr.settings_section(req, {'model': 'm', 'tokens used': '1'})
+        self.assertIn('항목별 비교: 모델 일치, 추론 수준 확인 불가', partial)
+        self.assertIn('차이: 확인 불가 (추론 수준를', partial)
+        mixed = cr.settings_section(req, {'model': 'other'})
+        self.assertIn('모델 요청 `m` / 로그 `other` (추론 수준는 로그에서 확인 불가)', mixed)
 
     # ------------------------------------------------------------- 2026-10-20: --range
 
