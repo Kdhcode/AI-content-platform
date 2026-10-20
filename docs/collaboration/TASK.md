@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-19 KST · 20절(새 노트북 점검·실행 스크립트) 추가, 기준 `claude/content-a` `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-20 KST · 25절(10-16 뒤로 가기 보호)·26절(통합 검증·병합 준비) 추가, 기준 `claude/content-a` `540062f`. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -596,7 +596,7 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **확인 못 한 것:** GitHub 작업 로그 본문은 로그인해야 보여서(내장 브라우저 미로그인) CI의 테스트 개수를 로그로 확인하지 못함 — 단계 성공과 같은 명령의 로컬 빈 DB 결과(257개)로만 판단. 실패할 때 아티팩트가 실제로 올라가는지는 일부러 실패시키지 않아 미확인. 포크 PR 실행 경로 미확인(포크 없음). PR은 인증 문제로 만들지 않음
 - `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
 
-## 23. 2026-10-16 콘텐츠 편집기 뒤로 가기 보호 (다른 PC, `claude/content-a` `ad9d5a2` 기준 · 10-20에 `280d4c5` 위로 옮겨 커밋)
+## 25. 2026-10-16 콘텐츠 편집기 뒤로 가기 보호 (이 PC, `claude/content-a` `ad9d5a2` 기준 미커밋 · 10-20에 커밋해 `280d4c5` 위로 옮김 `1b83c43`. 노트북의 23·24절과 번호가 겹치지 않게 25절로 둠)
 
 - 시작 상태: `main` `8e0c6d7`(원격과 같음, 미커밋 없음), `claude/content-a` `ad9d5a2`(main보다 19개 앞섬, 미병합), `claude/post-merge-check` 문서 커밋 1개 미병합. `AGENTS.md` 없음(협업 규칙은 `docs/collaboration/RULES.md`)
 - 검수 대기 이슈 EXCLUDED→CLOSED 우회: `main`에 방어 있음(`af174d9`, 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가, 회귀 테스트 `PublicNewsReviewFlowIntegrationTest`). 다른 CLOSED 경로도 확인 — 자동 종료는 ACTIVE만, 집계 재계산은 기사 0개일 때만, 병합·분리·이동으로 ACTIVE 이슈에 들어간 기사는 CLASSIFIED. 오늘 이슈 코드는 바꾸지 않음
@@ -610,3 +610,26 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 브라우저 확인(내장 브라우저, verify-content 13093, 로그인 생략 모드): 저장 대기 중 뒤로 가기 → 확인 창, "머무르기" 2번 모두 주소·입력 그대로; "떠나기" → 목록으로 한 번에; 저장이 끝난 뒤 뒤로 가기 → 묻지 않고 한 번에; 앞으로 가기로 남은 가드 항목에 돌아온 뒤 뒤로 가기 → 한 번에; 저장 대기 0.3초 만에 링크로 떠남 → 서버에 저장됨; 저장이 끝나지 못한 채 떠남 → 다시 열 때 보관본 복원 화면; 링크 확인 "머무르기"·`beforeunload` 처리 기존대로
 - 미검증: 실제 뒤로 가기 키·버튼. 내장 브라우저에서 Alt+← 가 기록 이동을 일으키지 않아 `history.back()`으로 확인(같은 popstate 경로). Chrome은 사용자 조작 없이 쌓인 기록 항목을 뒤로 가기 버튼에서 건너뛸 수 있다. 가드 항목은 입력(사용자 조작) 뒤에 쌓이지만, "머무르기" 뒤 다시 쌓는 항목이 버튼에서 건너뛰어지는지는 실제 Chrome에서 확인 필요(건너뛰어도 보관본과 떠날 때 저장은 그대로)
 - DB: 오늘 세션 시작 시 PostgreSQL·daily 서버가 모두 꺼져 있었음. 프로젝트 스크립트(`start-db.ps1`)로 DB만 켜고 daily 서버는 띄우지 않음. 유료 AI 호출 0
+
+## 26. 2026-10-20 콘텐츠 A 묶음 통합 검증과 병합 준비 (이 PC, `claude/content-a` `540062f`, 검증 브랜치 `verify/content-a-integration-20261020`)
+
+- **시작 상태(실제 확인):**
+  - 사용자 작업 폴더는 `main`인데 `280d4c5`(= `origin/claude/content-a`, 원격 `main` `8e0c6d7`보다 23커밋 앞). reflog: 10-20 15:39 Fork의 `pull --rebase=false main claude/content-a`가 **로컬 `main`을 fast-forward**함(원격 이름이 `main`이라 `main claude/content-a` = 원격 `main`의 `claude/content-a` 브랜치). `claude/content-a`가 이 PC의 다른 작업 트리(도구 검증 폴더)에 체크아웃돼 있어 작업 폴더에서 그 브랜치로 바꿀 수 없었던 것으로 보임. 원격 `main`은 그대로, 강제 초기화·stash 안 함. **로컬 `main`을 Fork에서 push하면 `content-a`가 원격 `main`에 들어가므로 push하지 말 것**
+  - 도구 검증 폴더의 `claude/content-a`는 `ad9d5a2`(원격보다 4커밋 뒤) + 10-16 미커밋 변경(뒤로 가기 보호, 25절). 이 변경을 커밋(`c8d9c6d`)한 뒤 아직 push되지 않은 로컬 커밋이라 `280d4c5` 위로 rebase → `1b83c43`(충돌은 `TASK.md` 기록 위치뿐, 양쪽 기록 모두 유지)
+  - 원격 확인 중 `content-a`에 없는 원격 브랜치 2개 발견: `claude/operator-ui-check`(4커밋, 23절)와 그것을 포함한 `claude/ci-checks`(6커밋, 24절), 둘 다 `280d4c5`에서 갈라짐. 23절에 "`content-a`로 합칠지 결정"이라고 남아 있어 **`content-a`에는 합치지 않음** → 로컬 검증 브랜치에서 합쳐 통합 확인
+  - 저장소에 `AGENTS.md` 없음(`RULES.md`·이 문서 기준)
+- **확인한 구현 범위(코드·테스트 대조):** A1~A8과 A7 보완이 코드에 있고, 각 요구가 실제 검사로 덮여 있음 — 생성·중복 방지(`ContentApiIntegrationTest` 3개, `ContentCreateConcurrencyIntegrationTest`), 편집·출처·URL(`ContentApi`/`ContentRelationApi`/`ContentLinkLimit`), 상태 전이와 OPERATOR 승인·복귀 403(`ContentStatusApiIntegrationTest` 86·152·162행, `ContentStatusPolicyTest`), REVIEW·APPROVED 편집 시 DRAFT와 같은 값 저장 시 변화 없음(`editingAReviewedOrApprovedContentRevokesItButSavingTheSameValuesDoesNot`), version 충돌(`ContentStatus/RelationConcurrency`), 원천 변경(`ContentOriginChangeIntegrationTest` 8개), 공개 분리(`anApprovedContentStaysOutOfThePublicNewsroom` 외 3개), 자동저장 순서·저장 실패 시 동작 중단·충돌 시 초안 유지(`verify:content-session`)
+- **발견한 문제와 수정(`540062f`, `scripts/run/check-env.ps1`·`test-run-scripts.ps1`):**
+  1. JDK 24 이상에서 `mvn -v` 첫 줄이 JVM 경고(`WARNING: A restricted method in java.lang.System has been called`)라 `check-env`가 정상 Maven을 `[MISSING]`으로 보고 종료 코드 1(이 PC JDK 25에서 재현, 같은 `mvn.cmd`로 `mvn test`는 통과). 버전 줄을 패턴으로 찾게 함(Java도 같은 방식 — `JAVA_TOOL_OPTIONS` 안내 줄 대비)
+  2. 원격 비교·`-Fetch`가 `origin`만 봄 → 원격 이름이 `main`인 이 PC에서는 다른 PC가 push한 커밋 경고가 **한 번도 안 나옴**(오늘 `operator-ui-check`·`ci-checks`를 놓친 원인과 같은 종류). 현재 브랜치의 추적 원격 → `origin` → 하나뿐인 원격 순서로 고르고, 짧은 이름 대신 전체 ref로 비교(`main/main`처럼 로컬 브랜치 이름과 겹칠 때 모호함 방지)
+  - `test-run-scripts.ps1`에 2개 추가(가짜 `mvn.cmd`가 경고를 먼저 출력, 원격 이름 `main`인 임시 저장소) → **19개 통과**. 수정 전 `check-env.ps1`로 바꾸면 새 2개만 **실패**, 되돌린 뒤 통과. 고친 `check-env`가 이 PC에서 위 두 원격 브랜치를 실제로 경고함
+- **검증 결과(이 PC: Windows 10, PowerShell 5.1, JDK 25.0.4, Node 24.19.0, Next 15.5.28):**
+  - `claude/content-a` `1b83c43` 기준: `npm ci`(작업 트리 전용 설치, 사용자 폴더 `node_modules`는 건드리지 않음) 후 `typecheck` 통과, `verify:content-session` **24/24**, `verify:auth-client` 통과, `mvn test`(`aicontent_test`) **257개 통과·실패/오류/건너뜀 0**, `test-run-scripts.ps1` 17개 통과(수정 전)
+  - 통합 브랜치 `verify/content-a-integration-20261020`(`540062f` + `origin/claude/ci-checks` `0f4af9d` 병합, 로컬 전용·push 안 함) — 24절 CI와 같은 명령: `npm ci`·`typecheck`·`build`(Next 15.5.28) 통과, `verify:content-session` 24/24, `verify:auth-client` 통과, `verify:write-target` **51개 통과**, `test-run-scripts.ps1` **19개 통과**, 빈 새 DB `aicontent_ci_sim_20261020`에 `mvn -B -ntp test` → Flyway "Successfully applied 7 migrations … v7", **257개 통과**
+  - **격리 DB 마이그레이션(V3 → V7):** `aicontent_verify_real`(V3, 실제 기사 복사본) 덤프 → `aicontent_mig_upgrade_20261020` → 통합 jar(기본 프로필, AI none, 로그인 생략 꺼짐, 작업자·스케줄러 끔, 127.0.0.1:18099)로 기동 → V4~V7 적용(0.05초), health UP, 인증 없는 관리자 API 401, 공개 API 200. `issue`(새 열 제외)·`news_article`·`issue_article`·`app_user` 행 md5 **전후 동일**(29/35/35/2), 새 테이블 3개·트리거 생성, 원본 `aicontent_verify_real`·`aicontent_main` V3 그대로
+  - **일반 로그인 모드 권한 화면(23절 스크립트 재실행):** `aicontent_verify_content` 복사본 `aicontent_verify_roles_20261020`(V7)에 통합 jar 기본 프로필(127.0.0.1:18096, stub, 작업자·스케줄러 끔) + 그 주소로 빌드한 화면 13096. 검증 DB에만 있는 OPERATOR·SYSTEM_ADMIN 시험 계정(비밀번호는 Git 밖 파일, 환경 변수로만 전달) → `VERIFY_UI_URL=http://127.0.0.1:13096 VERIFY_CONFIRM_VERIFY_DB=13096 npm run verify:content-roles` **11단계 모두 통과**, 브라우저 오류 0, 출력에 비밀번호 없음
+  - **내장 브라우저(같은 13096, SYSTEM_ADMIN 로그인, 로그인 생략 띠 없음):** 이슈 #3 "NEWS 만들기" → 빈 본문 DRAFT v0 → 제목·섹션·문단 입력 직후 검수 요청 → 요청 순서 `PATCH v0` → `submit v1`(자동저장 완료 후 상태 변경) → REVIEW → 승인 APPROVED → 공개 `/api/public/issues`·`/issues/3`에 콘텐츠 제목 없음, `/api/public/contents/7` 401 → 같은 값 저장(API) `changed=false`·APPROVED·version 그대로 → "편집 시작" 확인 1회 → 본문 수정 → DRAFT, 승인·검수 요청 기록 지워짐 → 저장 실패(PATCH 500으로 바꿈) 중 검수 요청 → `PATCH`만 나가고 submit 미전송·DRAFT 유지 → "다시 저장" 성공 → 외부 URL 출처·관련 URL 추가 → 다른 편집자 저장(API) 뒤 입력 → 충돌, 자동저장 중지·편집기 잠금·상태 버튼 비활성·초안 유지(화면·보관본), 최신본/초안 비교 → 다시 불러오기 → 보관본 복원 저장 → 원천 이슈 #3 제목 변경 → "원천 변경 미확인" → 확인 처리(제목·상태 그대로, version +1) → 뒤로 가기 보호(Next 15에서 다시 확인: 머무르기 → 주소·입력 유지, 떠나기 → 목록, 남은 편집 저장됨) → 다시 승인 → 뉴스룸 `/news`·`/news/3`에 콘텐츠 제목·본문·URL 없음. `verify:public-news`(`VERIFY_UI_URL=http://127.0.0.1:13096`) 통과(이슈 5개라 페이지 넘김은 건너뜀 — 22-1절에서 15개로 확인)
+  - 확인 뒤 18093·13093·18096·13096·18099 종료. DB(55432)는 사용자 스크립트(`start-db.ps1`)로 별도 창에서 켜 둠
+- **미실행:** `verify:flow`(실제 RSS 수집·유료 AI 필요), daily(8080·3000)·`aicontent_main` 실제 V3→V7 적용(실행 금지, RUNBOOK 5-1 절차로 사용자가 진행), GitHub Actions 실행(push는 사용자가 Fork에서 함 — push하면 24절 워크플로가 도는 것은 `ci-checks`를 합친 뒤부터), 실제 뒤로 가기 버튼(내장 브라우저에서 Alt+← 미동작, `history.back()`으로 확인 — 25절), Docker compose(이 PC 미사용)
+- 새로 만든 검증 DB: `aicontent_ci_sim_20261020`(V7), `aicontent_mig_upgrade_20261020`(V7), `aicontent_verify_roles_20261020`(V7, 콘텐츠 #5~#7 추가). 기존 DB는 덤프만 하고 바꾸지 않음. `aicontent_main` V3·이슈 29, 유료 AI 호출 0(`ai_log` 오늘 0행), 실제 RSS 수집 0
+- **병합 준비 상태:** `content-a`(`540062f`)는 원격 `main`(`8e0c6d7`) 뒤처짐 0, 충돌 없음. 남은 결정 ① `claude/ci-checks`(23·24절, 권한 화면 스크립트·데이터 쓰는 검증 스크립트 보호·CI)를 `content-a`에 합칠지(통합 확인은 위 검증 브랜치로 끝남, 합치면 `TASK.md`만 충돌 — 23·24절을 25·26절 앞에 두면 됨) ② `claude/post-merge-check`(14절 문서 1커밋) 처리. 병합 차단 결함은 없음
