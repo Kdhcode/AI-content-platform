@@ -3,12 +3,12 @@
 ## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
 
 - 작업 브랜치: `claude/collaboration-automation` (기준 `claude/ci-checks` `e40794f` = PR #2 head, PR #2는 `main` 미병합)
-- 검증한 코드 커밋: `db2cd08` (리뷰 도구) — `python -m unittest discover -s tools -p "test_*.py"` 49개 통과(직접 실행, Windows·Python 3.14.8·cp949 콘솔). 문서 커밋 `1fe5861`(RULES.md·CLAUDE.md·AGENTS.md)
-- 진행 중: 27절 전체 흐름 시험(Codex 범위 리뷰 → 지적 검증·수정 → 재검증)
+- 검증한 코드 커밋: `4d66eee` (리뷰 도구, 범위 리뷰 지적 2건 수정) — `python -m unittest discover -s tools -p "test_*.py"` **55개 통과**(직접 실행, Windows·Python 3.14.8·cp949 콘솔). 문서 커밋 `1fe5861`(RULES.md·CLAUDE.md·AGENTS.md)
+- Codex 리뷰: 범위 `e40794f..a4ea198` 리뷰 완료(지적 2건 모두 확인·수정, 27-1절). 수정 커밋 `4d66eee`의 재리뷰는 ChatGPT 사용량 한도로 **실패·미실행**(27-1절)
 - 열린 PR: #2 `claude/ci-checks` → `main`(CI 39387495038 성공). 이 브랜치의 PR은 `claude/collaboration-automation` → `claude/ci-checks`로 만들 예정
 - 다음 작업: PR #2 병합 → `main` 기준으로 이 브랜치 PR 기준 변경 → DB 백업(RUNBOOK 5-1) 뒤 daily V7 적용
 
-최종 갱신: 2026-10-20 KST · 27절(협업 자동화) 추가. 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-20 KST · 27절(협업 자동화)·27-1절(전체 흐름 시험 결과) 추가. 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -670,3 +670,18 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - `docs/collaboration/RULES.md`(`1fe5861`): 단일 원본으로 다시 씀 — 역할(사용자·Claude Code·GPT), 작업 시작 전 확인, Git 규칙, 검증 근거 구분, `TASK.md` 상단 현재 상태, 리뷰 절차(5절), 승인 범위(6절). `CLAUDE.md`·`AGENTS.md`는 RULES.md를 따르라는 안내만
 - **전체 흐름 시험 방법 선택:** 변경 전체를 커밋 하나로 합치는 대신 `--range claude/ci-checks` 옵션을 추가함. 이유: 합치면 이력이 다시 쓰이고 단계별 커밋이 없어짐, 범위 diff는 PR 리뷰에도 그대로 쓸 수 있음, 커밋 하나씩 리뷰하면 마지막 문서 커밋만 보고 전체 검증으로 오해할 위험이 있음
 - **검증(직접 실행, 기준 `db2cd08`):** `python -m unittest discover -s tools -p "test_*.py"` **49개 통과**(UTF-8 모드 없이). 대조: 끈 기능 검사를 끄면 2개, 가짜 codex를 기본 인코딩 읽기로 되돌리면 4개, 추론 수준 검사를 끄면 1개 실패 → 되돌린 뒤 49개 통과
+
+### 27-1. 2026-10-20 전체 흐름 시험 결과 (실제 Codex 호출: 사용자 승인 최대 3회 중 2회 사용)
+
+- **사전 확인(직접 실행, AI 호출 없음):** `python tools/codex_review.py --range claude/ci-checks --dry-run`
+  - 1차: **비밀값 검사가 전송을 막음** — `tools/test_codex_review.py`의 테스트 변수 `secret_line = 'admin_password = ' + ...`가 "비밀 이름 = 따옴표 안 공백 포함 문자열" 규칙에 걸림(실제 비밀값 아님, 검사기 오탐). 검사 규칙은 그대로 두고 변수 이름만 `first_line`으로 바꿈(`a4ea198`)
+  - 2차: 통과. 범위 `e40794f..a4ea198`(커밋 4개 `db2cd08`·`1fe5861`·`5edc8af`·`a4ea198`), diff 51,162자(한도 18만), 변경 파일 6개 모두 diff에 포함, 전체 내용 5개(75,617자), `TASK.md`는 파일당 한도 초과로 전체 내용 생략·발췌만(16,639자, 최근 4개 절, 27절 포함), README 5,010자·RULES 2,457자, 프롬프트 153,407자. 설정: `gpt-6.1-sol`·`medium`·codex-cli 0.162.1, 끈 기능 5개 모두 `false`
+- **호출 1/3 — 범위 리뷰(17:43, 54초, 성공):** `python tools/codex_review.py --range claude/ci-checks` → `.local/collaboration/reviews/range-e40794f4d01e-a4ea198d8b2e.md`. 실행 로그 확인 설정: model `gpt-6.1-sol`, reasoning effort `medium`(요청과 일치 — 첫 시험의 `none` 표기는 지정하지 않았을 때의 표기로 보임, 지정하면 로그에 그 값이 나옴), sandbox `read-only`, 토큰 63,540. 지적 2건(둘 다 "확인"):
+  1. [P2] 한글 경로의 변경 파일이 전체 내용에서 조용히 빠짐(`git diff --name-only`가 비ASCII 이름을 따옴표·이스케이프로 출력) → **직접 재현함**(기본 `core.quotePath` 임시 저장소에서 `한글 문서.md`가 `included`에 `"\355..."`로 들어가 전체 내용·생략 목록 모두에서 빠짐, diff는 전송됨). 같은 원인으로 변경·제외 파일 목록 이름도 이스케이프됨 → **수정**: `git diff --name-only -z`로 실제 경로 사용, 있는 파일을 못 읽으면 "읽기 실패"로 생략 목록에 기록(삭제 파일은 기존처럼 건너뜀)
+  2. [P3] 로그에 설정이 없어도 "요청과 로그의 차이: 없음" → **직접 재현함**(`settings_section`에 빈 로그·토큰만·모델만 넣으면 모두 "없음") → **수정**: 모델·추론 수준별 "일치/불일치/확인 불가", 둘 다 확인·일치할 때만 "없음"
+  - 정책 판단이 필요한 지적: 없음
+- **수정 커밋 `4d66eee` 검증(직접 실행):** 회귀 테스트 6개 추가 → **55개 통과**. 새 테스트 6개를 수정 전 `codex_review.py`로 돌리면 5개 실패(삭제 파일 테스트 1개는 원래 맞던 동작을 지키는 시험이라 양쪽 통과). 수정 커밋 dry-run: diff 10,492자, 전체 내용 2개, 설정 확인 통과
+- **호출 2/3 — 수정 커밋 재리뷰(17:53, 4초, 실패):** `python tools/codex_review.py --commit 4d66eee` → Codex가 시작은 했으나(로그: `gpt-6.1-sol`·`medium`·read-only) **ChatGPT 사용량 한도**("You've hit your usage limit … try again at 8:35 PM")로 종료. 도구는 설계대로 결과 파일을 만들지 않고 리뷰 완료로 표시하지 않았으며 로그 경로를 출력함. 지금 다시 호출해도 같은 이유로 실패하므로 **3번째 호출은 하지 않음** → `4d66eee` 재리뷰는 **미실행**
+- **흐름 판단:** 구현 → Codex 범위 리뷰 → 결과 파일 읽기 → 지적 2건 직접 재현 → 확인된 것만 수정 → 회귀 테스트 → 기록까지는 사용자 복사·붙여넣기 없이 이어짐. 끊긴 곳은 ① 사전 확인에서 비밀값 검사 오탐(사람 판단으로 테스트 변수 이름 변경, 도구가 의도대로 멈춘 것) ② 수정 커밋 재리뷰에서 ChatGPT 사용량 한도(외부 제한, 자동 재시도 없음). 이번 시험이 통과했다는 것이 모든 상황의 무인 동작을 보장하지는 않음
+- **관찰(이번에 고치지 않음):** 비밀값 검사가 이름에 `secret` 등이 든 변수에 공백 있는 문자열을 대입하면 오탐함. 프롬프트의 구역 이름(`DIFF:`, `FULL FILES:`)이 검토 대상 코드 안에도 나와 기계적으로 구역을 나누기 어려움(Codex는 문장으로 읽으므로 이번 리뷰에는 영향 없음). Git Bash에서 도구의 한글 출력이 깨져 보임(cp949 콘솔 출력, 파일은 UTF-8)
+- **미실행:** `4d66eee` 재리뷰(사용량 한도, 8:35 PM 이후 가능 — 실행하려면 새 승인 필요), CI에서의 리뷰 도구 테스트(CI 워크플로에 `tools` 테스트 작업 없음), JSON 결과·종료 코드 구분·`--followup`(이번 범위 밖)
