@@ -1,6 +1,14 @@
 # 현재 작업
 
-최종 갱신: 2026-10-20 KST · 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영) 추가, 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
+
+- 작업 브랜치: `claude/collaboration-automation` (기준 `claude/ci-checks` `e40794f` = PR #2 head, PR #2는 `main` 미병합)
+- 검증한 코드 커밋: `db2cd08` (리뷰 도구) — `python -m unittest discover -s tools -p "test_*.py"` 49개 통과(직접 실행, Windows·Python 3.14.8·cp949 콘솔). 문서 커밋 `1fe5861`(RULES.md·CLAUDE.md·AGENTS.md)
+- 진행 중: 27절 전체 흐름 시험(Codex 범위 리뷰 → 지적 검증·수정 → 재검증)
+- 열린 PR: #2 `claude/ci-checks` → `main`(CI 39387495038 성공). 이 브랜치의 PR은 `claude/collaboration-automation` → `claude/ci-checks`로 만들 예정
+- 다음 작업: PR #2 병합 → `main` 기준으로 이 브랜치 PR 기준 변경 → DB 백업(RUNBOOK 5-1) 뒤 daily V7 적용
+
+최종 갱신: 2026-10-20 KST · 27절(협업 자동화) 추가. 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -649,3 +657,16 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - 브라우저(verify-content 18093·13093, 이 커밋으로 빌드, 로그인 생략 모드): 콘텐츠 #1에서 제목 입력 직후 `history.back()` → 확인 창, "머무르기" → 주소·입력 그대로·가드 항목 다시 쌓임, "떠나기" → 목록으로 한 번에, 남은 편집이 서버에 저장됨. 확인 뒤 서버 종료
 - **미실행:** 새 커밋 3개에 대한 GitHub Actions(아직 push 전 — push하면 같은 커밋으로 실행됨), 실제 뒤로 가기 버튼(25절과 같은 제한), 일반 로그인 모드 권한 화면 재실행(코드가 26절 `5cd6414`와 같아 그 결과를 근거로 씀)
 - 원격 push·`main` 병합 안 함. `aicontent_main` V3, 유료 AI 호출 0, 실제 RSS 수집 0
+
+## 27. 2026-10-20 협업 자동화: 규칙 단일 원본 · 리뷰 도구 보완 · 전체 흐름 시험 (`claude/collaboration-automation`, 기준 `e40794f`)
+
+- **시작 상태(직접 확인):** `claude/ci-checks` = `e40794f`(원격과 같음), 원격 `main` `8e0c6d7`, PR #2 열림·미병합. 사용자 지시로 PR #2 병합을 기다리지 않고 `e40794f`에서 이 브랜치를 만듦. DB 작업은 범위 밖
+- **리뷰 도구 첫 실제 실행 기록(2026-10-20 17:12, 직접 실행, 사용자 승인 1회):** `python tools/codex_review.py --commit 9daed2c` → 성공(종료 코드 0, 29초, `codex exec` 1회). 3번 절 "실제 Codex CLI로 1회 실행" 항목이 처음으로 확인됨(그전 실제 실행 3건은 10-09, 제한 옵션 추가 전 코드). codex-cli 0.162.1, 로그의 모델 `gpt-6.1-sol`, 토큰 42,568, 한글 출력 정상(깨진 글자 0). 리뷰: 확정 결함 없음, 가설 1건("PowerShell 5.1에서 JVM 경고 stderr 때문에 `Get-MatchingLine`이 예외로 빠질 수 있음") → 같은 날 이 PC(PowerShell 5.1 + JDK 25)에서 고친 `check-env.ps1`이 Maven `[OK]`·종료 코드 0이라 **이 PC에서 재현 안 됨, 보류**
+  - 추론 수준: 실행 로그는 `reasoning effort: none`, CLI 모델 캐시(`models_cache.json`)의 `gpt-6.1-sol` 기본값은 `low`, 지원 값은 `low·medium·high·xhigh·max·ultra`(`none` 없음). **실제로 적용된 값은 확인 못 함**(로그 표기가 "지정 안 함"의 뜻인지 불명). 사용자 설정(`~/.codex/config.toml`)에는 모델·추론 설정 없음
+  - 진단에서 확인한 것(직접 실행, AI 호출 없음): 모르는 `-c features.x=false` 키·잘못된 `model_reasoning_effort` 값을 CLI가 오류 없이 무시함(exit 0). 유닛 테스트 33개 중 1개가 이 PC 콘솔(cp949)에서 실패 — 가짜 codex가 표준 입력을 기본 인코딩으로 읽어서였고 `PYTHONUTF8=1`에서는 통과(10-12에는 33개 통과). 실제 Codex(Node)는 위 실행에서 한글이 정상 전달됨
+- **변경:**
+  - `tools/codex_review.py`(`db2cd08`): ① 실제 호출 전 `codex features list`로 끈 기능 5개가 모두 `false`인지 확인, 아니면 아무것도 보내지 않고 중단 ② 모델·추론 수준을 항상 명시(`-m gpt-6.1-sol`, `-c model_reasoning_effort=medium`, `--model`·`--effort`로 변경), CLI 모델 캐시와 대조해 없는 모델·지원 안 하는 값이면 중단 ③ 결과 파일에 "요청한 설정 / 실행 로그에서 확인된 설정 / 차이"와 CLI 버전·사용 토큰 기록 ④ 입력 축소: `TASK.md`는 상단 블록 + 최근 절(2만 자 이내), `RULES.md`는 전체를 별도 제목으로 넣고 지시문에 "따르라"와 리뷰용 규칙을 직접 적음 ⑤ 변경 파일 전체 내용을 검토 대상 커밋 시점으로 추가(파일당 6만 자·합계 12만 자 한도, 넘는 파일은 "생략"으로 표시하고 diff는 그대로), 제외 규칙·비밀값 검사(전체 내용의 바뀌지 않은 줄 포함)·diff 18만 자 한도 유지 ⑥ `--range BASE`: `merge-base(BASE, HEAD)..HEAD` 전체 diff를 한 번에 리뷰(처리 상태 파일은 그대로) ⑦ 결과·로그 경로 출력, `--dry-run`이 보낼 입력 요약과 확인한 설정을 출력
+  - `tools/test_codex_review.py`: 가짜 codex가 표준 입력을 UTF-8로 읽음, `features list`·`--version`·실행 로그 머리말 흉내, 임시 모델 캐시. 새 테스트 16개(끈 기능 켜짐·누락 시 중단, 지원 안 하는 추론 수준·없는 모델·캐시 없음, 요청/로그 설정 기록과 차이 표시, 기본 medium, RULES 전달, TASK.md 발췌, 검토 시점 전체 파일, 바뀌지 않은 줄의 비밀값 차단, 큰 파일 생략, 제외 파일 미전송, `--range`, 범위 크기 초과 거부, dry-run 출력). Windows 텍스트 파이프가 프롬프트 줄바꿈을 CRLF로 바꿔 보내는 것은 테스트 쪽에서 정규화(리뷰에는 영향 없음)
+  - `docs/collaboration/RULES.md`(`1fe5861`): 단일 원본으로 다시 씀 — 역할(사용자·Claude Code·GPT), 작업 시작 전 확인, Git 규칙, 검증 근거 구분, `TASK.md` 상단 현재 상태, 리뷰 절차(5절), 승인 범위(6절). `CLAUDE.md`·`AGENTS.md`는 RULES.md를 따르라는 안내만
+- **전체 흐름 시험 방법 선택:** 변경 전체를 커밋 하나로 합치는 대신 `--range claude/ci-checks` 옵션을 추가함. 이유: 합치면 이력이 다시 쓰이고 단계별 커밋이 없어짐, 범위 diff는 PR 리뷰에도 그대로 쓸 수 있음, 커밋 하나씩 리뷰하면 마지막 문서 커밋만 보고 전체 검증으로 오해할 위험이 있음
+- **검증(직접 실행, 기준 `db2cd08`):** `python -m unittest discover -s tools -p "test_*.py"` **49개 통과**(UTF-8 모드 없이). 대조: 끈 기능 검사를 끄면 2개, 가짜 codex를 기본 인코딩 읽기로 되돌리면 4개, 추론 수준 검사를 끄면 1개 실패 → 되돌린 뒤 49개 통과
