@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-20 KST · 25절(10-16 뒤로 가기 보호)·26절(통합 검증·병합 준비) 추가, 기준 `claude/content-a` `540062f`. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-20 KST · 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영) 추가, 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -633,3 +633,19 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **미실행:** `verify:flow`(실제 RSS 수집·유료 AI 필요), daily(8080·3000)·`aicontent_main` 실제 V3→V7 적용(실행 금지, RUNBOOK 5-1 절차로 사용자가 진행), GitHub Actions 실행(push는 사용자가 Fork에서 함 — push하면 24절 워크플로가 도는 것은 `ci-checks`를 합친 뒤부터), 실제 뒤로 가기 버튼(내장 브라우저에서 Alt+← 미동작, `history.back()`으로 확인 — 25절), Docker compose(이 PC 미사용)
 - 새로 만든 검증 DB: `aicontent_ci_sim_20261020`(V7), `aicontent_mig_upgrade_20261020`(V7), `aicontent_verify_roles_20261020`(V7, 콘텐츠 #5~#7 추가). 기존 DB는 덤프만 하고 바꾸지 않음. `aicontent_main` V3·이슈 29, 유료 AI 호출 0(`ai_log` 오늘 0행), 실제 RSS 수집 0
 - **병합 준비 상태:** `content-a`(`540062f`)는 원격 `main`(`8e0c6d7`) 뒤처짐 0, 충돌 없음. 남은 결정 ① `claude/ci-checks`(23·24절, 권한 화면 스크립트·데이터 쓰는 검증 스크립트 보호·CI)를 `content-a`에 합칠지(통합 확인은 위 검증 브랜치로 끝남, 합치면 `TASK.md`만 충돌 — 23·24절을 25·26절 앞에 두면 됨) ② `claude/post-merge-check`(14절 문서 1커밋) 처리. 병합 차단 결함은 없음
+
+### 26-1. 2026-10-20 누락 수정 3개를 `claude/ci-checks`에 반영 (이 PC, 기준 원격 `0f4af9d`)
+
+- **결정(사용자):** `content-a`에만 있던 커밋 3개(`1b83c43` 뒤로 가기 보호, `540062f` check-env, `695c88e` 25·26절 기록)를 검토 후 `claude/ci-checks`에 반영. PR은 `claude/ci-checks` → `main`
+- **25·26절과의 구분:** 25·26절은 `claude/content-a`(`540062f`) 기준과, 그것에 `ci-checks`를 **병합**한 로컬 검증 브랜치(`5cd6414`) 기준으로 쓴 기록이다. 아래가 실제로 `ci-checks`에 올린 결과(체리픽)다. 26절의 "병합 준비 상태·남은 결정 ①"은 이 결정으로 해소됨
+- **복구 수단:** 로컬 백업 브랜치 `backup/content-a-20261020`(`695c88e`, 세 커밋 모두 포함 확인), `backup/local-main-20261020`(`280d4c5`, Fork pull로 앞서 있던 로컬 `main`)
+- **검토:** 세 커밋 모두 `280d4c5` 위에 있고 `280d4c5`는 `ci-checks`의 조상(선행 의존성 충족). `ci-checks`가 `280d4c5` 이후 바꾼 파일(`ci.yml`, `package.json`, `write-target.cjs`, `verify-content-roles.cjs`, `verify-flow.cjs`, `verify-write-target.cjs`, `VERIFY.md`, `TASK.md`)과 겹치는 것은 `TASK.md`뿐 → 중복 적용 없음
+- **체리픽(순서대로):** `1b83c43` → `d44f031`(`TASK.md` 충돌: 노트북 23·24절 다음에 이 PC 기록을 둠), `540062f` → `9daed2c`(충돌 없음), `695c88e` → `8f4e70f`(충돌 없음, 25절 제목·26절 추가). 결과 트리는 문서를 빼면 로컬 검증 브랜치 `5cd6414`와 **같음**(`git diff` 비어 있음), 백업 브랜치 대비 차이는 `ci-checks` 자체 파일뿐
+- **검증(기준 `8f4e70f`, Windows 10 · PowerShell 5.1 · JDK 25.0.4 · Node 24.19.0, 직접 실행):**
+  - `npm ci` · `typecheck` · `build`(Next.js 15.5.28) 통과, `verify:content-session` **24/24**(뒤로 가기 보호 9개 포함), `verify:auth-client` 통과, `verify:write-target` **51개 통과**
+  - `test-run-scripts.ps1` **19개 통과**(새 2개: Maven이 JVM 경고 뒤에 버전을 출력하는 경우, 원격 이름이 `origin`이 아닌 경우)
+  - 실제 `check-env.ps1`: Java 25.0.4·Maven `[OK]`(수정 전에는 이 PC에서 `[MISSING]`·종료 코드 1), 원격 `main`을 추적 원격으로 인식해 `main/claude/post-merge-check` 1커밋만 경고(이미 포함된 `content-a`·`operator-ui-check`는 경고 없음), 종료 코드 0
+  - `mvn test`(`aicontent_test`) **257개 통과**, 실패·오류·건너뜀 0
+  - 브라우저(verify-content 18093·13093, 이 커밋으로 빌드, 로그인 생략 모드): 콘텐츠 #1에서 제목 입력 직후 `history.back()` → 확인 창, "머무르기" → 주소·입력 그대로·가드 항목 다시 쌓임, "떠나기" → 목록으로 한 번에, 남은 편집이 서버에 저장됨. 확인 뒤 서버 종료
+- **미실행:** 새 커밋 3개에 대한 GitHub Actions(아직 push 전 — push하면 같은 커밋으로 실행됨), 실제 뒤로 가기 버튼(25절과 같은 제한), 일반 로그인 모드 권한 화면 재실행(코드가 26절 `5cd6414`와 같아 그 결과를 근거로 씀)
+- 원격 push·`main` 병합 안 함. `aicontent_main` V3, 유료 AI 호출 0, 실제 RSS 수집 0
