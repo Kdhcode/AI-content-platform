@@ -2,13 +2,14 @@
 
 ## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
 
-- 작업 브랜치: `claude/v7-rehearsal` (기록만, PR #3 head `c615af3` 위). 원격 `main` = `6a9ba31`(PR #2 병합, V4~V7 포함). PR #3(`claude/collaboration-automation` → `main`)은 열림·미병합
+- 작업 브랜치: `claude/v7-rehearsal` (기록만, PR #3 head `c615af3` 위). 원격 `main` = **`1dda07b`**(PR #3 병합 완료, 2026-10-21 15:03 KST, 병합 커밋. 그 전 `6a9ba31` = PR #2 병합, V4~V7 포함). `main` CI 39553091328 성공. 이 브랜치의 `main` 기준 변경은 `TASK.md`뿐(28-2절)
 - 검증한 코드 커밋: 리뷰 도구 `4d66eee`(55개 통과, 27-1·27-2절). 이번 28절은 코드 변경 없음
 - `aicontent_main`: V3 그대로. 적용 전 백업 `.local/backup-aicontent_main-20261021-1427-V3.dump` 복원 확인 완료(28절)
 - **V4~V7 리허설 완료(28-1절):** `main` `6a9ba31` 빌드 jar로 백업 복원본 `aicontent_main_v7rehearsal_20261021`에 V4~V7 적용, 확인 SQL·기존 데이터·API·트리거 확인 통과
-- 다음 작업: 실제 `aicontent_main` V7 적용(별도 승인, RUNBOOK 5-1 4~5단계) — 적용 직전 다시 백업할지 결정
+- 열린 PR: 없음. 이 브랜치의 기록용 PR(`claude/v7-rehearsal` → `main`)은 사용자가 만들 예정
+- 다음 작업: 실제 `aicontent_main` V7 적용(별도 승인) — **새 백업 생성·복원 확인부터** 시작한 뒤 RUNBOOK 5-1 4~5단계, 적용 후 확인과 화면 확인
 
-최종 갱신: 2026-10-21 KST · 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-21 KST · 28-2절(PR #3 병합 후속). 이전: 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -738,3 +739,11 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **트리거 동작(rollback한 트랜잭션 안):** 이슈 제목 변경 → `change_seq` 0→1, 값이 같은 UPDATE는 오르지 않음(V7 설계: 지정 열이 실제로 바뀔 때만), `issue_article.is_primary` 변경 → 0→1. rollback 뒤 0·제목 원래대로
 - **변경하지 않음:** `aicontent_main`(끝까지 V3, 확인함), daily(실행 안 함), 실행 정책, PostgreSQL(계속 실행). 남겨 둔 DB: `aicontent_main_v7rehearsal_20261021`(V7), `aicontent_main_backupcheck_20261021`(V3)
 - **관찰:** 사용자 터미널 탭에 오래 실행되는 명령을 넣으면 도구가 2초 안에 실행 확인을 못 받고 Ctrl-C를 보냄(빌드는 문제없었음). 실제 daily 기동은 사용자가 직접 터미널에서 실행하는 것이 안전
+
+### 28-2. 2026-10-21 후속: PR #3 병합 (28·28-1절은 병합 전 기록)
+
+- 28·28-1절과 그 시점의 상단 상태에 적힌 "PR #3 열림·미병합", "원격 `main` = `6a9ba31`"은 기록할 때의 사실이며 고치지 않음
+- **PR #3 병합(원격 조회):** 2026-10-21 06:03:23Z(15:03 KST), 병합 커밋 `1dda07b`(부모 `6a9ba31`·`c615af3`). `1dda07b` 트리 = `c615af3` 트리(병합으로 섞인 변경 없음). 원격 `claude/collaboration-automation` 브랜치는 남아 있음
+- **CI(원격 조회):** `main` `1dda07b` push 실행 39553091328 — backend·admin-ui·run-scripts 모두 success. `claude/v7-rehearsal` `43fa5cf` push 실행 39552509826도 세 작업 모두 success
+- **이 브랜치와 새 `main`(직접 실행):** `git diff main...claude/v7-rehearsal` = `docs/collaboration/TASK.md` 1개. `git merge-tree --write-tree main claude/v7-rehearsal` 충돌 없음, 결과 트리 = `43fa5cf` 트리. rebase·force push 불필요
+- **변경 없음:** `aicontent_main` V3, daily·백엔드 미실행, 실제 Codex·유료 AI 호출 0
