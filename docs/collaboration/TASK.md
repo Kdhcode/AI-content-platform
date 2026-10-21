@@ -2,13 +2,13 @@
 
 ## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
 
-- 작업 브랜치: `claude/collaboration-automation` (기준 `claude/ci-checks` `e40794f` = PR #2 head, PR #2는 `main` 미병합)
-- 검증한 코드 커밋: `4d66eee` (리뷰 도구, 범위 리뷰 지적 2건 수정) — `python -m unittest discover -s tools -p "test_*.py"` **55개 통과**(직접 실행, Windows·Python 3.14.8·cp949 콘솔). 문서 커밋 `1fe5861`(RULES.md·CLAUDE.md·AGENTS.md)
-- Codex 리뷰: 범위 `e40794f..a4ea198` 리뷰 완료(지적 2건 모두 확인·수정, 27-1절). 수정 커밋 `4d66eee` 재리뷰 완료(2026-10-21, 확정 지적 없음, 27-2절)
-- 열린 PR: #2 `claude/ci-checks` → `main`(CI 39387495038 성공). 이 브랜치의 PR은 `claude/collaboration-automation` → `claude/ci-checks`로 만들 예정
-- 다음 작업: PR #2 병합 → `main` 기준으로 이 브랜치 PR 기준 변경 → DB 백업(RUNBOOK 5-1) 뒤 daily V7 적용
+- 작업 브랜치: `claude/v7-rehearsal` (기록만, PR #3 head `c615af3` 위). 원격 `main` = `6a9ba31`(PR #2 병합, V4~V7 포함). PR #3(`claude/collaboration-automation` → `main`)은 열림·미병합
+- 검증한 코드 커밋: 리뷰 도구 `4d66eee`(55개 통과, 27-1·27-2절). 이번 28절은 코드 변경 없음
+- `aicontent_main`: V3 그대로. 적용 전 백업 `.local/backup-aicontent_main-20261021-1427-V3.dump` 복원 확인 완료(28절)
+- **보류:** V4~V7 리허설 — PowerShell 실행 정책(`Restricted`)으로 `scripts/run/*.ps1`이 실행되지 않음. 사용자가 정상 절차로 실행 정책을 설정한 뒤 재개(28절 "재개할 작업")
+- 다음 작업: 실행 정책 설정(사용자) → 28절 재개할 작업 → 실제 `aicontent_main` V7 적용은 별도 승인
 
-최종 갱신: 2026-10-21 KST · 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-21 KST · 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -701,3 +701,24 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **미실행:** CI의 `tools` 테스트 작업(워크플로에 없음)
 - **이번 범위에서 제외한 기능(정정: 27절·27-1절에는 "미실행"으로 적었으나 실행하지 못한 검증이 아니라 범위 밖 기능):** JSON 결과, 종료 코드 구분, `--followup`
 - 관찰 항목(비밀값 검사 오탐, 프롬프트 구역 이름 모호, Git Bash 한글 출력)은 27-1절과 같음
+
+### 28. 2026-10-21 `aicontent_main` 백업 · V4~V7 리허설 보류
+
+- **원격 상태(원격 조회):** PR #2 병합(`main` `6a9ba31`, 병합 커밋). PR #3 열림·미병합(head `c615af3`). 사용자 작업 폴더는 미커밋 변경 없음, 로컬 `main`을 `6a9ba31`로 fast-forward
+- **DB 백업(직접 실행):** `aicontent_main` V3(Flyway 1~3 성공), 이슈 29·기사 35·연결 35·계정 2, 접속 클라이언트 0, 8080/3000 서버 없음 → `pg_dump -Fc` → `.local/backup-aicontent_main-20261021-1427-V3.dump`(566,073바이트, SHA-256 `63e2faf7984da44cd2aab17d634daf119fbbb9af5300d224065bb30c817d4ec8`, TABLE DATA 12개). Git 제외
+- **백업 확인(직접 실행):** 새 DB `aicontent_main_backupcheck_20261021`에 `pg_restore --no-owner` 오류 없음. 12개 테이블 모두 행 수와 내용 md5가 `aicontent_main`과 같음, 최고 버전 3. 이 DB는 남겨 둠
+- **정정(절차 위반):** PostgreSQL(55432)이 꺼져 있었고 `start-db.ps1`이 실행 정책에 막히자 스크립트 안의 `pg_ctl ... -w start`를 직접 실행해 DB를 띄웠음(서버 로그: 비정상 종료 뒤 자동 복구 정상 완료). 정책 차단을 다른 실행 방식으로 피한 것이라 하지 말았어야 함 → RULES 반영 예정 문구 아래. DB는 `127.0.0.1:55432`, 데이터 `.local/pgdata`, Windows 서비스 아님(자동 시작 없음), 계속 실행 중(끄지 않음)
+- **리허설 보류 — 차단 원인(직접 실행):**
+  - 사용자 터미널(Windows PowerShell 5.1.19041.6456, PowerShell 7 없음)에서 `& .\scripts\run\start-db.ps1`, `& .\scripts\run\check-env.ps1` → "이 시스템에서 스크립트를 실행할 수 없으므로 … 로드할 수 없습니다"(`PSSecurityException`, `UnauthorizedAccess`)
+  - `Get-ExecutionPolicy -List`: MachinePolicy·UserPolicy·Process·CurrentUser·LocalMachine 모두 `Undefined` → 적용 정책 `Restricted`(Windows 기본값). 그룹 정책 강제는 아님. 레지스트리 HKCU 정책 값 없음, HKLM `ExecutionPolicy` 값 없음
+  - 기존 jar 2개(`backend/target/platform-backend-0.1.0-SNAPSHOT.jar`, `.local/run/platform-backend.jar`, 둘 다 10-15 13:57)에는 마이그레이션 V1~V3만 있어 V4~V7 리허설에 쓸 수 없음 → `build.ps1`로 다시 빌드해야 하는데 같은 이유로 실행 불가
+  - Claude Code의 PowerShell 도구 세션은 Process 범위 `Bypass`라 그 경로로 `.ps1`을 실행하는 것도 우회에 해당 → 사용하지 않음. `-ExecutionPolicy Bypass` 실행도 하지 않음(사용자 결정)
+- **재개할 작업(실행 정책을 정상 절차로 설정한 뒤, 새 PowerShell 창에서):**
+  1. `Get-ExecutionPolicy -List`로 설정 확인, `.\scripts\run\check-env.ps1`
+  2. `admin-ui`에서 `npm ci`, `.\scripts\run\build.ps1`로 `main`(`6a9ba31` 이후 최신) 빌드, jar에 V4~V7 포함 확인
+  3. 검증된 백업 `…-20261021-1427-V3.dump`를 **새 이름** 리허설 DB에 복원(기존 `aicontent_main_v7check`·`aicontent_rehearsal_main*` 등이 있으면 덮어쓰지 않음)
+  4. 연결 대상이 그 DB인지 확인한 뒤 `java -jar … --spring.datasource.url=…/<리허설 DB>`(daily와 다른 포트, `--app.ai.provider=none`)로 기동 → V4~V7 적용 로그, RUNBOOK 5-1 확인 SQL(1~7 `t`, 트리거 3개, 이슈·기사·연결 29/35/35), 기본 API 동작
+  5. 실제 `aicontent_main` V7 적용·daily 실행은 별도 승인
+- **복원 표현 정정:** 역방향 마이그레이션이 없을 뿐, 검증된 백업으로 V3 상태 복원은 가능. 단 백업 이후 생긴 데이터는 복원본에 없으므로 따로 보존·처리해야 함(RUNBOOK 5-1 "복원" 5번)
+- **RULES 반영 예정(사용자 정리 문구, 아직 RULES.md에 넣지 않음):** 스크립트 실행이 차단되면 오류와 적용된 정책을 먼저 확인한다. 보안·관리자 정책에 의한 차단은 다른 실행 방식으로 우회하지 않는다. 사용자가 승인한 실행 방법으로만 진행하며, DB 시작도 연결 대상과 자동 실행 동작을 확인한다
+- **변경하지 않음:** 실행 정책, `aicontent_main`, daily, 서버 상태. 빌드·리허설 미실행
