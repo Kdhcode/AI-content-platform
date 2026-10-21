@@ -5,10 +5,10 @@
 - 작업 브랜치: `claude/v7-rehearsal` (기록만, PR #3 head `c615af3` 위). 원격 `main` = `6a9ba31`(PR #2 병합, V4~V7 포함). PR #3(`claude/collaboration-automation` → `main`)은 열림·미병합
 - 검증한 코드 커밋: 리뷰 도구 `4d66eee`(55개 통과, 27-1·27-2절). 이번 28절은 코드 변경 없음
 - `aicontent_main`: V3 그대로. 적용 전 백업 `.local/backup-aicontent_main-20261021-1427-V3.dump` 복원 확인 완료(28절)
-- **보류:** V4~V7 리허설 — PowerShell 실행 정책(`Restricted`)으로 `scripts/run/*.ps1`이 실행되지 않음. 사용자가 정상 절차로 실행 정책을 설정한 뒤 재개(28절 "재개할 작업")
-- 다음 작업: 실행 정책 설정(사용자) → 28절 재개할 작업 → 실제 `aicontent_main` V7 적용은 별도 승인
+- **V4~V7 리허설 완료(28-1절):** `main` `6a9ba31` 빌드 jar로 백업 복원본 `aicontent_main_v7rehearsal_20261021`에 V4~V7 적용, 확인 SQL·기존 데이터·API·트리거 확인 통과
+- 다음 작업: 실제 `aicontent_main` V7 적용(별도 승인, RUNBOOK 5-1 4~5단계) — 적용 직전 다시 백업할지 결정
 
-최종 갱신: 2026-10-21 KST · 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-21 KST · 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -722,3 +722,19 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **복원 표현 정정:** 역방향 마이그레이션이 없을 뿐, 검증된 백업으로 V3 상태 복원은 가능. 단 백업 이후 생긴 데이터는 복원본에 없으므로 따로 보존·처리해야 함(RUNBOOK 5-1 "복원" 5번)
 - **RULES 반영 예정(사용자 정리 문구, 아직 RULES.md에 넣지 않음):** 스크립트 실행이 차단되면 오류와 적용된 정책을 먼저 확인한다. 보안·관리자 정책에 의한 차단은 다른 실행 방식으로 우회하지 않는다. 사용자가 승인한 실행 방법으로만 진행하며, DB 시작도 연결 대상과 자동 실행 동작을 확인한다
 - **변경하지 않음:** 실행 정책, `aicontent_main`, daily, 서버 상태. 빌드·리허설 미실행
+
+### 28-1. 2026-10-21 V4~V7 리허설 (실행 정책 설정 뒤 재개)
+
+- **실행 정책(직접 실행, 사용자 터미널):** CurrentUser `RemoteSigned`, 나머지 범위 `Undefined`(사용자가 설정). `.\scripts\run\check-env.ps1` 실행됨 → "Nothing required is missing"(Java 25.0.4, Maven 3.9.9, node 24.19.0, next 15.5.28, `aicontent_main` V3, 8080/3000 서버 없음). 경고는 `DB_PASSWORD` 미설정(`mvn test`용)과 `main`에 없는 원격 브랜치 커밋(PR #3 7개, `post-merge-check` 1개)
+- **빌드(직접 실행):** `main` `6a9ba31`(원격과 같음, PR #3 미병합)에서 `.\scripts\run\build.ps1` → BUILD SUCCESS. `.local/run/platform-backend.jar`(14:45, 42,869,267바이트)에 V1~V7 포함 확인. 이 jar는 daily도 쓰는 파일이므로 다음 daily 기동 때 `aicontent_main`에 V4~V7이 적용됨(이번에는 daily 실행 안 함). `npm ci`·화면 빌드는 미실행(백엔드 리허설에 불필요)
+- **리허설 DB(직접 실행):** 기존 이름과 겹치지 않는 새 DB `aicontent_main_v7rehearsal_20261021` 생성(같은 이름 없음 확인) → 백업 `…-20261021-1427-V3.dump`(SHA-256 `63e2faf7…4ec8` 재확인) `pg_restore --no-owner` 오류 없음 → 12개 테이블 행 수·md5가 `aicontent_main`과 같음
+- **기동:** daily 인자(`start-backend.ps1 -Target daily`와 같음: profile `default`, 로그인 생략 끔, AI `none`, 스케줄러 끔, OpenAI 키 비움)에서 DB URL과 포트만 바꿈(`…/aicontent_main_v7rehearsal_20261021`, `127.0.0.1:18094`). 로그 `Database: jdbc:postgresql://127.0.0.1:55432/aicontent_main_v7rehearsal_20261021`로 연결 대상 확인
+  - 1차: 터미널 도구가 기동 중 Ctrl-C를 보내 Flyway 검증(`Successfully validated 7 migrations`) 직후 종료 — DB는 V3 그대로, `content` 테이블·`change_seq` 열 없음(부분 적용 없음) 확인
+  - 2차(14:48:24): `Migrating schema "public" to version "4 - content"` … `"7 - issue change seq"`, `Successfully applied 4 migrations … now at version v7 (execution time 00:00.054s)`. 이 기동도 같은 이유로 곧 종료됨
+  - 3차(Claude Code 백그라운드 실행, 같은 인자): `Schema "public" is up to date`, `Started PlatformApplication in 2.555 seconds`. 로그에 ERROR·WARN 없음. 확인 뒤 종료
+- **확인 SQL(RUNBOOK 5-1):** Flyway 1~7 모두 `true`, 트리거 3개(`trg_issue_change_seq`·`trg_issue_article_change_seq`·`trg_issue_article_move_change_seq`), 함수 2개, 새 테이블 `content`·`content_source`·`content_link`(0행), `issue.change_seq` 기본값 0(29개 모두 0)·`change_seq_at`·`content.origin_ack_seq`
+- **기존 데이터:** 기존 11개 테이블을 원래 열만으로 비교 — 행 수·md5 모두 `aicontent_main`과 같음(이슈 29·기사 35·연결 35 등)
+- **API(127.0.0.1:18094):** `/actuator/health` 200 UP. 로그인 없이 `/api/admin/me`·`/issues`·`/contents` 401, 틀린 비밀번호 401. `viewer`(비밀번호 파일 사용, 출력 안 함) `/me` 200(SYSTEM_ADMIN), `/issues` 200 총 29, 이슈 상세 200, `/contents` 200 빈 목록, `/articles` 200 총 35, `/jobs` 200. 공개 `/api/public/issues` 총 29, `/categories` 200. 화면(3000 계열)은 확인하지 않음(미실행)
+- **트리거 동작(rollback한 트랜잭션 안):** 이슈 제목 변경 → `change_seq` 0→1, 값이 같은 UPDATE는 오르지 않음(V7 설계: 지정 열이 실제로 바뀔 때만), `issue_article.is_primary` 변경 → 0→1. rollback 뒤 0·제목 원래대로
+- **변경하지 않음:** `aicontent_main`(끝까지 V3, 확인함), daily(실행 안 함), 실행 정책, PostgreSQL(계속 실행). 남겨 둔 DB: `aicontent_main_v7rehearsal_20261021`(V7), `aicontent_main_backupcheck_20261021`(V3)
+- **관찰:** 사용자 터미널 탭에 오래 실행되는 명령을 넣으면 도구가 2초 안에 실행 확인을 못 받고 Ctrl-C를 보냄(빌드는 문제없었음). 실제 daily 기동은 사용자가 직접 터미널에서 실행하는 것이 안전
