@@ -1,8 +1,14 @@
 """Tests for tools/codex_review.py. Run: python -m unittest discover -s tools -p "test_*.py" -v
 
 A fake `codex` executable is put first on PATH, so no AI service is called. It records the
-arguments and prompt it received and behaves according to FAKE_CODEX_MODE.
+arguments and prompt of every `exec` call and behaves according to FAKE_CODEX_MODE. It also answers
+`features list` (like codex-cli: a feature is off when its -c override is given, unless listed in
+FAKE_CODEX_FEATURES_ON or left out via FAKE_CODEX_FEATURES_MISSING) and `--version`, and prints a run
+log header like the real CLI. CODEX_HOME points at a temporary model cache.
 """
+import contextlib
+import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -19,7 +25,20 @@ import codex_review as cr  # noqa: E402
 FAKE_CODEX = textwrap.dedent('''\
     import json, os, sys, time
     args = sys.argv[1:]
-    prompt = sys.stdin.read()
+    if '--version' in args:
+        print('codex-cli 9.9.9-fake')
+        sys.exit(0)
+    if 'features' in args:
+        on = set(filter(None, os.environ.get('FAKE_CODEX_FEATURES_ON', '').split(',')))
+        missing = set(filter(None, os.environ.get('FAKE_CODEX_FEATURES_MISSING', '').split(',')))
+        for name in ['apps', 'hooks', 'multi_agent', 'plugins', 'shell_tool', 'unrelated_feature']:
+            if name in missing:
+                continue
+            off = ('features.' + name + '=false') in args and name not in on
+            print(name.ljust(41) + 'stable'.ljust(19) + ('false' if off else 'true'))
+        sys.exit(0)
+    # The review tool writes UTF-8; read bytes so the result does not depend on the console code page.
+    prompt = sys.stdin.buffer.read().decode('utf-8')
     record = os.environ['FAKE_CODEX_RECORD']
     with open(record, 'a', encoding='utf-8') as f:
         f.write(json.dumps({'args': args, 'prompt': prompt}) + '\\n')
@@ -36,9 +55,24 @@ FAKE_CODEX = textwrap.dedent('''\
         with open(os.environ['FAKE_CODEX_CHILD_PID'], 'w') as f:
             f.write(str(child.pid))
         time.sleep(30)
+    model = args[args.index('-m') + 1] if '-m' in args else 'unknown'
+    effort = next((a.split('=', 1)[1] for a in args if a.startswith('model_reasoning_effort=')), 'none')
+    print('OpenAI Codex v9.9.9-fake')
+    if not os.environ.get('FAKE_CODEX_NO_HEADER'):
+        print('model: ' + model)
+        print('provider: openai')
+        print('approval: never')
+        print('sandbox: read-only')
+        print('reasoning effort: ' + os.environ.get('FAKE_CODEX_LOG_EFFORT', effort))
     with open(out, 'w', encoding='utf-8') as f:
         f.write('' if mode == 'empty' else 'fake review body')
+    print('tokens used')
+    print('1,234')
     ''')
+
+MODEL_CACHE = {'models': [{'slug': 'gpt-6.1-sol', 'default_reasoning_level': 'low',
+                           'supported_reasoning_levels': [{'effort': e} for e in
+                                                          ['low', 'medium', 'high', 'xhigh', 'max']]}]}
 
 
 def pid_alive(pid):
@@ -83,9 +117,15 @@ class ReviewToolTest(unittest.TestCase):
             shim.write_text('#!/bin/sh\nexec "' + sys.executable + '" "$(dirname "$0")/fake_codex.py" "$@"\n')
             shim.chmod(0o755)
         self.record = root / 'calls.jsonl'
+        self.codex_home = root / 'codex-home'
+        self.codex_home.mkdir()
+        (self.codex_home / 'models_cache.json').write_text(json.dumps(MODEL_CACHE), encoding='utf-8')
         self.env = mock.patch.dict(os.environ, {
-            'PATH': str(bindir) + os.pathsep + os.environ['PATH'],
+            'PATH': str(bindir) + os.pathsep + os.environ['PATH'], 'CODEX_HOME': str(self.codex_home),
             'FAKE_CODEX_RECORD': str(self.record), 'FAKE_CODEX_MODE': 'ok'})
+        for name in ('FAKE_CODEX_FEATURES_ON', 'FAKE_CODEX_FEATURES_MISSING', 'FAKE_CODEX_LOG_EFFORT',
+                     'FAKE_CODEX_NO_HEADER'):
+            os.environ.pop(name, None)
         self.env.start()
         self.commit('README.md', 'readme\n', 'initial')
 
@@ -104,16 +144,24 @@ class ReviewToolTest(unittest.TestCase):
         return cr.git(self.repo, 'rev-parse', 'HEAD')
 
     def calls(self):
-        import json
         if not self.record.exists():
             return []
-        return [json.loads(line) for line in self.record.read_text(encoding='utf-8').splitlines()]
+        calls = [json.loads(line) for line in self.record.read_text(encoding='utf-8').splitlines()]
+        for call in calls:      # on Windows the text-mode pipe turns the prompt's LF into CRLF
+            call['prompt'] = call['prompt'].replace('\r\n', '\n')
+        return calls
 
     def report(self, sha):
         return cr.reviews_dir(self.repo) / (sha + '.md')
 
     def lock(self):
         return cr.reviews_dir(self.repo).parent / 'review.lock'
+
+    def main_output(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cr.main(argv)
+        return buf.getvalue()
 
     # ------------------------------------------------------------- commit coverage
 
@@ -474,6 +522,246 @@ class ReviewToolTest(unittest.TestCase):
         self.assertIsNone(cr.read_state(self.repo))
         self.assertEqual(self.calls(), [])
 
+
+    # ------------------------------------------------------------- 2026-10-20: disabled features, model settings
+
+    def test_feature_still_enabled_blocks_sending(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        os.environ['FAKE_CODEX_FEATURES_ON'] = 'hooks'
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('hooks=true', str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+        self.assertFalse(self.report(sha).exists())
+
+    def test_feature_missing_from_list_blocks_sending(self):
+        # a renamed feature: the override no longer matches anything and the CLI does not complain
+        sha = self.commit('a.txt', 'a\n', 'A')
+        os.environ['FAKE_CODEX_FEATURES_MISSING'] = 'shell_tool'
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('shell_tool=missing', str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+
+    def test_unsupported_effort_and_unknown_model_refused_before_sending(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha, effort='none')
+        self.assertIn('not supported', str(ctx.exception))
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha, model='no-such-model')
+        self.assertIn('not in the Codex model cache', str(ctx.exception))
+        (self.codex_home / 'models_cache.json').unlink()
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('Cannot read the Codex model cache', str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+
+    def test_model_and_effort_passed_and_recorded_with_log_settings(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        out = self.main_output(['--repo', str(self.repo), '--commit', sha, '--effort', 'high'])
+        args = self.calls()[0]['args']
+        self.assertEqual(args[args.index('-m') + 1], cr.DEFAULT_MODEL)
+        self.assertIn('model_reasoning_effort=high', args)
+        text = self.report(sha).read_text(encoding='utf-8')
+        self.assertIn('요청한 설정: 모델 `' + cr.DEFAULT_MODEL + '`, 추론 수준 `high`, CLI `codex-cli 9.9.9-fake`', text)
+        self.assertIn('모델 캐시 기본 추론 수준: `low`', text)
+        self.assertIn('실행 로그에서 확인된 설정: model `' + cr.DEFAULT_MODEL + '`', text)
+        self.assertIn('reasoning effort `high`', text)
+        self.assertIn('tokens used `1,234`', text)
+        self.assertIn('요청과 로그의 차이: 없음', text)
+        self.assertIn('Result file: ' + str(self.report(sha)), out)
+        self.assertIn('Log file: ', out)
+
+    def test_default_effort_is_medium(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        cr.review(self.repo, sha)
+        self.assertIn('model_reasoning_effort=medium', self.calls()[0]['args'])
+
+    def test_log_that_disagrees_with_the_request_is_reported(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        os.environ['FAKE_CODEX_LOG_EFFORT'] = 'none'
+        cr.review(self.repo, sha)
+        self.assertIn('추론 수준 요청 `medium` / 로그 `none`', self.report(sha).read_text(encoding='utf-8'))
+
+    # ------------------------------------------------------------- 2026-10-20: input sent to codex
+
+    def test_prompt_follows_rules_and_carries_the_rules_text(self):
+        self.commit('docs/collaboration/RULES.md', '# 공통 협업 규칙\n- RULE_MARKER_42 규칙\n', 'rules')
+        sha = self.commit('a.txt', 'a\n', 'A')
+        cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        self.assertIn("Follow the project's collaboration rules in docs/collaboration/RULES.md", prompt)
+        self.assertIn('RULES (docs/collaboration/RULES.md):\n# 공통 협업 규칙\n- RULE_MARKER_42', prompt)
+        self.assertIn('policy decision is reported as a question for the user', prompt)
+
+    def test_task_md_sends_top_block_and_latest_sections_only(self):
+        text = ('# 현재 작업\n\n## 현재 상태\n- TOP_MARKER\n\n## 1. 오래된 절\nOLD_MARKER ' + 'x' * 30000 + '\n'
+                '## 2. 중간 절\nMIDDLE_MARKER\n\n## 3. 최근 절\nNEW_MARKER\n')
+        self.commit('docs/collaboration/TASK.md', text, 'task')
+        sha = self.commit('a.txt', 'a\n', 'A')
+        cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        for marker in ('TOP_MARKER', 'MIDDLE_MARKER', 'NEW_MARKER'):
+            self.assertIn(marker, prompt)
+        self.assertNotIn('OLD_MARKER', prompt)
+        self.assertIn('TASK.md 발췌: 상단 + 최근 2개 절', prompt)
+
+    def test_task_excerpt_keeps_and_cuts_a_huge_latest_section(self):
+        excerpt, whole = cr.task_excerpt('# 현재 작업\n\n## 1. 큰 절\n' + 'y' * 50000 + '\n', limit=1000)
+        self.assertLess(len(excerpt), 1400)
+        self.assertIn('## 1. 큰 절', excerpt)
+        self.assertIn('길이 제한으로 생략', excerpt)
+        self.assertGreater(whole, 50000)
+
+    def test_full_files_come_from_the_reviewed_commit_not_the_working_tree(self):
+        lines = ['TOP_CONTEXT_LINE = 1'] + ['line_%d = %d' % (i, i) for i in range(2, 30)]
+        self.commit('src/mod.py', '\n'.join(lines) + '\n', 'v1')
+        lines[-1] = 'line_29 = 2929'
+        sha = self.commit('src/mod.py', '\n'.join(lines) + '\n', 'v2')
+        (self.repo / 'src' / 'mod.py').write_text('WORKTREE_ONLY = 1\n', encoding='utf-8')   # not committed
+        cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        self.assertIn('--- src/mod.py (검토 대상 시점 전체 내용)', prompt)
+        self.assertIn('TOP_CONTEXT_LINE', prompt)              # far outside the diff hunk
+        self.assertNotIn('WORKTREE_ONLY', prompt)
+        self.assertIn('전체 내용 포함 1개', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_secret_in_an_unchanged_line_of_a_changed_file_blocks_sending(self):
+        first_line = 'admin_password = ' + self.SECRET + ' # production'
+        self.commit('deploy/app.ini', first_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(20)) + '\n', 'v1')
+        sha = self.commit('deploy/app.ini', first_line + '\n' + '\n'.join('k%d = %d' % (i, i) for i in range(19)) +
+                          '\nk19 = changed\n', 'v2')
+        with self.assertRaises(RuntimeError) as ctx:
+            cr.review(self.repo, sha)
+        self.assertIn('deploy/app.ini (전체 내용):1', str(ctx.exception))
+        self.assertNotIn(self.SECRET, str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+
+    def test_large_changed_file_is_listed_as_omitted_but_its_diff_is_sent(self):
+        sha = self.commit('big.txt', 'BIG_START\n' + 'z' * 500 + '\n', 'big')
+        with mock.patch.object(cr, 'FULL_FILE_MAX_CHARS', 100):
+            cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        self.assertIn('+BIG_START', prompt)                        # diff still there
+        self.assertNotIn('--- big.txt (검토 대상 시점 전체 내용)', prompt)
+        self.assertIn('big.txt: ', prompt.split('OMITTED FULL FILES:')[1])
+        self.assertIn('전체 내용 생략 1개: big.txt', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_excluded_file_is_never_sent_as_a_full_file(self):
+        (self.repo / '.env').write_text('PLAIN_ENV_MARKER=1\n', encoding='utf-8')
+        (self.repo / 'app.py').write_text('x = 1\n', encoding='utf-8')
+        run(['git', 'add', '-f', '.env', 'app.py'], self.repo)
+        run(['git', 'commit', '-q', '-m', 'env and app'], self.repo)
+        cr.review(self.repo, cr.git(self.repo, 'rev-parse', 'HEAD'))
+        self.assertNotIn('PLAIN_ENV_MARKER', self.calls()[0]['prompt'])
+
+    # regression (range review 2026-10-20 #1): non-ASCII paths came back quoted from `git diff --name-only`
+
+    def test_korean_path_is_sent_as_a_full_file(self):
+        path = '문서 폴더/한글 파일.md'
+        sha = self.commit(path, 'KOREAN_PATH_BODY\n', 'korean path')
+        d = cr.commit_diff(self.repo, sha)
+        self.assertEqual(d['included'], [path])                  # not '"\\353..."'
+        cr.review(self.repo, sha)
+        prompt = self.calls()[0]['prompt']
+        self.assertIn('--- ' + path + ' (검토 대상 시점 전체 내용)\nKOREAN_PATH_BODY', prompt)
+        self.assertIn('전체 내용 포함 1개', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_korean_excluded_path_is_listed_by_its_real_name(self):
+        (self.repo / '설정').mkdir()
+        (self.repo / '설정' / '.env').write_text('X=1\n', encoding='utf-8')
+        (self.repo / 'app.py').write_text('x = 1\n', encoding='utf-8')
+        run(['git', 'add', '-f', '설정/.env', 'app.py'], self.repo)
+        run(['git', 'commit', '-q', '-m', 'korean env'], self.repo)
+        cr.review(self.repo, cr.git(self.repo, 'rev-parse', 'HEAD'))
+        self.assertIn('제외: 설정/.env', self.calls()[0]['prompt'])
+
+    def test_full_file_that_cannot_be_read_is_listed_not_dropped(self):
+        sha = self.commit('src/x.py', 'x = 1\n', 'x')
+        real_git = cr.git
+
+        def failing_show(repo, *args, quiet=False):
+            if args[:1] == ('show',) and args[1].endswith(':src/x.py'):
+                raise subprocess.CalledProcessError(128, 'git show')
+            return real_git(repo, *args, quiet=quiet)
+        with mock.patch.object(cr, 'git', failing_show):
+            cr.review(self.repo, sha)
+        self.assertIn('src/x.py: 읽기 실패', self.calls()[0]['prompt'])
+        self.assertIn('전체 내용 생략 1개: src/x.py (읽기 실패)', self.report(sha).read_text(encoding='utf-8'))
+
+    def test_deleted_file_is_neither_sent_nor_listed_as_omitted(self):
+        self.commit('gone.py', 'g = 1\n', 'add')
+        run(['git', 'rm', '-q', 'gone.py'], self.repo)
+        run(['git', 'commit', '-q', '-m', 'remove'], self.repo)
+        sha = cr.git(self.repo, 'rev-parse', 'HEAD')
+        cr.review(self.repo, sha)
+        text = self.report(sha).read_text(encoding='utf-8')
+        self.assertIn('전체 내용 포함 0개', text)
+        self.assertIn('전체 내용 생략 0개', text)
+
+    # regression (range review 2026-10-20 #2): missing log fields were reported as "no difference"
+
+    def test_settings_missing_from_the_log_are_not_reported_as_matching(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        os.environ['FAKE_CODEX_NO_HEADER'] = '1'
+        cr.review(self.repo, sha)
+        text = self.report(sha).read_text(encoding='utf-8')
+        self.assertNotIn('요청과 로그의 차이: 없음', text)
+        self.assertIn('요청과 로그의 차이: 확인 불가 (모델, 추론 수준를 실행 로그에서 찾지 못함', text)
+        self.assertIn('항목별 비교: 모델 확인 불가, 추론 수준 확인 불가', text)
+
+    def test_settings_summary_per_field(self):
+        req = {'model': 'm', 'effort': 'medium', 'cli': 'x', 'features': {'hooks': 'false'}, 'cache_default': 'low'}
+        self.assertIn('차이: 없음', cr.settings_section(req, {'model': 'm', 'reasoning effort': 'medium'}))
+        partial = cr.settings_section(req, {'model': 'm', 'tokens used': '1'})
+        self.assertIn('항목별 비교: 모델 일치, 추론 수준 확인 불가', partial)
+        self.assertIn('차이: 확인 불가 (추론 수준를', partial)
+        mixed = cr.settings_section(req, {'model': 'other'})
+        self.assertIn('모델 요청 `m` / 로그 `other` (추론 수준는 로그에서 확인 불가)', mixed)
+
+    # ------------------------------------------------------------- 2026-10-20: --range
+
+    def test_range_reviews_every_commit_of_the_branch_in_one_call(self):
+        cr.main(['--repo', str(self.repo)])                       # state = initial commit
+        state = cr.read_state(self.repo)
+        calls = len(self.calls())
+        run(['git', 'checkout', '-q', '-b', 'feature'], self.repo)
+        a = self.commit('a.txt', 'RANGE_A\n', 'A')
+        b = self.commit('b.txt', 'RANGE_B\n', 'B')
+        out = self.main_output(['--repo', str(self.repo), '--range', 'main'])
+        self.assertEqual(len(self.calls()), calls + 1)
+        prompt = self.calls()[-1]['prompt']
+        self.assertIn('+RANGE_A', prompt)
+        self.assertIn('+RANGE_B', prompt)
+        self.assertIn(a[:7] + ' A', prompt)
+        self.assertIn(b[:7] + ' B', prompt)
+        base = cr.git(self.repo, 'rev-parse', 'main')
+        report = cr.reviews_dir(self.repo) / ('range-' + base[:12] + '-' + b[:12] + '.md')
+        self.assertTrue(report.exists())
+        self.assertIn('범위 리뷰: ' + base[:12] + '..' + b[:12], report.read_text(encoding='utf-8'))
+        self.assertIn('Result file: ' + str(report), out)
+        self.assertEqual(cr.read_state(self.repo), state)           # processed-commit state untouched
+        with self.assertRaises(SystemExit):
+            cr.main(['--repo', str(self.repo), '--range', 'main', '--commit', b])
+
+    def test_range_over_the_size_limit_is_refused(self):
+        run(['git', 'checkout', '-q', '-b', 'feature'], self.repo)
+        self.commit('a.txt', 'q' * 300 + '\n', 'A')
+        with mock.patch.object(cr, 'MAX_PATCH_CHARS', 100):
+            with self.assertRaises(RuntimeError) as ctx:
+                cr.main(['--repo', str(self.repo), '--range', 'main'])
+        self.assertIn('Diff too large', str(ctx.exception))
+        self.assertEqual(self.calls(), [])
+
+    def test_dry_run_prints_input_settings_and_prompt_file(self):
+        sha = self.commit('a.txt', 'a\n', 'A')
+        out = self.main_output(['--repo', str(self.repo), '--commit', sha, '--dry-run'])
+        self.assertIn('Input:', out)
+        self.assertIn('Settings: model ' + cr.DEFAULT_MODEL + ' | effort medium | cli codex-cli 9.9.9-fake', out)
+        self.assertIn("'shell_tool': 'false'", out)
+        self.assertIn('Prompt file: ', out)
+        self.assertEqual(self.calls(), [])
 
 if __name__ == '__main__':
     unittest.main()
