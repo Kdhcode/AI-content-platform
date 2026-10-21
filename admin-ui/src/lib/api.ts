@@ -5,7 +5,7 @@ export type ApiError = { code: string; message: string; details?: unknown };
 type Envelope<T> = { success: boolean; data: T | null; error: ApiError | null };
 
 export class ApiFailure extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(public status: number, public code: string, message: string, public details?: unknown) {
     super(message);
   }
 }
@@ -17,6 +17,10 @@ export function setCredentials(username: string, password: string) {
 }
 export function clearCredentials() {
   sessionStorage.removeItem(KEY);
+}
+/** True only when the person signed in with an account (not merely local-verify mode). */
+export function hasLogin(): boolean {
+  return typeof window !== "undefined" && !!sessionStorage.getItem(KEY);
 }
 export function hasCredentials(): boolean {
   return typeof window !== "undefined" && (!!sessionStorage.getItem(KEY) || bypassKnown);
@@ -40,7 +44,7 @@ export function localVerifyMode(): Promise<LocalVerifyMode> {
   return modeRequest;
 }
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
   const token = sessionStorage.getItem(KEY);
   if (!token && !(await localVerifyMode()).loginBypass) {
     if (window.location.pathname !== "/login") window.location.replace("/login");
@@ -51,6 +55,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     headers: {
       ...(token ? { Authorization: `Basic ${token}` } : {}),
       ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers ?? {}),
     },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
@@ -65,7 +70,8 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     if (window.location.pathname !== "/login") window.location.replace("/login");
   }
   if (!res.ok || !envelope || !envelope.success) {
-    throw new ApiFailure(res.status, envelope?.error?.code ?? "HTTP_" + res.status, envelope?.error?.message ?? res.statusText);
+    throw new ApiFailure(res.status, envelope?.error?.code ?? "HTTP_" + res.status, envelope?.error?.message ?? res.statusText,
+      envelope?.error?.details);
   }
   return envelope.data as T;
 }
@@ -141,6 +147,48 @@ export type Dashboard = {
     schemaVersion: string | null; aiProvider: string; schedulerEnabled: boolean };
   checkedAt: string;
 };
+
+/** The signed-in account (GET /api/admin/me). Only for showing the right buttons; the server checks every action. */
+export type Me = { username: string; roles: string[] };
+
+let meCache: { token: string | null; request: Promise<Me> } | null = null;
+/** Asked once per sign-in (a new login asks again). */
+export function currentUser(): Promise<Me> {
+  const token = typeof window === "undefined" ? null : sessionStorage.getItem(KEY);
+  if (!meCache || meCache.token !== token) {
+    const request = api<Me>("/api/admin/me");
+    meCache = { token, request };
+    request.catch(() => { if (meCache?.request === request) meCache = null; });
+  }
+  return meCache.request;
+}
+
+export type ContentBody = { schemaVersion: 1; sections: { id: string; heading: string; paragraphs: { id: string; text: string }[] }[] };
+export type OriginChange = {
+  unacknowledged: boolean; issueChangeSeq: number; acknowledgedSeq: number; issueChangedAt: string | null;
+  acknowledgedAt: string | null; issueStatus: string; notice: "MERGED" | "EXCLUDED" | null; mergedIntoIssueId: number | null;
+};
+export type ContentSource = {
+  id: number; kind: "ISSUE" | "NEWS_ARTICLE" | "EXTERNAL_URL" | "MANUAL"; issueId: number | null; newsArticleId: number | null;
+  externalUrl: string | null; label: string | null; role: "PRIMARY" | "SUPPORTING" | "REFERENCE"; checkedAt: string | null;
+};
+export type ContentLink = {
+  id: number; linkType: string; title: string; url: string; siteVisible: boolean; blogVisible: boolean;
+  displayPosition: "BODY_TOP" | "BODY_BOTTOM" | "SOURCES"; sortOrder: number; createdAt: string | null; updatedAt: string | null;
+};
+export type ContentDetail = {
+  id: number; contentType: "NEWS" | "LIFE"; status: string; title: string; body: ContentBody; version: number;
+  originIssue: { id: number; title: string; status: string; mergedIntoIssueId: number | null };
+  originCheckedAt: string | null; originChange: OriginChange; sources: ContentSource[]; links: ContentLink[];
+  statusReason: string | null; createdBy: string; createdAt: string; updatedBy: string; updatedAt: string;
+  submittedAt: string | null; approvedBy: string | null; approvedAt: string | null;
+};
+export type ContentListItem = {
+  id: number; contentType: "NEWS" | "LIFE"; status: string; title: string; version: number; originIssueId: number;
+  originIssueTitle: string; originIssueStatus: string; originChange: OriginChange; updatedBy: string; updatedAt: string;
+};
+/** Response of every content change except the status actions (those return the detail itself). */
+export type ContentChangeResult = { content: ContentDetail; changed: boolean; statusChanged: boolean; itemId: number | null };
 
 export function qs(params: Record<string, string | number | undefined | null>): string {
   const p = new URLSearchParams();

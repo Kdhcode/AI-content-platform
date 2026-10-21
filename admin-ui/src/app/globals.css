@@ -63,3 +63,18 @@ table { width:100%; border-collapse:collapse; background:var(--card); border:1px
 .local-verify-banner strong { color:#8a5a00; }
 .local-verify-data { font-weight:600; }
 @media (max-width:700px) { .local-verify-banner { padding:8px 16px; font-size:11px; } }
+/* content editor (A7) */
+.row.tight { margin-bottom:6px; gap:6px; }.row.spread { justify-content:space-between; }.grow { flex:1; min-width:200px; }
+.check { display:inline-flex; gap:6px; align-items:center; font-size:12px; color:#50606e; }.check input { padding:0; }
+.link-button { border:0; background:none; padding:0 4px; color:var(--accent); font-weight:500; }.link-button:disabled { color:var(--muted); }
+.field-label { display:flex; gap:8px; align-items:baseline; font-size:11px; color:#6a7c8a; margin:10px 0 6px; }.field-error { color:var(--bad); font-size:11px; margin:4px 0; }
+.counter { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }.counter.over { color:var(--bad); font-weight:700; }
+.title-input { width:100%; }.section-block { border:1px solid var(--line); border-radius:8px; padding:12px 16px 14px; margin:12px 0; }.section-block legend { font-size:11px; color:#6a7c8a; padding:0 6px; }
+.paragraph-block { margin:8px 0 10px 12px; padding-left:12px; border-left:2px solid var(--line); }
+.save-state { min-width:220px; padding:10px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:12px; }
+.save-state.saved { color:var(--ok); }.save-state.dirty, .save-state.saving { color:var(--warn); }.save-state.error, .save-state.conflict { color:var(--bad); border-color:#f1d8d8; background:#fdf4f4; }
+.warn-box { color:#7d5a26; background:#fdf8ef; border:1px solid #eedfca; border-radius:6px; padding:10px 14px; margin:12px 0; font-size:12px; }
+.card.conflict { border-color:#f1d8d8; }.compare { margin:12px 0; }.doc-view { border:1px solid var(--line); border-radius:6px; padding:10px 14px; background:#fafbfc; max-height:420px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+.doc-title { font-weight:700; margin-bottom:8px; }.url { word-break:break-all; font-size:11px; }
+.sticky-feedback { position:sticky; top:0; z-index:5; }.action-form { border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:8px 0; }
+.pick-list { margin:6px 0; padding-left:18px; font-size:12px; }

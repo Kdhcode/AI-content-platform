@@ -37,17 +37,25 @@
 | **daily (평소)** | 관리자 http://127.0.0.1:3000 · 뉴스룸 http://127.0.0.1:3000/news · API 8080 | `aicontent_main` | 기본 `none`(유료 호출 없음). 새 기사 처리가 필요할 때만 `-Ai openai` + 호출 한도 | **관리자 인증 필수** |
 | dev (개발) | 3001 / 8081 | `aicontent` | `stub` | 관리자 인증 |
 | verify-scenario / verify-real | 13091·18091 / 13092·18092 | 검증 DB | stub / none | 로그인 생략(검증 전용, `local-verify`) |
+| verify-content | 13093·18093 | `aicontent_verify_content`(시나리오 DB 복사본) | stub, 작업자 끔 | 로그인 생략 가능 + 실제 계정 로그인(역할 확인용, 계정은 검증 DB에만) |
 
 로그인 생략은 검증 환경에만 남긴다. daily·dev는 `local-verify` 프로필을 쓰지 않으므로 기존 인증이 그대로다(2026-10-15 확인: daily에서 로그인 없이·틀린 비밀번호로 관리자 API 401, `viewer` 계정 200).
 
 ## 3. 처음 한 번 준비
 
-1. `npm install`을 `admin-ui`에서 한 번 실행(이미 했으면 생략).
-2. `.local/run/machine.ps1`을 만든다(Git 제외). 예:
+0. **새 PC면 먼저 점검:** 프로젝트 폴더에서 `.\scripts\run\check-env.ps1`(원격 브랜치까지 보려면 `-Fetch`). 읽기 전용이며 아무것도 설치·시작하지 않는다. Git 브랜치·미커밋 변경·현재 브랜치에 없는 원격 커밋(현재 브랜치가 추적하는 원격과 비교. 추적 원격이 없으면 `origin`, 그것도 없으면 하나뿐인 원격 — Fork 등으로 받아 원격 이름이 `origin`이 아닌 경우 포함), Java(pom.xml 기준 21+)·Maven·Node(next 15.5 기준 18.18+·19.8+·20+)·`admin-ui/node_modules`(설치된 next가 `package.json`과 다르면 `[MISSING]`), `127.0.0.1:$DbPort`의 PostgreSQL과 환경별 DB·pgvector·스키마 버전, Docker, 터미널 환경 변수(값은 출력하지 않고 설정 여부만), 실행 중인 서버와 health를 보여 준다. 필수 항목이 빠지면 `[MISSING]`과 종료 코드 1.
+   - `.local/`(프로젝트 DB 바이너리·데이터, Maven, `machine.ps1`, 계정 비밀번호 파일)은 Git에 없다. 새 PC에는 직접 준비해야 하고, 이전 PC의 DB 데이터(`aicontent_main` 등)는 옮기지 않으면 없다.
+   - 이전 PC의 `.local/`을 통째로 옮기는 방법(둘 다 Windows x64·PostgreSQL 16이면 가능): ① 이전 PC에서 미커밋·미push 작업이 없는지 확인 ② 이전 PC DB를 먼저 멈춤(`pg_ctl ... -m fast -w stop`, 켠 채 `pgdata`를 복사하면 손상될 수 있음) ③ USB 등으로 복사(비밀번호 파일이 있으니 Git·공유 드라이브 금지) ④ 새 PC에서 `.local/run/machine.ps1`의 경로를 새 PC에 맞게 수정 ⑤ 이전 경로를 가리키는 `.local/run/ui-*`를 지우고(`start-ui.ps1`이 다시 만듦) `build.ps1`로 jar를 다시 만든 뒤 `check-env.ps1`. 다른 방법은 `pg_dump`/`pg_restore`.
+1. `admin-ui`에서 `npm ci`(잠금 파일 그대로 설치. 이미 했으면 생략). 의존성이 바뀐 커밋을 받은 뒤(예: 2026-10-19 next 14 → 15)에는 다시 실행하고, 화면은 `start-ui.ps1 -Target <환경> -Rebuild`로 한 번 다시 빌드한다(`.local/run/ui-*`에 예전 빌드가 남아 있음).
+2. `.local/run/machine.ps1`을 만든다(Git 제외). 기본값(`.local` 안의 PostgreSQL·Maven, DB 포트 55432) 다음에 읽히므로 아래 값을 덮어쓸 수 있다(2026-10-19부터. 그 전에는 `$PgBin`·`$MavenCmd`를 덮어써도 기본값으로 되돌아갔다). 예:
    ```powershell
    $env:JAVA_HOME = 'C:\Users\User\.jdks\temurin-25.0.4.1'
    $NodeDir = 'C:\Users\User\AppData\Local\JetBrains\IntelliJIdea2026.2\acp-agents\.runtimes\node\24.19.0'
+   $MavenCmd = 'C:\tools\apache-maven-3.9.9\bin\mvn.cmd'   # 없으면 PATH의 mvn
+   $PgBin = 'C:\tools\pgsql\bin'; $PgData = 'C:\tools\pgdata'
+   $DbPort = 5432                                         # docker compose(postgres 5432)를 쓸 때. 이때는 DB_PASSWORD 필요
    ```
+   DB 주소는 항상 `127.0.0.1`이고 포트만 바꿀 수 있다. docker compose를 쓰면 `aicontent_test`는 `docker/init-test-db.sql`이 만들고, 다른 환경 DB(`aicontent_main` 등)는 직접 만든다.
 3. daily 관리자 계정: `aicontent_main`에는 `viewer` 계정이 복사돼 있다(비밀번호는 `.local/view/viewer-password.txt`, Git 제외). 자기 계정을 따로 만들려면 처음 실행할 때 `ADMIN_USERNAME`/`ADMIN_PASSWORD`를 그 터미널에만 설정한다(없는 아이디일 때만 생성, 기존 비밀번호는 바꾸지 않음).
 
 ## 4. 평소 실행 순서 (본인 터미널에서)
@@ -80,6 +88,8 @@ $env:AI_DAILY_MAX_CALLS = '50'       # 없으면 스크립트가 시작을 거�
 
 ## 5. main 병합 후 재시작·확인 순서
 
+> 이 절과 6절은 2026-10-15 PR #1(`claude/integration-review`) 기준이다. **`claude/content-a`(V4~V7) 병합은 5-1절**을 따른다.
+
 이번 통합(`claude/integration-review`)에는 **DB 마이그레이션 변경이 없다**(V1~V3 그대로). 병합·되돌리기 모두 코드만 바뀐다.
 
 **병합 전**
@@ -105,10 +115,55 @@ $env:AI_DAILY_MAX_CALLS = '50'       # 없으면 스크립트가 시작을 거�
    - 화면 위에 노란 "로컬 검증 모드" 띠가 **없어야** 한다(daily는 검증 모드가 아님).
 5. 필요하면 전체 테스트: `backend`에서 `mvn test`(테스트 DB `aicontent_test`, 유료 호출 없음).
 
+## 5-1. `claude/content-a` 병합 후 daily DB V3 → V7 (콘텐츠 A 묶음)
+
+**바뀌는 것:** 병합한 코드로 백엔드를 처음 띄우는 순간 Flyway가 `aicontent_main`(현재 V3)에 V4~V7을 한 번에 적용한다. 따로 실행하는 마이그레이션 명령은 없다.
+- V4: 새 테이블 `content`·`content_source`·`content_link`. V5·V6: 이 테이블들의 제약 교체
+- V7: `issue`에 `change_seq`·`change_seq_at` 열(기본값 0), 함수 2개(`issue_raise_change_seq`, `issue_article_raise_change_seq`), 트리거 3개(`trg_issue_change_seq` — `issue` BEFORE UPDATE, `trg_issue_article_change_seq`·`trg_issue_article_move_change_seq` — `issue_article` 추가·삭제·이동 시 해당 `issue` 행 UPDATE), `content.origin_ack_seq`
+- 기존 테이블의 행은 바뀌지 않는다(`aicontent_main` 복사본으로 기존 11개 테이블 행 md5 동일 확인, TASK.md 15~18절). 이후 이슈 갱신·기사 연결마다 트리거가 돈다
+- **되돌리는 마이그레이션은 없다.** 예전 코드로 돌아가도 DB는 V7로 남는다(아래 "복원")
+
+**순서 (본인 터미널, daily를 쓰지 않는 시간에)**
+1. daily 백엔드가 떠 있으면 Ctrl+C로 멈춘다(작업 중 데이터가 백업 뒤에 바뀌지 않게).
+2. **백업:**
+   ```powershell
+   $d = Get-Date -Format 'yyyyMMdd-HHmm'
+   & .local\pg16\pgsql\bin\pg_dump.exe -h 127.0.0.1 -p 55432 -U aicontent -Fc -f ".local\backup-aicontent_main-$d-V3.dump" aicontent_main
+   ```
+   백업 확인: `pg_restore.exe --list <파일> | Select-String 'TABLE DATA'`에 `issue`·`news_article`·`issue_article`·`app_user` 등이 보이고, 파일이 0바이트가 아닌지. `.local/`은 Git 제외(비밀번호 해시가 들어 있음, 공유 드라이브에 올리지 않음).
+3. (권장) **리허설:** 백업을 새 DB로 복원하고 병합한 코드를 그 DB로 한 번 띄워 V4~V7이 적용되는지 본다. 스크립트 환경(`start-backend.ps1`)은 DB가 고정이라, 15~18절처럼 `java -jar ... --spring.datasource.url=jdbc:postgresql://127.0.0.1:55432/aicontent_main_v7check`로 다른 포트에 띄운다(daily와 같은 `--app.ai.provider=none`). 확인 뒤 그 DB는 지워도 된다.
+   ```powershell
+   & .local\pg16\pgsql\bin\createdb.exe -h 127.0.0.1 -p 55432 -U aicontent aicontent_main_v7check
+   & .local\pg16\pgsql\bin\pg_restore.exe -h 127.0.0.1 -p 55432 -U aicontent -d aicontent_main_v7check --no-owner <백업 파일>
+   ```
+4. 코드 받기·빌드: `git checkout main`, `git pull`, `admin-ui`에서 `npm ci`, `.\scripts\run\build.ps1`, `.\scripts\run\check-env.ps1`.
+5. 실행: `start-backend.ps1 -Target daily`(이때 V4~V7 적용, 로그에 `Migrating schema "public" to version "4 - content"` … `"7 - issue change seq"`), `start-ui.ps1 -Target daily -Rebuild`.
+
+**적용 후 확인**
+```powershell
+$q = { param($sql) & .local\pg16\pgsql\bin\psql.exe -h 127.0.0.1 -p 55432 -U aicontent -d aicontent_main -Atc $sql }
+& $q "select version, success from flyway_schema_history order by installed_rank"     # 1~7 모두 t
+& $q "select tgname from pg_trigger where tgname like 'trg_issue%change_seq' order by 1" # 트리거 3개
+& $q "select count(*) from issue; select count(*) from news_article; select count(*) from issue_article"  # 백업 전과 같은 수
+```
+화면: 로그인 후 대시보드·이슈 목록이 전과 같고, `/contents`가 빈 목록으로 열리며, 로그인 없는 창에서 `/api/admin/contents`가 401, `/news`가 열린다. 화면 위에 "로컬 검증 모드" 띠가 없어야 한다.
+
+**문제가 생겼을 때 복원** — 코드만 되돌리면 DB는 원래대로 돌아오지 않는다(2026-10-19 확인: V7 DB 복사본에 `main` `8e0c6d7`을 띄우면 Flyway가 "version (7) newer than the latest available migration (3)" 경고만 내고 시작하며, `content*` 테이블·`issue.change_seq` 열·트리거가 그대로 남아 이슈를 고치면 `change_seq`가 계속 올라감). DB까지 V3로 돌리려면 백업으로 바꾼다:
+1. daily 백엔드를 멈춘다(연결이 남아 있으면 이름 변경이 안 됨).
+2. 백업을 새 DB로 복원: `createdb ... aicontent_main_restore` → `pg_restore ... -d aicontent_main_restore --no-owner <백업>`. `aicontent_main_restore`에서 `flyway_schema_history` 최고 버전이 3이고 위 행 수가 백업 전과 같은지 확인.
+3. 바꿔 끼우기(지우지 않고 이름만):
+   ```powershell
+   & .local\pg16\pgsql\bin\psql.exe -h 127.0.0.1 -p 55432 -U aicontent -d postgres -c "ALTER DATABASE aicontent_main RENAME TO aicontent_main_v7_failed_<날짜>" -c "ALTER DATABASE aicontent_main_restore RENAME TO aicontent_main"
+   ```
+4. 예전 코드로 빌드·실행: `git checkout 8e0c6d7`(또는 병합 되돌리기 커밋), `build.ps1`, `start-ui.ps1 -Target daily -Rebuild`, `start-backend.ps1 -Target daily`.
+5. 백업 뒤에 생긴 데이터(새 콘텐츠, 그 사이 수집·처리한 기사, 관리자 조작)는 복원한 DB에 없다. 필요하면 `aicontent_main_v7_failed_<날짜>`에서 확인한다. 원인을 확인하기 전에는 그 DB를 지우지 않는다.
+
+**리허설 기록(2026-10-19, daily·`aicontent_main`은 건드리지 않음):** `aicontent_verify_real`(V3, 실제 데이터 복사본, 이슈 29·기사 35)을 `aicontent_rehearsal_main`으로 복사해 위 순서를 그대로 실행 — 백업(TABLE DATA 12개) → `claude/content-a` jar(AI `none`)로 기동 → 로그 `Migrating schema "public" to version "4 - content"` … `"7 - issue change seq"`, `Successfully applied 4 migrations … now at version v7`(0.2초) → 확인 SQL 통과(1~7 `t`, 트리거 3개, 이슈·기사·연결 수 29/35/35 그대로) → 복원·이름 바꾸기 → V3, `content` 테이블·트리거 없음, 수 그대로. `aicontent_rehearsal_main_v7_failed`(V7)는 남겨 둠.
+
 ## 6. 되돌리는 방법
 
 - **코드:** GitHub에서 병합 커밋을 되돌리는 PR을 만든다(`git revert -m 1 <병합 커밋>` 후 push). 급하면 작업 폴더에서 `git checkout 885b2f5` 후 `build.ps1`·`start-ui.ps1 -Rebuild`로 이전 버전을 띄운다.
-- **DB:** 스키마가 바뀌지 않았으므로 되돌릴 것이 없다. 관리자 조작으로 데이터를 되돌려야 하면 병합 전 백업을 새 DB로 복원해 비교한다: `createdb ... aicontent_main_restore` → `pg_restore -d aicontent_main_restore <백업>`. 기존 DB를 지우거나 덮어쓰기 전에는 먼저 확인한다.
+- **DB:** (PR #1 기준) 스키마가 바뀌지 않았으므로 되돌릴 것이 없다. V4~V7 이후는 5-1절 "복원" — 코드만 되돌려서는 DB가 V3로 돌아가지 않는다. 관리자 조작으로 데이터를 되돌려야 하면 병합 전 백업을 새 DB로 복원해 비교한다: `createdb ... aicontent_main_restore` → `pg_restore -d aicontent_main_restore <백업>`. 기존 DB를 지우거나 덮어쓰기 전에는 먼저 확인한다.
 - **로그인 생략:** `local-verify` 프로필을 켜지 않는 한 동작하지 않는다. 문제가 생기면 그 프로필로 띄운 검증 서버만 끄면 된다.
 
 ## 7. 임시 작업 폴더 의존 정리

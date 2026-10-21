@@ -1,9 +1,12 @@
 "use client";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { publicApi, categoryName, newsDate, safeArticleUrl, type PublicDetail } from "@/lib/public-api";
 
-export default function IssuePage({ params }: { params: { id: string } }) {
+export default function IssuePage() {
+  // Next 15 passes page params as a Promise; read them like the other detail pages
+  const params = useParams<{ id: string }>();
   const [data, setData] = useState<PublicDetail | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);

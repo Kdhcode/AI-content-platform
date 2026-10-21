@@ -53,7 +53,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/public/issues", "/api/public/issues/*", "/api/public/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/local-verify/mode").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/admin/jobs/*/retry", "/api/admin/jobs/*/cancel",
-                                "/api/admin/sources/*/collect").hasRole("SYSTEM_ADMIN")
+                                "/api/admin/sources/*/collect", "/api/admin/contents/*/approve",
+                                "/api/admin/contents/*/restore").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("OPERATOR", "SYSTEM_ADMIN")
                         .anyRequest().denyAll());
         return http.build();

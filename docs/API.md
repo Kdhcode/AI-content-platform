@@ -43,6 +43,11 @@
 
 ---
 
+## 계정
+
+### `GET /me` — 로그인한 계정 (OPERATOR+)
+`{username, roles[]}`(`roles`는 `OPERATOR`·`SYSTEM_ADMIN`, `ROLE_` 접두어 없음). 관리자 화면이 보여 줄 버튼을 고르는 데만 쓴다 — 모든 동작은 서버가 역할을 다시 검사한다. 미인증·틀린 비밀번호 401. 로컬 검증 모드에서 인증 헤더 없이 부르면 `local-verify`(두 역할), 계정으로 로그인한 요청은 그 계정의 역할.
+
 ## 기사
 
 ### `GET /articles` — 목록 (OPERATOR+)
@@ -93,6 +98,74 @@
 본문 `{ "articleIds": [10, 11], "newTitle": "선택, ≤300자(없으면 첫 기사 제목)", "reason": "선택" }` — `articleIds` 1~200개, 모두 이 이슈의 기사여야 하고 원본에 1건 이상 남아야 함.
 응답 `{ sourceIssueId, newIssueId, movedArticleIds[] }`. 새 이슈는 ACTIVE.
 오류: 400 `VALIDATION_ERROR`, 404 `ISSUE_NOT_FOUND`, 409 `ARTICLE_NOT_IN_ISSUE`/`ISSUE_SPLIT_WOULD_EMPTY`/`ISSUE_STATE_INVALID`.
+
+---
+
+## 콘텐츠 (NEWS·LIFE, A2~A5 — 수동 작성·검수·출처·관련 URL)
+
+관리자 전용(OPERATOR+). 공개 API(`/api/public/*`)와 뉴스룸은 콘텐츠를 읽지 않으며, 승인돼도 자동 공개되지 않는다. 본문 형식·한도는 `docs/CONTENT_A_PLAN.md` 2절.
+
+### `POST /issues/{issueId}/contents` — 수동 초안 생성 (OPERATOR+) · 동기
+헤더 `Idempotency-Key` 필수(영문·숫자·`._:-` 8~100자, 대화상자를 열 때마다 새로 만듦). 본문 `{contentType: NEWS|LIFE, title?, body?}`(title·body 생략 시 빈 제목·빈 본문 `{"schemaVersion":1,"sections":[]}`).
+- 201: 새 DRAFT(`version` 0). 원천 이슈가 PRIMARY 출처로 같은 트랜잭션에서 등록되고 감사 기록 `CONTENT_CREATE`.
+- 200 + `Idempotent-Replayed: true`: 같은 키·같은 요청(이슈·유형·제목·본문, JSON 키 순서 무관)의 재요청 → 처음 만든 콘텐츠. 동시 재요청도 콘텐츠·출처·감사 기록은 1건.
+- 409 `IDEMPOTENCY_KEY_CONFLICT`(`details.contentId`): 같은 키로 다른 요청.
+- 409 `ISSUE_STATE_INVALID`: 이슈가 REVIEW·EXCLUDED·MERGED(MERGED면 병합 대상 이슈 번호 안내). 404 `ISSUE_NOT_FOUND`.
+- 400 `VALIDATION_ERROR`(키 없음·형식, 유형, 제목 200자 초과·줄바꿈), 400 `CONTENT_BODY_INVALID`(`details.violations[]: {path, message}`, 최대 20개).
+
+### `GET /contents` — 목록 (OPERATOR+)
+`type`(NEWS|LIFE), `status`(DRAFT|REVIEW|APPROVED|HOLD|EXCLUDED|ARCHIVED), `issueId`, `q`(제목 검색, 200자 이하), `updateNeeded`(true: 미확인 원천 변경만, false: 없는 것만 — 페이지 전에 적용), `page`, `size`, `sort`(`updatedAt|createdAt|title|id`, 기본 최근 수정순). 항목: `id, contentType, status, title, version, originIssueId, originIssueTitle, originIssueStatus, originChange, updatedBy, updatedAt`. `originChange` = `{unacknowledged, issueChangeSeq, acknowledgedSeq, issueChangedAt, acknowledgedAt, issueStatus, notice(MERGED|EXCLUDED|null), mergedIntoIssueId}` — `unacknowledged`는 확인 뒤 원천 이슈가 바뀌었는지, `notice`는 원천 이슈의 현재 상태 안내(확인해도 남음).
+
+### `GET /contents/{id}` — 상세 (OPERATOR+)
+한 SQL 문으로 읽어 모든 필드가 같은 시점(스냅샷)이다 — 변경 응답의 `content`도 같다.
+`id, contentType, status, title, body, version, originIssue{id, title, status, mergedIntoIssueId}, originCheckedAt(마지막 확인 시각), originChange(목록과 같음), sources[]{id, kind, issueId, newsArticleId, externalUrl, label, role, checkedAt}, links[]{id, linkType, title, url, siteVisible, blogVisible, displayPosition, sortOrder, createdAt, updatedAt}, statusReason, createdBy/At, updatedBy/At, submittedAt, approvedBy/At`. 404 `CONTENT_NOT_FOUND`.
+
+### `PATCH /contents/{id}` — 제목·본문 저장 (OPERATOR+) · 동기
+본문 `{version, title?, body?}` — 생략한 값은 유지, 둘 다 없으면 400. `version`은 편집기가 불러온 값.
+- 200 `{content, changed, statusChanged, itemId}`: 저장되면 `version`+1, 감사 기록 `CONTENT_UPDATE`. REVIEW·APPROVED 콘텐츠는 DRAFT로 돌아가고(`statusChanged: true`, 승인·검수 요청 기록 지움) APPROVED였으면 `CONTENT_APPROVAL_REVOKED_BY_EDIT`도 기록. 값이 같으면 아무것도 바꾸지 않음(version 그대로).
+- 409 `CONTENT_VERSION_CONFLICT`: `details{currentVersion, sentVersion, updatedBy, updatedAt}` — 다시 불러와 확인. 검사와 저장은 행 잠금 안에서 함께 처리.
+- 409 `CONTENT_STATE_INVALID`: HOLD·EXCLUDED·ARCHIVED(먼저 `resume`·`restore`).
+- 400 `CONTENT_BODY_INVALID` / `VALIDATION_ERROR`.
+
+### 상태 동작 `POST /contents/{id}/{submit|approve|return|hold|resume|exclude|archive|restore}` (A3) · 동기
+본문 `{version, reason?}`(사유는 앞뒤 공백 제거 후 1~500자). 응답은 바뀐 상세(version +1). 상태는 이 동작으로만 바뀌고 `PATCH`는 `status`를 받지 않는다. 전이·권한표는 `docs/CONTENT_A_PLAN.md` 4절.
+
+| 동작 | 시작 → 결과 | 역할 | 사유 |
+|---|---|---|---|
+| `submit` 검수 요청 | DRAFT → REVIEW | OPERATOR+ | 선택 |
+| `approve` 승인 | REVIEW → APPROVED | **SYSTEM_ADMIN**(본인 작성분 포함) | 선택 |
+| `return` 반려 | REVIEW → DRAFT | OPERATOR+ | 필수 |
+| `hold` 보류 | DRAFT·REVIEW·APPROVED → HOLD | OPERATOR+ | 필수 |
+| `resume` 보류 해제 | HOLD → DRAFT | OPERATOR+ | 선택 |
+| `exclude` 제외 | DRAFT·REVIEW·HOLD → EXCLUDED | OPERATOR+ | 필수 |
+| `archive` 보관 | APPROVED·HOLD → ARCHIVED | OPERATOR+ | 선택 |
+| `restore` 복귀 | EXCLUDED·ARCHIVED → DRAFT | **SYSTEM_ADMIN** | 필수 |
+
+오류: 403 `FORBIDDEN`(역할), 409 `CONTENT_STATE_INVALID`(`details{status, action, allowedFrom}` — 예: DRAFT에서 approve), 409 `CONTENT_VERSION_CONFLICT`(`details{currentVersion, sentVersion, updatedBy, updatedAt, status}`), 422 `CONTENT_NOT_READY`(submit·approve: `details.violations[]` — 제목, 섹션·소제목·문단, PRIMARY 출처), 400 `VALIDATION_ERROR`(version 없음, 필수 사유 없음, 사유 500자 초과), 404 `CONTENT_NOT_FOUND`. 감사 기록 `CONTENT_<동작>`(처리자, 전후 상태·version, 사유). 승인돼도 공개 API·뉴스룸에는 나오지 않는다.
+
+### `POST /contents/{id}/acknowledge-origin` — 원천 이슈 변경 확인 (A6, OPERATOR+)
+본문 `{version, originChangeSeq}` — `originChangeSeq`는 화면에 보여 준 `originChange.issueChangeSeq`. 그 번호까지 확인한 것으로 기록하고 version +1. 내용(제목·본문·출처·URL)·상태·검수 기록은 그대로이며 모든 상태(HOLD·EXCLUDED·ARCHIVED 포함)에서 가능.
+- 200 `{content, changed, statusChanged: false}` — 같은 번호를 다시 확인하면 `changed: false`(version·감사 기록 그대로).
+- 409 `CONTENT_ORIGIN_CHANGED`: 보여 준 뒤 원천 이슈가 다시 바뀜 — `details{currentChangeSeq, sentChangeSeq, acknowledgedSeq, issueChangedAt, issueStatus, mergedIntoIssueId}`. 다시 조회해 확인.
+- 409 `CONTENT_VERSION_CONFLICT`, 404 `CONTENT_NOT_FOUND`, 400 `VALIDATION_ERROR`(값 없음). 감사 기록 `CONTENT_ORIGIN_ACKNOWLEDGED`.
+
+### 출처 (A4) — `.../contents/{id}/sources` (OPERATOR+)
+- `GET` — 목록(PRIMARY·SUPPORTING·REFERENCE 순, 같은 역할은 id 순).
+- `POST` `{version, kind: ISSUE|NEWS_ARTICLE|EXTERNAL_URL|MANUAL, issueId?, newsArticleId?, externalUrl?, label?, role?: PRIMARY|SUPPORTING(기본)|REFERENCE}` — 201.
+- `PATCH /{sourceId}` `{version, role?, label?}` — label `""`은 지움(MANUAL은 불가).
+- `DELETE /{sourceId}?version=N` — 원천 이슈 출처는 409 `CONTENT_SOURCE_PROTECTED`.
+- 오류: 400 `VALIDATION_ERROR`(종류와 맞지 않는 칸, URL, 빈 설명, 역할), 404 `ISSUE_NOT_FOUND`·`ARTICLE_NOT_FOUND`(참조 대상 없음), 404 `CONTENT_SOURCE_NOT_FOUND`(이 콘텐츠의 출처가 아님), 409 `ISSUE_STATE_INVALID`(ACTIVE·CLOSED 아님), 409 `CONTENT_SOURCE_INVALID`(중복 기사), 409 `CONTENT_SOURCE_DUPLICATE`.
+
+### 관련 URL (A5) — `.../contents/{id}/links` (OPERATOR+)
+- `GET` — 목록(정렬 순서, 같으면 id 순).
+- `POST` `{version, linkType, title?, url, siteVisible?(true), blogVisible?(false), displayPosition?: BODY_TOP|BODY_BOTTOM(기본)|SOURCES}` — 201, 맨 뒤에 추가.
+- `PATCH /{linkId}` `{version, linkType?, title?, url?, siteVisible?, blogVisible?, displayPosition?}` — 생략한 값 유지.
+- `DELETE /{linkId}?version=N`.
+- `PUT /order` `{version, linkIds: [이 콘텐츠의 링크 id 전부, 한 번씩]}` — 중복·모르는 id·빠진 id가 있으면 400 `details{duplicateIds, unknownIds, missingIds}`, 아무것도 바뀌지 않음.
+- **한도: 콘텐츠당 500개.** 501번째 `POST`는 409 `CONTENT_LINK_LIMIT_EXCEEDED`(`details{limit, current}`, 콘텐츠 행 잠금 안에서 세므로 동시 추가도 넘지 못함). 정렬 `linkIds`도 최대 500개(넘으면 400).
+- 오류: 400 `VALIDATION_ERROR`, 409 `CONTENT_LINK_LIMIT_EXCEEDED`, 404 `CONTENT_LINK_NOT_FOUND`(이 콘텐츠의 링크가 아님).
+
+**출처·URL 공통 응답** `{content(상세: 새 version·상태·sources·links), changed, statusChanged, itemId}`. 실제 변경이 있을 때만 version +1·감사 기록(`CONTENT_SOURCE_ADD|UPDATE|REMOVE`, `CONTENT_LINK_ADD|UPDATE|REMOVE`, `CONTENT_LINKS_REORDER`), REVIEW·APPROVED는 DRAFT로(`statusChanged: true`, APPROVED면 `CONTENT_APPROVAL_REVOKED_BY_EDIT`). 같은 값이면 `changed: false`로 아무것도 쓰지 않음. HOLD·EXCLUDED·ARCHIVED는 409 `CONTENT_STATE_INVALID`, version 불일치는 409 `CONTENT_VERSION_CONFLICT`. 노출 설정은 저장만 하며 공개 API·뉴스룸에는 나오지 않는다.
 
 ---
 

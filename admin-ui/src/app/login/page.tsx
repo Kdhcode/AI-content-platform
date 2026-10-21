@@ -11,8 +11,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  // local-verify mode needs no login: go straight to the workspace
-  useEffect(() => { localVerifyMode().then((m) => { if (m.loginBypass) router.replace("/"); }); }, [router]);
+  // local-verify mode needs no login, but signing in with a real account is still possible (to check roles)
+  const [bypass, setBypass] = useState(false);
+  useEffect(() => { localVerifyMode().then((m) => setBypass(m.loginBypass)); }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -42,7 +43,10 @@ export default function LoginPage() {
         <div className="row"><input id="password" type="password" placeholder="비밀번호" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></div>
         <button className="primary" disabled={busy || !username || !password}>로그인</button>
         <ErrorText error={error} />
-      </form><p className="login-note">허가된 관리자 계정으로 이용할 수 있습니다.</p><p className="login-note"><Link href="/news">일반 사용자 뉴스룸 보기 →</Link></p>
+      </form>
+      {bypass && <p className="notice">로컬 검증 모드입니다. 로그인하지 않아도 <Link href="/">워크스페이스</Link>를 쓸 수 있지만(모든 권한),
+        역할별 버튼·권한 확인은 실제 계정으로 로그인해서 하세요. 로그인하면 그 계정의 권한으로만 요청합니다.</p>}
+      <p className="login-note">허가된 관리자 계정으로 이용할 수 있습니다.</p><p className="login-note"><Link href="/news">일반 사용자 뉴스룸 보기 →</Link></p>
     </main></div>
   );
 }

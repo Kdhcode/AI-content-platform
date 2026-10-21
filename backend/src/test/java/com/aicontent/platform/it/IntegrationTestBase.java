@@ -36,8 +36,8 @@ public abstract class IntegrationTestBase {
     @BeforeEach
     void cleanDatabase() {
         jdbc.sql("""
-                TRUNCATE ai_log, ai_job, classification_run, issue_article, issue, news_article, news_source, async_job,
-                         admin_audit_log RESTART IDENTITY CASCADE""").update();
+                TRUNCATE content_link, content_source, content, ai_log, ai_job, classification_run, issue_article, issue,
+                         news_article, news_source, async_job, admin_audit_log RESTART IDENTITY CASCADE""").update();
     }
 
     /** Runs jobs until the queue is empty (backoff delays are skipped so retries run immediately). */

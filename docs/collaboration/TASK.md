@@ -1,6 +1,6 @@
 # 현재 작업
 
-최종 갱신: 2026-10-13 KST · 기준 커밋 `191bc8b` + 이번 커밋 9개(아래 6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달). `main` 병합은 PC 검증 후 (GitHub `Kdhcode/AI-content-platform`)
+최종 갱신: 2026-10-20 KST · 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영) 추가, 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -352,3 +352,300 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - 확인된 문제: 검수 대기 이슈를 제외(EXCLUDED)한 뒤 API로 CLOSED로 바꾸면 검수 안 된 기사가 공개됐다(REVIEW→CLOSED만 막혀 있었음). 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가로 수정
 - 실행 스크립트: 혼합 검사를 끄는 잔여 변수(`APP_AI_EMBEDDINGGUARD*`)도 거부 목록에 추가
 - 전체 `mvn test` 205개 통과(UI 코드 변경 없음). 유료 호출 0
+
+## 15. 2026-10-15 NEWS·LIFE 콘텐츠 A1·A2 (`claude/content-a`, `main` 미병합)
+
+- 범위: A1 스키마(V4), A2 `POST /api/admin/issues/{id}/contents`, `GET /api/admin/contents`, `GET /api/admin/contents/{id}`, `PATCH /api/admin/contents/{id}`. 상태 전이·출처/URL 관리 API·화면·자동저장·AI 생성·LIFE 판정·회원·TV·블로그 발행은 하지 않음
+- 저장소에 `AGENTS.md`는 없음 → `docs/collaboration/RULES.md` 기준
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 20개(본문 검증 6, API 8, 동시성·트랜잭션 3, 스키마 제약 3) 포함 전체 `mvn package` **225개 통과**(기준: 이 커밋의 코드). 대시보드 스키마 버전 기대값 3→4 갱신, 테스트 정리 대상에 콘텐츠 테이블 추가
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig_fresh`에 V1~V4 적용. `aicontent_main`(V3)의 복사본 `aicontent_mig_upgrade`에 V4만 적용, 기존 11개 테이블 행 전체 md5 동일(데이터 보존). 원본 `aicontent_main`은 V3 그대로, daily 서버는 건드리지 않음
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+- A3 전에 정할 것: `CONTENT_A_PLAN.md` 7절(승인 권한, REVIEW 중 편집, 기본 소제목 등)
+
+## 16. 2026-10-15 콘텐츠 A3 상태 전이 + 기존 문제 2건 (`claude/content-a`, `main` 미병합)
+
+- 수정 ①: V4 `ck_content_source_one_ref`의 EXTERNAL_URL 조건이 NULL URL을 통과시킴(CHECK 결과가 NULL이면 PostgreSQL이 허용). V4가 이미 적용된 DB(`aicontent_test`, `aicontent_mig_fresh`, `aicontent_mig_upgrade`)가 있어 V4는 고치지 않고 V5로 제약 교체(URL 필수, `http(s)://호스트`, 공백 불가). 직접 삽입 회귀 테스트 추가
+- 수정 ②: `CONTENT_A_PLAN.md`의 "A1·A2 구현"과 "V4·코드 미구현" 모순 정리 → 맨 앞에 작업별 진행 상태 표
+- A3: `POST /api/admin/contents/{id}/{submit,approve,return,hold,resume,exclude,archive,restore}`, 전이·권한표와 검수 기록 칸 규칙은 계획 4절(최종). 승인·복귀 SYSTEM_ADMIN만(본인 작성분 승인 허용), 사유 필수(반려·보류·제외·복귀), 제출 조건 422, version 필수·행 잠금
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 12개(정책 표 3, 상태 API 6, 동시성·원자성 3) + 스키마 회귀 보강 포함 전체 `mvn package` **237개 통과**(기준: A3 코드 커밋). 대시보드 스키마 버전 기대값 4→5
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig5_fresh` V1~V5, `aicontent_mig_upgrade` V4→V5, `aicontent_main` 새 복사본 `aicontent_mig5_upgrade` V3→V5 — 두 업그레이드 모두 기존 11개 테이블 행 md5 동일, 업그레이드 DB에서 NULL URL 출처 삽입 거부 확인(확인용 콘텐츠 1건이 그 검증 DB에 남음). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 17. 2026-10-15 콘텐츠 A4 출처·A5 관련 URL (`claude/content-a`, `main` 미병합)
+
+- API: `GET/POST /api/admin/contents/{id}/sources`, `PATCH/DELETE .../sources/{sourceId}`, `GET/POST .../links`, `PATCH/DELETE .../links/{linkId}`, `PUT .../links/order`. 규칙은 `CONTENT_A_PLAN.md` 5절
+- 공통 변경 경로 `ContentChanges`로 제목·본문 편집(A2)도 옮김(동작 동일, 응답에 `changed`·`itemId` 추가)
+- V6: 링크 표시 위치 BODY_TOP·BODY_BOTTOM(기본)·SOURCES, NULL은 BODY_BOTTOM으로 채우고 다른 값은 마이그레이션이 멈추게 함(행 삭제·추측 없음), 링크 URL 규칙을 V5 출처와 통일
+- **테스트 코드 문제 발견·수정:** MockMvc 응답을 `getContentAsString()`(ISO-8859-1)으로 읽어 한글이 깨졌고, 그래서 A2·A3의 "승인 콘텐츠가 공개 응답에 없음"(`doesNotContain(한글)`) 검사는 노출돼도 통과할 수 있었다. 콘텐츠 테스트 전체를 UTF-8로 읽도록 고침(이제 실제로 검사함)
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 8개(출처·링크 API 6, 동시성·원자성 2) + 스키마 V6 검사 포함 전체 `mvn package` **245개 통과**(기준: A4·A5 코드 커밋)
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig6_fresh` V1~V6(기본값 BODY_BOTTOM, NOT NULL), `aicontent_mig5_upgrade` V5→V6(미리 넣은 NULL 위치 링크 → BODY_BOTTOM, 나머지 13개 테이블 행 동일), `aicontent_main` 새 복사본 `aicontent_mig6_upgrade` V3→V6(기존 11개 테이블 행 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 18. 2026-10-15 A5 보완(링크 500개) · A6 원천 이슈 변경 표시 (`claude/content-a`, `main` 미병합)
+
+- A5 보완: 관련 URL 콘텐츠당 500개(정렬 요청 한도와 같음), 501번째 409 `CONTENT_LINK_LIMIT_EXCEEDED`, 콘텐츠 행 잠금 안에서 셈. 모든 DB에서 콘텐츠당 링크 최대 1개 → 기존 데이터 영향 없음
+- A6: 이슈 갱신 경로 점검 결과 시각 비교는 ① 트랜잭션 시작 시각(`now()`) 때문에 동시 변경을 놓치고 ② 예전 기사 추가를 놓치며 ③ 재계산만으로도 바뀜 → V7 `issue.change_seq`(트리거) + `content.origin_ack_seq`. 목록·상세 `originChange`, `updateNeeded` 필터(쿼리에서 적용), `POST .../acknowledge-origin {version, originChangeSeq}`. 규칙은 `CONTENT_A_PLAN.md` 5절
+- 테스트(로컬 `aicontent_test`, stub): 새 테스트 10개(링크 한도 2, 원천 변경 8) 포함 전체 `mvn package` **255개 통과**(기준: A6 코드 커밋). 대시보드 스키마 버전 기대값 6→7
+- 마이그레이션 실제 확인(별도 DB): 빈 DB `aicontent_mig7_fresh` V1~V7, `aicontent_mig6_upgrade` V6→V7(미리 넣은 콘텐츠 2건: 이슈 변경 뒤 확인한 것 → 확인됨, 그 전 것 → 미확인; 기존 14개 테이블 행 동일[새 열 제외]; 업그레이드 뒤 제목 변경은 번호 +1, 임베딩만 갱신은 그대로), `aicontent_main` 새 복사본 `aicontent_mig7_upgrade` V3→V7(기존 11개 테이블 동일). 원본 `aicontent_main`은 V3, daily 서버 그대로
+- UI 변경 없음 → 타입 검사·빌드 생략. 유료 AI 호출 0
+
+## 19. 2026-10-15 상세 조회 일관성 · A7 콘텐츠 화면 · A8 공개 분리 (`claude/content-a`, `main` 미병합)
+
+- 상세 조회: 출처·링크를 따로 읽던 3개 문장 → 한 SQL 문(`jsonb_agg`). 동시 변경 중 읽기 테스트가 고치기 전 실패("version 3, 출처 3, 링크 2"), 고친 뒤 통과. 추가 잠금 없음
+- `GET /api/admin/me`(역할 조회) + 테스트
+- A7 화면: `/contents` 목록, `/contents/{id}` 편집기(섹션·문단, 자동저장 큐, 충돌, 보관본, 상태 버튼, 출처, 관련 URL, 원천 이슈), 이슈 상세 "콘텐츠 만들기". 규칙은 `CONTENT_A_PLAN.md` 5절
+- 테스트: `npm run verify:content-session` 15개(자동저장 2초·되돌림·IME·저장 중 입력·순서·version 전달·저장 실패 시 동작 차단·한도·충돌·연타·키 순서·보관본·id, 서버 상수와 한도 비교) — 일부러 깨뜨린 코드(응답이 입력 덮기, 큐 제거, 실패 뒤 동작 실행)에서 실패 확인. 끝나지 않는 테스트도 실패로 처리
+- 기존 `verify-auth-client`는 로컬 검증 모드 조회(`/api/local-verify/mode`)를 요청으로 세어 이전부터 실패하고 있었음 → "관리자 요청 없음"을 검사하도록 수정
+- 전체 `mvn package` **257개 통과**, 타입 검사·`next build` 통과, `verify-dashboard`·`verify-ai-usage`(검증 UI, SYSTEM_ADMIN 로그인)·`verify-public-news` 통과. `verify-flow`는 실제 RSS 수집·실제 AI가 필요해 실행 안 함
+- 검증 환경 `verify-content`(DB `aicontent_verify_content` = `aicontent_verify_scenario` 복사본 V3→V7, 백엔드 18093·UI 13093, stub, 작업자 끔, 화면에 "콘텐츠 화면 검증용 데이터" 표시). 검증 DB에만 OPERATOR·SYSTEM_ADMIN 계정 생성(비밀번호는 기록하지 않음)
+- 브라우저 확인(내장 브라우저, 실제 로그인): NEWS·LIFE 생성, 제목·본문 자동저장·새로고침 유지, 출처 4종·중복·잘못된 URL·원천 출처 삭제 불가·역할 변경, 링크 추가·수정·삭제·정렬·`javascript:` 거부, 검수 요청→승인→편집 시작 확인 1회→DRAFT, 반려·보류·보관·제외·복귀·보류 해제와 사유, 두 탭 충돌→비교→다시 불러오기→보관본 복원, 저장 중 입력, 저장 실패 시 검수 요청 미전송, 연타 1회, 생성 응답 유실 뒤 같은 키 재시도(콘텐츠 1개), 원천 변경 표시·확인 경합 409·재확인·새 변경 재표시·병합 안내, 역할별 버튼과 UI 우회 시 403, 승인 콘텐츠가 공개 API·뉴스룸에 없음
+- 브라우저 검증 중 고친 것: 출처 역할 선택이 예전 값을 보내던 문제(비동기 요청이 React가 되돌린 값을 읽음), 버튼 연타 시 여러 번 전송(상태 대신 ref로 막음), 같은 값 저장 시 "바꿨습니다" 대신 "바뀐 내용 없음"
+- 실제 한글 IME는 자동화로 칠 수 없어 composition 이벤트로 확인. 이탈 확인 창은 사용자 조작이 없으면 브라우저가 띄우지 않아 처리기 동작(`beforeunload` 취소 여부)으로 확인
+- 유료 AI 호출 0. `aicontent_main`(V3)·daily 서버(3000·8080) 그대로
+
+## 20. 2026-10-19 새 노트북 이전 점검 · 실행 스크립트 PC별 경로 (`claude/content-a` 기준 패치, 미커밋)
+
+- 기준: 노트북 작업 폴더 `main` = `8e0c6d7`(10-19 13:01 clone, fetch 완료, 미커밋 변경 없음). **다른 PC의 최신 작업이 `main`에 없음**: `origin/claude/content-a` 19커밋(`ad9d5a2`, 15~19절), `origin/claude/post-merge-check` 1커밋(`6c75b16`, 14절 문서). 두 브랜치 모두 `main` 위에서 갈라져 뒤처짐 0. 서로는 `TASK.md`에서 충돌(병합 시 14절과 15절 이후를 둘 다 남기면 됨). `main`에서 중복 구현하지 않고 `content-a`(`ad9d5a2`) 기준으로 작업
+- 저장소에 `AGENTS.md` 없음(15절과 같음) → `RULES.md`·이 문서 기준
+- 노트북 환경(파일 목록으로 확인, 이 세션은 노트북 터미널 입력 불가): JDK 21.0.8·17.0.10(`C:\Program Files\Java`), Git 있음. **Node.js·npm 없음, Maven 없음(저장소에 wrapper 없음), Docker Desktop 없음, PostgreSQL 없음.** `.local/`(프로젝트 PostgreSQL·pgvector·Maven·`machine.ps1`·계정 비밀번호 파일)과 이전 PC의 DB 데이터(`aicontent_main` 등)는 Git에 없어 넘어오지 않음. IntelliJ 설정 폴더는 표준 위치(`Program Files`, `AppData\Roaming`)에서 찾지 못함
+- 확인된 결함(새 PC에서 실행을 막음): `common.ps1`이 `machine.ps1`을 **기본값보다 먼저** 읽어 `$PgBin`·`$PgData`·`$MavenCmd`를 덮어써도 되돌아감(`.local` 경로만 가능). DB 포트 `55432`가 `start-db.ps1`·`start-backend.ps1`에 고정돼 docker compose(5432)와 함께 쓸 수 없음. 도구가 없으면 "명령을 찾을 수 없음"으로만 실패
+- 수정: `common.ps1`(기본값 → `machine.ps1` 순서, `$DbPort` 추가·검증, `$MavenCmd`가 없으면 PATH의 `mvn`, 금지 변수 검사를 `Get-RiskyEnvNames`로 옮겨 공유), `start-db.ps1`(도구가 없을 때 포트가 열려 있으면 외부 DB로 인정, 아니면 안내와 함께 중단, 클러스터 없음 안내), `start-backend.ps1`(DB URL에 `$DbPort`, 주소는 `127.0.0.1` 고정 유지), `build.ps1`(Maven 없음 안내)
+- 추가: `check-env.ps1`(읽기 전용 점검. Git 브랜치·미커밋·현재 브랜치에 없는 원격 커밋, Java·Maven·Node·`node_modules`, DB 포트·환경별 DB·pgvector·스키마 버전, Docker, 환경 변수는 설정 여부만, 실행 중인 서버·health. 필수 누락 시 종료 코드 1), `test-run-scripts.ps1`(임시 폴더 복사본으로 위 동작 15개 확인, 서버·DB·Maven·Node 불필요). RUNBOOK 3절 갱신
+- 테스트(클라우드 Linux, PowerShell 7.4.6): `test-run-scripts.ps1` 15개 통과. 이전 `common.ps1`로 되돌리면 9개 실패, `check-env`가 비밀값을 출력하도록 일부러 바꾸면 1개 실패 확인. 6개 스크립트 구문 오류 0. 별도로 가짜 Java·Node·Maven과 임시 PostgreSQL 16(pgvector 없음/있음)으로 `check-env.ps1` 출력 확인(비밀값 미출력, pgvector 없는 서버 `[MISSING]`)
+- **미실행:** Windows PowerShell 5.1에서의 실행(노트북 터미널 입력 불가), `mvn package`·`npm ci`·타입 검사·`next build`(클라우드에서 Maven Central·npm 레지스트리 차단, 노트북에는 Maven·Node 없음). 백엔드·화면 코드는 바꾸지 않음. 유료 AI 호출 0
+
+### 20-1. 2026-10-19 오후 노트북 실행 결과 (Windows PowerShell 5.1.26100, JDK 21.0.8)
+
+- 기준 커밋: `claude/content-a` = `ad9d5a2`(origin과 같음) + 위 패치(미커밋). 이전 PC의 `.local`(pg16·pgdata·Maven·m2)을 복사해 옴, `machine.ps1`은 `JAVA_HOME = jdk-21`만 지정
+- 실행 명령: `powershell -ExecutionPolicy Bypass -File .\.local\setup-laptop.ps1`(브랜치 전환 → 패치 적용 → 자체 점검 → check-env → npm ci → DB 시작 → `build.ps1` → `mvn test` → check-env). 1회차 로그는 `.local\setup-laptop.run1.log`, 2회차는 `.local\setup-laptop.log`(Git 밖)
+- 1회차에서 나온 문제 2건과 수정:
+  - `test-run-scripts.ps1`이 4개 통과 뒤 중단: Windows PowerShell 5.1은 `$ErrorActionPreference = 'Stop'` 상태에서 네이티브 명령의 stderr를 `2>&1`로 받으면 종료 오류로 바꿈(클라우드 PowerShell 7에서는 안 생김). 자식 셸 실행부(`Invoke-Copy`)만 `Continue`로 바꿈 → **15개 통과**(수정 전 같은 PC에서 실패 확인). 검사 내용은 바꾸지 않음
+  - DB 시작 단계에서 멈춤: `setup-laptop.ps1`이 `start-db.ps1` 출력을 파이프로 받는데, `pg_ctl`이 띄운 postgres가 그 파이프 핸들을 물려받아 파이프가 닫히지 않음. DB는 정상 기동(이전 PC에서 비정상 종료된 데이터라 자동 복구 후 `accepting connections`). `.local\setup-laptop.ps1`(Git 밖)에서 이 단계만 별도 숨김 창으로 실행하도록 바꿈. `start-db.ps1`을 터미널에서 직접 실행하는 경우는 해당 없음
+- 2회차 결과:
+  - 자체 점검 `test-run-scripts.ps1` **15개 통과**
+  - `build.ps1`(`mvn package -DskipTests`) **BUILD SUCCESS**, `.local\run\platform-backend.jar` 갱신(15:10)
+  - `mvn test`(`TEST_DB_URL` = `127.0.0.1:55432/aicontent_test`, stub AI): **257개 통과, 실패 0, 오류 0, 건너뜀 0**(surefire 보고서 합계, 19절과 같은 개수)
+  - check-env: Java 21.0.8·Maven 3.9.9·프로젝트 PostgreSQL 정상. **`[MISSING]` node, admin-ui deps** → 이때는 `npm ci`·타입 검사 미실행(Node.js 미설치)
+- 사용자가 Node.js LTS 설치(v24.20.0, npm 11.19.0) 뒤 이어서 실행:
+  - `admin-ui`에서 `npm ci --no-audit --no-fund` **통과**(exit 0), `npm run typecheck`(`tsc --noEmit`) **통과**(exit 0). npm이 `next@14.2.15`에 보안 취약점 경고를 냄 → 21절에서 업그레이드
+  - `start-ui.ps1 -Target verify-content`: `next build` **Compiled successfully**, 127.0.0.1:13093 기동. `/`·`/contents`·`/news` 200. 내장 브라우저에서 `/contents` 목록이 백엔드 18093 데이터(콘텐츠 4건, 이전 PC 검증 데이터)를 표시하는 것 확인. 화면 기능 전체 재검증은 하지 않음(19절에서 이전 PC로 확인)
+  - 기동 뒤에도 `aicontent_main` V3
+- DB 버전 확인(실행 전후 같음): `aicontent_main` **V3 그대로**, `aicontent_verify_content` V7, `aicontent_test` V7. daily 환경(8080·3000)·`aicontent_main` 실행 안 함
+- 검증 환경 `verify-content`: 백엔드 `start-backend.ps1 -Target verify-content`(127.0.0.1:18093, stub, 작업자 끔) **기동 확인**: `/actuator/health` UP, `/api/local-verify/mode` = loginBypass true·aiProvider stub, Flyway "V7, 마이그레이션 없음", 기동 뒤에도 `aicontent_main` V3. 화면 13093은 처음엔 Node.js가 없어 못 띄웠고, 설치 뒤 기동(위 항목)
+- 이번 세션에서 띄운 PostgreSQL·백엔드는 도구 세션에서 시작돼 세션이 끝나면 함께 멈출 수 있음. 계속 쓰려면 사용자 터미널에서 `start-db.ps1`부터 다시 실행
+- 유료 AI 호출 0. 커밋·push·병합 안 함
+
+## 21. 2026-10-19 관리자 화면 Next.js 보안 업그레이드 14.2.15 → 15.5.28 (`claude/content-a` 기준, 미커밋)
+
+- 선정 이유: A 묶음(A1~A8)은 끝났고, B(LIFE 판정)·C(AI 생성)는 `NEXT_CONTENT_SCOPE.md` 6절 3·4·7·10·11번 결정이 필요해 임의로 시작하지 않음. 오늘 확인된 결함 중 남은 것이 `npm audit` **critical**(next 직접 권고 30개 이상). 그중 "Windows에서 실행하는 서버의 인증 없는 원격 코드 실행"(<15.5.24)은 이 프로젝트가 Windows에서 돌기 때문에 해당됨. 14.2.x 최신(14.2.35)으로는 대부분이 안 고쳐져서(수정 버전이 15.5.x) 15.5 최신으로 올림
+- 영향 범위 확인: 관리자 화면은 전부 클라이언트 컴포넌트, `middleware` 없음, 인증·검수·공개 조건은 모두 Spring 백엔드가 판단(Next는 `/api/*` 프록시만). 백엔드 코드 변경 없음 → 검수·공개 조건 우회 경로 변화 없음
+- 변경:
+  - `admin-ui/package.json`·`package-lock.json`: `next` 15.5.28, `react`·`react-dom` 19.1.10(Next 15 앱 라우터 기준), `@types/react` 19.1.17·`@types/react-dom` 19.1.11. 잠금 파일에 새로 들어온 것은 Next 15의 선택 의존성 `sharp`(+플랫폼별 바이너리)뿐
+  - `admin-ui/src/app/news/[id]/page.tsx`: Next 15는 페이지 `params`를 Promise로 넘기므로 다른 상세 페이지(`issues/[id]` 등)처럼 `useParams`로 읽게 바꿈. 화면·요청 동작은 같음
+- 검증(기준 `ad9d5a2` + 20절 패치 + 이 변경, Node 24.20.0, npm 11.19.0):
+  - `npm audit --omit=dev`: next 직접 권고 **0**. 남은 것은 next 안에 묶인 `postcss`(high, 빌드할 때 이 프로젝트의 CSS에만 쓰여 외부 입력이 들어가지 않음). 없애려면 next 16 필요 → 이번에는 하지 않음
+  - `npm ci`(잠금 파일로 처음부터 설치) **통과**, `npm run typecheck` **통과**
+  - `start-ui.ps1 -Target verify-content -Rebuild`: `next build`(Next.js 15.5.28) **Compiled successfully**, 14개 경로, 13093 기동
+  - `npm run verify:content-session` **15/15 통과**, `npm run verify:auth-client` **통과**
+  - 내장 브라우저(13093 → 백엔드 18093, local-verify): 대시보드, `/news`, `/news/4`(이번에 바꾼 페이지), `/issues/4`, `/contents/4` 표시, 콘솔 오류 0. `/contents/4`에 제목 입력 → 자동저장 `PATCH` 200 → 새로고침 뒤 유지(version 0→1, 검증 DB `aicontent_verify_content`에 남음)
+  - 공개 분리 재확인(새 프록시 경유): `/api/public/issues` 응답에 콘텐츠 제목 없음, `/api/public/contents` 403
+  - 백엔드 변경 없음 → `mvn test`는 20-1절 결과(257개 통과) 유지, 다시 돌리지 않음
+- **미실행:** `verify:dashboard`·`verify:ai-usage`(관리자 계정 비밀번호를 입력해야 함), `verify:public-news`(주소가 `localhost:3000` = daily 환경으로 고정돼 있고 daily 데이터를 기대함, daily는 실행 금지), `verify:flow`(실제 RSS·실제 AI 필요). 화면 기능 전체를 하나씩 다시 확인하지는 않음(19절 항목은 이전 PC에서 확인)
+- `aicontent_main` V3 그대로, daily 실행 안 함, 유료 AI 호출 0. 커밋·push·병합 안 함
+
+## 22. 2026-10-19 밤 `claude/content-a` → `main` 병합 전 검토와 PR 준비
+
+**20·21절 이후 실제 상태(위 절의 "미커밋·push 안 함"은 그 시점 기록):** 20절 패치는 `9762eb0`, 21절은 `9fee68b`로 커밋해 같은 날 `origin/claude/content-a`에 일반 push함. 검토 시작 시 원격 `9fee68b`, `main` `8e0c6d7`(변경 없음), 이 브랜치의 PR 없음(GitHub API 조회). 브랜치는 `main`보다 21커밋 앞, 뒤처짐 0, 67개 파일
+
+**검토 범위와 결과(main 대비 전체 diff):**
+- 상태 전이: `ContentStatusPolicy` 표가 `CONTENT_A_PLAN.md` 4절 최종 표와 같음(출발 상태·결과·사유 필수·SYSTEM_ADMIN 전용). 검수 기록 칸(`submitted_at`·`approved_*`·`status_reason`)도 4절 표대로(`storesReason`이 아닌 동작의 사유는 감사 기록에만). 상태는 이 동작과 편집 규칙으로만 바뀌고 `PATCH`는 `status`를 받지 않음
+- 권한: 승인·복귀는 `SecurityConfig`(경로)와 서비스 정책(역할) 두 곳에서 SYSTEM_ADMIN 검사. 콘텐츠 API는 모두 `/api/admin/**`, 공개 경로에 콘텐츠 없음
+- 검수·공개 우회: 제목·본문·출처·URL 변경이 모두 `ContentChanges` 한 경로(행 잠금 → 잠금 상태 409 → version 409 → 실제 변경 시에만 version +1, REVIEW·APPROVED → DRAFT, 승인 해제 기록). 원천 이슈 출처 삭제 불가. 확인 처리(acknowledge)는 승인 상태를 바꾸지 않는 별도 경로(계획 5절)
+- 중복 요청·동시 수정: 생성은 `creation_key` UNIQUE + 요청 지문, 상태·편집은 같은 행 잠금·version. 화면은 요청 큐 하나로 순서대로 보냄(`verify:content-session`)
+- 마이그레이션: V4(새 테이블 3개만) → V5(V4 CHECK 교체) → V6(링크 위치 값·URL 규칙) → V7(`issue.change_seq`·트리거, `content.origin_ack_seq`). V3 DB에 적용 시 기존 테이블 행은 바뀌지 않음(15~18절에서 `aicontent_main` 복사본으로 행 md5 비교). 영향: V7 이후 `issue` 갱신마다 BEFORE 트리거, `issue_article` 추가·삭제·이동마다 해당 `issue` 행 UPDATE(그 행 잠금)가 추가됨 — 기존 동시성 테스트는 통과. 한 번 적용하면 Flyway 기록이 V7이 되므로, 예전 코드(V3)로 그 DB를 띄울 때는 Flyway가 "미래 버전"으로 보고 넘어가지만 트리거는 남음(되돌리는 마이그레이션 없음)
+- Next.js 15·React 19: 모든 페이지가 클라이언트 컴포넌트, `middleware` 없음, 인증은 브라우저 `sessionStorage`의 Basic 헤더를 Next `rewrites`가 백엔드로 넘김. 15에서 바뀐 것 중 해당은 페이지 `params`(21절 `news/[id]`)뿐
+- **찾은 문제와 수정:**
+  1. `check-env.ps1` Node 기준이 next 14.2 값(18.17+) 그대로였음 → next 15.5 `engines`(`^18.18 || ^19.8 || >=20`)로 수정
+  2. `check-env.ps1`이 `node_modules` 폴더만 있으면 OK → 다른 PC가 next 15 커밋을 받고 `npm ci`를 안 하면(next 14 남음) 통과로 보였음. 설치된 next와 `package.json`의 next가 다르면 `[MISSING]`. `test-run-scripts.ps1`에 2개 추가(**17개**), 이전 `check-env.ps1`로 바꾸면 새 2개 실패 확인
+  3. `verify-public-news.cjs` 주소가 `localhost:3000`(daily) 고정, 첫 페이지 카드 12개·페이지 넘김을 항상 기대 → 기본값은 그대로 두고 `VERIFY_UI_URL`로 검증 환경 지정(다른 verify 스크립트와 같은 방식, 로컬 주소만 허용). 카드 수는 `min(12, 전체)`, 페이지 넘김은 12개 넘을 때만(건너뛰면 결과 줄에 표시). daily에서는 전과 같은 검사
+  4. RUNBOOK 3절 Node 기준·의존성 변경 뒤 `npm ci`·`-Rebuild` 안내 갱신
+- 백엔드 코드에서 결함은 찾지 못함(변경 없음)
+
+**postcss 권고(남은 high 1건) 판단:**
+- 경로: `next@15.5.28` → `postcss@8.4.31`(next가 정확한 버전으로 고정, 직접 의존성 아님). 권고 4건: GHSA-qx2v-qp2m-jg93(<8.5.10, 문자열화 출력에 `</style>` 미이스케이프 → XSS), GHSA-6g55-p6wh-862q(≤8.5.11)·GHSA-fxqj-rqcc-2cmp(≤8.5.22)·GHSA-r28c-9q8g-f849(≤8.5.17)(CSS 주석의 `sourceMappingURL`로 임의 `.map` 파일 읽기)
+- 성립 조건: 공격자가 PostCSS에 넣는 CSS를 정할 수 있어야 함(그 결과를 HTML `<style>`에 넣거나, source map을 읽게 하는 경우)
+- 이 프로젝트: next 안에서 postcss를 부르는 코드는 빌드용(webpack CSS 로더·글꼴 로더·CSS 압축)뿐이고, 빌드 결과 서버 코드(`.next/server`)에는 postcss가 없음. 처리되는 CSS는 저장소의 `globals.css`·`news/news.css` 2개(사람이 커밋, `sourceMappingURL` 없음, postcss 설정 파일 없음). 사용자 입력은 CSS로 처리되지 않고 텍스트로만 렌더링(A7 규칙). 따라서 실행 중 서버로는 성립하지 않고, 빌드 입력을 바꿀 수 있는 사람은 이미 저장소 쓰기 권한(빌드 스크립트 실행)을 가진 경우뿐
+- 판단: **이번 PR의 병합 차단 아님**, 후속 작업. 해결 방법은 ① postcss 8.5.23 이상을 쓰는 next 15.5.x가 나오면 올림 ② next 16 이전(주 버전 변경, 별도 작업·검증) ③ `overrides`로 postcss 강제(next가 8.4.31로 고정해 호환성 미검증이라 이번에는 하지 않음). `npm audit fix --force`(next 16 설치)는 실행하지 않음
+
+**검증(기준: `9fee68b` + 이 절의 미커밋 변경, Node 24.20.0, Windows PowerShell 5.1):**
+- `mvn test`(`aicontent_test`, stub): **257개 통과, 실패·오류·건너뜀 0**(21:09 새로 실행, surefire 합계)
+- `test-run-scripts.ps1` **17개 통과**, `check-env.ps1` 필수 누락 0(next 15.5.28 인식)
+- `npm ci`·`typecheck` 통과(21절), `next build` 15.5.28 통과(13093, 그리고 아래 13094 복사본)
+- `verify:content-session` 15/15, `verify:auth-client` 통과(21절, UI 코드는 그 뒤 변경 없음)
+- **검증 모드**(verify-content, 18093·13093, 로그인 생략): `verify:public-news`를 `VERIFY_UI_URL=http://127.0.0.1:13093`으로 **통과**(이슈 5개라 페이지 넘김은 건너뜀으로 표시), 콘텐츠 편집기 자동저장 PATCH 200·새로고침 유지(21절), 빈 본문 검수 요청 → 422 `CONTENT_NOT_READY`가 화면 경고로 표시되고 상태 안 바뀜
+- **일반(로그인) 모드**: 검증 DB 복사본 `aicontent_verify_auth_20261019`(V7)에 기본 프로필 백엔드 127.0.0.1:18094(로그인 생략 꺼짐, stub, 작업자·스케줄러 끔)와 그 주소로 빌드한 화면 13094. 시험용 SYSTEM_ADMIN은 기동 시 `ADMIN_USERNAME`/`ADMIN_PASSWORD`로 만들고 비밀번호는 `.local/run/verify-auth.cred`(Git 제외)에만 둠, 백엔드 로그에 비밀번호 없음 확인
+  - 백엔드 직접·Next 프록시 경유 각각: 로그인 생략 꺼짐, 인증 없이 `/api/admin/me`·목록·PATCH 401, 틀린 비밀번호 401, 시험 계정 200(SYSTEM_ADMIN), 공개 이슈 200. `/api/public/contents`는 인증 없이 401(경로 없음 → `denyAll`; 로그인 생략 모드에서는 이미 인증된 요청이라 403) — 어느 쪽이든 열리지 않음
+  - 프록시 경유 로그인 흐름: 생성 201 → 같은 `Idempotency-Key` 재요청 200·같은 id → 편집 200 → 오래된 version 409 → 검수 요청 REVIEW → 승인 APPROVED → 공개 이슈 상세에 콘텐츠 제목 없음 → 승인 후 편집 DRAFT(`statusChanged=true`). 콘텐츠 #5가 그 복사본 DB에 남음
+  - `verify:dashboard`·`verify:ai-usage`(`VERIFY_UI_URL=http://127.0.0.1:13094`, 시험 계정): **둘 다 통과**(브라우저 오류 0·API 실패 0)
+  - 확인 뒤 18094·13094 종료
+- **미실행:** OPERATOR 계정으로 승인·복귀 403 화면 확인(시험 계정은 SYSTEM_ADMIN 하나뿐, `ContentStatusApiIntegrationTest`가 서비스·보안 두 곳의 403을 검사), `verify:flow`(실제 RSS·실제 AI 필요), daily(8080·3000)·`aicontent_main`(실행 금지), Docker compose 구성(노트북에 Docker 없음)
+- `aicontent_main` V3 그대로, 유료 AI 호출 0
+- 22절 작업은 `ff04064`로 커밋·일반 push. PR은 생성 못 함(노트북에 `gh`·토큰 없음, 내장 브라우저 GitHub 미로그인) — 제목·본문은 `.local/pr-content-a.md`(Git 제외)
+
+### 22-1. 2026-10-19 밤 남은 검증 보완과 병합 절차 (기준 `ff04064` + 아래 미커밋)
+
+- 시작 상태: 원격 `ff04064`(22절 이후 변경 없음), 미커밋 없음, `main` `8e0c6d7`, 이 브랜치 PR 없음. 저장소에 `.github/workflows`가 없어 GitHub Actions 실행 기록이 없는 것이 정상(CI 없음)
+- **공개 뉴스 페이지 넘김(22절에서 이슈 5개라 건너뜀):** 재현 스크립트 `docs/verify/public-news-pagination.sql` 추가 — `aicontent_verify_*` DB에서만 실행(다른 DB면 오류로 멈춤, `aicontent_main`에서 실제로 거부되고 아무것도 안 바뀐 것 확인), 가상 ACTIVE 이슈 10개 + 기사 각 1개(`example.com`), 다시 실행하면 추가 없음. `aicontent_verify_content` 덤프 → `aicontent_verify_pagination_20261019`(V7) → 스크립트 → 공개 이슈 **15개**. 그 DB로 백엔드 127.0.0.1:18095(기본 프로필, stub, 작업자·스케줄러 끔) + 화면 13095(next 15.5.28 빌드)
+  - `VERIFY_UI_URL=http://127.0.0.1:13095 node scripts/verify-public-news.cjs` **통과, 페이지 넘김 실행됨**(결과 줄 "pagination", 건너뜀 표시 없음)
+  - 내장 브라우저 추가 확인: 1쪽 12개 → "다음" → "2 / 2"·3개(1쪽과 겹치는 제목 0) · 마지막 쪽에서 "다음" 비활성 → "이전" → 1쪽 12개가 처음과 같은 순서
+  - 확인 뒤 18095·13095 종료
+- **예전 코드로 되돌릴 때 DB 상태(사실 확인):** `main` `8e0c6d7`을 임시 작업 트리(확인 뒤 삭제)에서 빌드해 V7 DB 복사본(`aicontent_verify_pagination_20261019`)에 띄움 → Flyway "Schema "public" has a version (7) that is newer than the latest available migration (3)" **경고만 내고 시작**(health 200, 공개 API 200). 트리거 그대로, 이슈 제목 변경 시 `change_seq` 0→1, `content` 테이블 남음 → **코드만 되돌려서는 DB가 V3로 돌아가지 않음**
+- **RUNBOOK 5-1절 추가:** V3→V7 영향(새 테이블·열·함수·트리거, 되돌리는 마이그레이션 없음), 순서(daily 멈춤 → `pg_dump -Fc` 백업과 확인 → 권장 리허설 → 코드·빌드 → daily 기동 시 자동 적용), 적용 후 확인 SQL·화면, 복원(새 DB로 `pg_restore` → V3·행 수 확인 → 이름 바꾸기 → 예전 코드, 백업 뒤 데이터는 실패 DB에서 확인, 지우지 않음). 5·6절은 PR #1 기준임을 표시
+- **5-1절 리허설(daily·`aicontent_main` 미사용):** `aicontent_verify_real`(V3, 실제 데이터 복사본) → `aicontent_rehearsal_main`에서 5-1 순서 그대로: 백업(TABLE DATA 12개) → 이 브랜치 jar(AI `none`, 127.0.0.1:18097)로 기동 → V4~V7 적용 로그 4줄·`now at version v7`(0.2초) → 확인 SQL(1~7 `t`, 트리거 3개, 이슈·기사·연결 29/35/35 그대로) → 복원·이름 바꾸기 → V3, `content` 테이블·트리거 없음, 수 그대로. `aicontent_rehearsal_main_v7_failed`(V7) 보관
+- 새로 만든 검증 DB: `aicontent_verify_pagination_20261019`, `aicontent_rehearsal_main`(V3), `aicontent_rehearsal_main_v7_failed`(V7). 기존 테스트로 보장되는 항목(상태 전이·권한·동시성·공개 분리 등, 257개)은 22절 결과를 그대로 근거로 씀(이번에 백엔드·화면 코드 변경 없음 → 다시 돌리지 않음)
+- 남은 미실행: 22절과 같음(OPERATOR 화면 403, `verify:flow`, daily 실제 적용, Docker). `aicontent_main` V3·이슈 29 그대로, 유료 AI 호출 0, 실제 RSS 수집 0
+- 22-1절 작업은 `280d4c5`로 커밋·일반 push. PR은 여전히 인증 문제로 생성 못 함
+
+## 23. 2026-10-19 밤 OPERATOR 권한 실제 화면 검증 (`claude/operator-ui-check`, 기준 `280d4c5`)
+
+- 브랜치: `origin/claude/content-a`(`280d4c5`, fetch 후 변경 없음)에서 `claude/operator-ui-check`를 새로 만듦(같은 이름 로컬·원격 없음 확인, `content-a` 추적 해제). `main`·`claude/content-a`에는 커밋하지 않음. 내일 `content-a` 병합 전에 이 브랜치를 `content-a`로 합칠지 결정
+- **권한 정책(바꾸지 않음, `CONTENT_A_PLAN.md` 4절·`ContentStatusPolicy`·`SecurityConfig` 기준):**
+  - OPERATOR·SYSTEM_ADMIN 공통: 목록·상세, 생성(ACTIVE·CLOSED 이슈), 제목·본문 편집, 출처·관련 URL 변경, 원천 변경 확인, 검수 요청(DRAFT→REVIEW), 반려(REVIEW→DRAFT, 사유), 보류(DRAFT·REVIEW·APPROVED→HOLD, 사유), 보류 해제(HOLD→DRAFT), 제외(DRAFT·REVIEW·HOLD→EXCLUDED, 사유), 보관(APPROVED·HOLD→ARCHIVED)
+  - SYSTEM_ADMIN만: 승인(REVIEW→APPROVED, 본인 작성분 포함), 복귀(EXCLUDED·ARCHIVED→DRAFT, 사유). `SecurityConfig`(경로 `hasRole`)와 `ContentStatusPolicy`(서비스) 두 곳에서 검사. 기존 근거: `ContentStatusPolicyTest`(역할 표), `ContentStatusApiIntegrationTest`(OPERATOR approve·restore HTTP 403)
+  - 화면: `GET /api/admin/me`의 역할로 승인·복귀를 "(SYSTEM_ADMIN)" 표시와 함께 비활성화(서버가 다시 검사). 역할 조회는 로그인 정보(토큰)별로 캐시, 로그아웃은 `sessionStorage`의 인증 정보 삭제, 페이지마다 `Shell`이 다시 마운트되어 계정을 다시 읽음
+- **검증 환경(일반 인증 모드):** `aicontent_verify_content` 덤프 → `aicontent_verify_operator_20261019`(V7). 백엔드 127.0.0.1:18098(기본 프로필, 로그인 생략 꺼짐, stub, 작업자·스케줄러 끔), 그 주소로 빌드한 화면 13098(next 15.5.28). 시험 계정 `verify-operator`(OPERATOR)·`verify-sysadmin`(SYSTEM_ADMIN): 기동 시 `ADMIN_USERNAME`/`ADMIN_PASSWORD`로 각각 만든 뒤(기동 생성 계정은 항상 SYSTEM_ADMIN) `verify-operator`의 역할만 SQL로 OPERATOR로 바꿈. 비밀번호는 무작위 생성해 `.local/run/verify-operator.cred`(Git 제외)에만 두고 출력하지 않음, 서버·화면 로그 6개에 비밀번호 없음 확인
+- **재현 가능한 브라우저 검증 추가:** `admin-ui/scripts/verify-content-roles.cjs`(`npm run verify:content-roles`, `verify-dashboard`와 같은 방식: Playwright·Chrome, `VERIFY_UI_URL` 로컬만, 계정은 환경 변수 `OPERATOR_USERNAME`/`OPERATOR_PASSWORD`/`ADMIN_USERNAME`/`ADMIN_PASSWORD`). 연결된 DB의 첫 ACTIVE 이슈에 콘텐츠 2개를 만들므로 검증 DB 복사본에서만 실행
+- **결과(13098, 11단계 모두 통과, 브라우저 오류 0):**
+  1. OPERATOR 로그인 → 사이드바·`/api/admin/me`가 OPERATOR
+  2. 목록 → 이슈 #4에서 NEWS 생성 → 제목·섹션·문단 입력 → 자동저장(서버 본문 반영, `createdBy` = OPERATOR) → 검수 요청 → REVIEW
+  3. 승인 버튼 "승인 (SYSTEM_ADMIN)" 비활성·활성 "승인" 없음, **Next 프록시로 OPERATOR 인증 직접 `POST .../approve` → 403**, 상태·version·`submittedAt`·`approvedBy`·`approvedAt`·사유·제목 그대로
+  4. LIFE 생성 → 제외(사유) → EXCLUDED → "복귀 (SYSTEM_ADMIN)" 비활성, **직접 `POST .../restore` → 403**, 그대로
+  5. 로그아웃 → `sessionStorage` 인증 정보 없음, `/contents` 접근 시 `/login`, `/api/admin/me` 401
+  6. 같은 탭에서 SYSTEM_ADMIN 로그인 → 사이드바·`/me`가 SYSTEM_ADMIN → 승인 → APPROVED(`approvedBy` = 관리자) → 복귀(사유) → DRAFT
+  7. 다시 OPERATOR로 전환 → APPROVED 콘텐츠 보관 → ARCHIVED → 복귀 버튼 다시 비활성, 직접 요청 403·변경 없음(이전 관리자 권한·화면 상태 안 남음)
+- **검증이 실제로 잡는지 확인:** 13098 화면 복사본(저장소 아님)만 승인·복귀 버튼이 항상 활성이 되도록 바꿔 다시 빌드 → 이 검사가 3단계에서 **실패**. 복사본을 저장소 코드로 되돌려 다시 빌드 → 다시 11단계 통과. 실패 메시지가 막연해("false !== true") 해당 검사에 설명 문구를 붙임
+- **발견한 문제: 없음.** 앱 코드(백엔드·화면) 변경 없음. 바꾼 파일은 검증 스크립트·`package.json`의 스크립트 항목·이 기록뿐
+- 검증 DB에 남은 것: 콘텐츠 #5·#8(ARCHIVED, 승인 이력 있음), #6·#9(DRAFT), #7(REVIEW, 실패를 확인한 실행에서 중단된 것). 확인 뒤 18098·13098 종료
+- **미실행:** 백엔드 `mvn test`(백엔드 변경 없음 → 22절 257개 결과 유지), `typecheck`·`next build` 이외의 화면 검사(화면 코드 변경 없음; 13098 빌드는 통과), OPERATOR로 그 밖의 SYSTEM_ADMIN 전용 경로(작업 재시도·취소, 수동 수집)는 이번 범위(콘텐츠) 밖이라 확인 안 함, 두 브라우저 탭에서 동시에 다른 계정(같은 탭 전환만 확인; 인증 정보가 탭별 `sessionStorage`라 탭 사이에 공유되지 않음)
+- `aicontent_main` V3 그대로, daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+- 23절 작업은 `78a9fa6`으로 커밋, `claude/operator-ui-check`를 원격에 새로 push. PR은 인증 문제로 생성 못 함
+
+### 23-1. 2026-10-19 밤 `verify:content-roles` 실행 대상 보호 (기준 `78a9fa6`)
+
+- 확인된 문제: `verify-content-roles.cjs`는 콘텐츠를 생성·편집·승인·보관하는데 `VERIFY_UI_URL`이 없으면 `http://localhost:3000`(daily UI → `aicontent_main`)을 기본값으로 썼고, 호스트가 로컬인지 외에는 검사하지 않아 daily에서 실수로 실행되는 것을 막지 못함. 23절 실행은 모두 `VERIFY_UI_URL=http://127.0.0.1:13098`(검증 DB `aicontent_verify_operator_20261019`)로 했으므로 daily 데이터가 바뀌었다고 보지 않음(`aicontent_main` V3 그대로)
+- 수정:
+  - `admin-ui/scripts/lib/write-target.cjs`(새 파일, 순수 함수 `checkWriteTarget`): `VERIFY_UI_URL` 필수(기본값 없음), URL 형식, `http://`만, 사용자 정보 금지, 호스트 `localhost`·`127.0.0.1`만, 포트 명시 필수, **포트 3000(daily)·3001(dev, `aicontent`)은 두 호스트 모두 거부**, 경로·쿼리·조각 금지(화면 주소만), `VERIFY_CONFIRM_VERIFY_DB`(실행자가 그 화면의 백엔드가 검증 DB임을 확인하는 값, 화면 포트를 다시 입력) 필수·일치, 계정 환경 변수 존재. 오류에는 올바른 실행 예시만 붙이고 비밀번호는 출력하지 않음
+  - `verify-content-roles.cjs`: `main()`의 첫 줄에서 검사하고, 통과한 뒤에만 Playwright를 불러 브라우저를 띄움(그 전에는 요청 없음). 로그인 생략 모드를 요구하지 않음(일반 로그인 권한 검증 그대로). 앱 코드·API 변경 없음(DB 이름을 알려 주는 API를 만들지 않음)
+  - `admin-ui/scripts/verify-write-target.cjs`(`npm run verify:write-target`): 서버 없이 실행하는 사전 검사 시험
+  - `docs/VERIFY.md`에 실행 방법·거부 조건·한계(포트·확인 값은 실수 방지일 뿐 DB 증명이 아님) 추가
+- 검증:
+  - `npm run verify:write-target` **26개 통과**: 함수 19개(주소 없음, `localhost:3000`·`127.0.0.1:3000/`, 3001, 외부 호스트, `localhost.example.com`, 잘못된 URL 2종, `https`, 사용자 정보, 포트 생략, 경로, 쿼리, 확인 값 없음·다른 포트·`yes`, 비밀번호 없음은 거부 / `127.0.0.1:13098`+13098, `localhost:13093/`+13093은 통과) + 실제 스크립트 7개(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, 로컬 포트에 확인 값 없음·틀림, 외부 호스트, 잘못된 URL → 종료 코드 1, 실행 예시 안내, 가짜 비밀번호 미출력, 대상 포트에 둔 연결 계수기의 연결 **0**). 3000 계수기는 3000이 비어 있을 때만 이 시험이 직접 연 것(daily 서버 아님, 실행 전 3000 미사용 확인)
+  - 대조: 이전 `verify-content-roles.cjs`(`78a9fa6`)로 바꿔 돌리면 실제 스크립트 7개 모두 **실패**, 되돌린 뒤 통과
+  - 검증 DB 환경(18098·13098, `aicontent_verify_operator_20261019`)에서 `VERIFY_UI_URL=http://127.0.0.1:13098`, `VERIFY_CONFIRM_VERIFY_DB=13098`로 `npm run verify:content-roles` **11단계 모두 통과**(콘텐츠 #10·#11 추가 생성), 확인 뒤 서버 종료
+- **미실행·남은 제한:** daily 서버·`aicontent_main`에 접속하는 거부 시험은 하지 않음(지시대로 사전 검사 시험으로 대신). 다른 포트로 daily DB에 연결한 서버는 이 검사로 막을 수 없음(VERIFY.md 한계). **`verify:flow`도 데이터를 쓰면서(수집·이슈 상태 변경) `localhost:3000` 기본값을 쓰는데 이번 범위 밖이라 그대로 둠** — 같은 보호를 적용할지 결정 필요. 백엔드 `mvn test`·화면 빌드는 코드 변경이 없어 다시 돌리지 않음
+- `aicontent_main` V3 그대로, daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+- 23-1절 작업은 `df5a06c`로 커밋·`claude/operator-ui-check`에 일반 push
+
+### 23-2. 2026-10-19 밤 사전 검사 오류 출력·연결 계수 시험 보완 (기준 `df5a06c`)
+
+- **발견한 문제 1 — 오류에 입력 원문 출력:** `write-target.cjs`가 URL 파싱 실패 시 `JSON.stringify(raw)`로 `VERIFY_UI_URL` 전체를, 프로토콜·호스트 거부 시 그 부분을 오류에 그대로 넣었음. 잘못 입력한 주소에도 사용자 정보·비밀번호·토큰이 들어 있을 수 있음
+- **수정:** 거부 메시지는 고정 문구·환경 변수 이름·URL 파서가 숫자만 받는 포트만 보임(파싱 실패 "value not shown", 프로토콜·호스트는 값 없이 규칙만). 다른 경로(사용자 정보·경로·쿼리·확인 값·계정)는 원래도 입력을 출력하지 않음을 확인. 보호 규칙 자체(거부 조건·확인 값)는 그대로
+- **발견한 문제 2 — 연결 계수 시험의 신뢰성:** `verify-write-target.cjs`가 부모 프로세스에 계수용 `net.Server`를 열고 `spawnSync`로 자식을 실행한 직후 `hits`를 읽었음. `spawnSync` 동안 부모 이벤트 루프가 멈춰 연결 콜백이 처리되지 않으므로, 자식이 연결했어도 0으로 판정할 수 있었음. 또 계수기가 `127.0.0.1`(IPv4)에만 있어 `localhost`가 `::1`로 연결하면 놓칠 수 있었음
+- **수정:** 비동기 `spawn`으로 자식을 기다리는 동안 부모가 연결을 받고 셈. 같은 포트에 `127.0.0.1`과 `::1` 계수기를 함께 열고 합산(IPv6가 없는 PC면 로그에 "127.0.0.1 only" 표시). 자식마다 30초 제한(넘으면 종료하고 실패), 실행 오류·종료 코드 처리, 읽기 전 300ms 대기, 끝나면 소켓·리스너 정리. 포트 3000 계수기는 이 시험이 직접 열 수 있을 때만(daily 서버 아님, 실행 전후 3000 미사용 확인). 실패 시 연결 여부를 먼저 판정해 원인이 보이게 함
+- **양성 대조 추가:** 시험 전용 자식(`node -e`, `net.connect`)이 임시 리스너에 `127.0.0.1`·`localhost`·`::1`로 실제 연결 → 세 경우 모두 계수됨. 계수기가 연결을 못 잡으면 시험 전체가 실패
+- **이전 기록 구분:** 23-1절의 "연결 계수기 연결 **0**"은 `spawnSync` 방식으로 잰 값이라, 그 방식만으로는 연결이 없었다는 근거가 되지 못함(이벤트 루프가 멈춰 있었음). 23-1의 사전 검사가 브라우저를 띄우기 전에 종료한다는 판단은 코드 순서와 아래 비동기 측정으로 다시 확인함
+- **검증(기준 `df5a06c` + 이 절의 미커밋 변경, Node 24.20.0):**
+  - `node --check`: `lib/write-target.cjs`·`verify-write-target.cjs`·`verify-content-roles.cjs` 통과
+  - `npm run verify:write-target` **40개 통과, 실패 0, 건너뜀 0**(23-3에서 정정: 처음에 41개·실제 스크립트 11개로 잘못 적음. 같은 코드를 다시 실행해 PASS 줄을 센 결과 함수 27 + 양성 대조 3 + 실제 스크립트 10 = 40): 함수 27개(가짜 비밀값 `fake-secret-…`이 든 잘못된 URL·`Bearer` 값·사용자 정보 비밀번호(로컬·외부 호스트)·쿼리·경로·호스트·스킴 8개 추가 — 모두 거부되고 메시지에 비밀값 없음, 허용 2개 통과) + 양성 대조 3개 + 실제 스크립트 10개(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, 시험 포트 `127.0.0.1`·`localhost` 확인 값 없음, 확인 값 틀림, 외부 호스트, 가짜 비밀번호 든 잘못된 URL, 가짜 비밀번호 든 사용자 정보, 가짜 토큰 쿼리 → 모두 종료 코드 1, **비동기 측정으로 연결 0**(IPv4+IPv6), 비밀값 미출력, 실행 예시 안내)
+  - 대조 ①: 이전 `write-target.cjs`(`df5a06c`)로 바꾸면 6개 **실패**(입력 원문 출력: 문자열 아닌 값, 가짜 비밀번호 든 잘못된 URL, `Bearer` 값, 호스트·스킴의 가짜 비밀값, 스크립트 출력의 가짜 비밀번호)
+  - 대조 ②: 보호 전 `verify-content-roles.cjs`(`78a9fa6`)로 바꾸면 실제 스크립트 10개 **실패**, 그중 8개는 계수기가 직접 잡음(주소 없음·3000 경우 → 이 시험의 3000 리스너에 새 연결 2회, 시험 포트 경우 → 2회; 나머지 2개는 예전 스크립트도 거부했으나 안내 문구가 없어 실패). 되돌린 뒤 40개 통과(정정 전 41)
+- **미실행:** 백엔드 `mvn test`, 권한 화면 11단계(이번 변경은 사전 검사·시험 코드뿐, 23-1에서 통과), 저장소에 `npm run verify`라는 스크립트는 없어 `verify:write-target`과 구문 검사로 대신함. `verify:flow` 보호는 별도 후속 항목(이번에 섞지 않음)
+- `aicontent_main`·daily 미사용, 유료 AI 호출 0
+- 23-2절 작업은 `6ef7b96`으로 커밋·`claude/operator-ui-check`에 일반 push
+
+### 23-3. 2026-10-19 밤 `verify:flow` 실행 대상 보호와 23-2 개수 정정 (기준 `6ef7b96`)
+
+- **23-2 개수 정정:** `6ef7b96`의 `npm run verify:write-target`을 다시 실행해 결과 줄을 셈 → **40개 통과(함수 27, 양성 대조 3, 실제 스크립트 10), 실패 0, 건너뜀 0.** 23-2에 적은 "41개·실제 스크립트 11개"는 틀린 숫자라 그 자리에 정정 표시를 남기고 고침(`cases` 배열이 10개). 숫자를 맞추려고 시험을 더하지 않음
+- **`verify:flow` 확인:** `package.json`의 `verify:flow` → `scripts/verify-flow.cjs`. 주소 기본값이 `http://localhost:3000`(daily UI → `aicontent_main`)이었고 로컬 호스트 여부만 검사. 브라우저 실행은 `chromium.launch`, 첫 요청은 `/login` 이동, 실제 RSS 수집은 "지금 수집" 클릭(`POST .../collect`), 상태 변경은 이슈 `PATCH`(REVIEW) 뒤 확정. 계정 변수는 `ADMIN_USERNAME`·`ADMIN_PASSWORD`만 씀
+- **수정:**
+  - `verify-flow.cjs`: 기본 주소 제거. `main()` 첫 줄에서 `checkWriteTarget(process.env, ["ADMIN_USERNAME", "ADMIN_PASSWORD"], "npm run verify:flow")` — 통과한 뒤에만 Playwright를 불러 브라우저를 띄움(그 전 요청 없음). OPERATOR 계정은 요구하지 않음. 수집·분석·임베딩·분류 대기, `VERIFY_REQUIRE_REAL_AI` 검사, 실패 시 이슈 상태 복원 등 기존 검증 로직은 그대로
+  - `lib/write-target.cjs`: 거부 안내를 호출 스크립트에 맞춤 — `checkWriteTarget(env, 계정 변수, 실행 명령)`의 계정 변수·명령으로 예시를 만듦(`verify:flow`는 `ADMIN_USERNAME=... ADMIN_PASSWORD=... npm run verify:flow`, 역할 검사는 기존대로). 검사 규칙(필수 값, 3000·3001 거부, 확인 값 일치, 입력 원문 미출력)은 그대로. 주석에 "유료 AI 사용 승인도 아님" 추가
+  - `verify-content-roles.cjs`: 실행 명령을 명시해 넘김(동작 같음)
+  - `verify-write-target.cjs`: `verify:flow` 함수 3개(안내가 `verify:flow`·`ADMIN_*`만 보이고 역할 검사·OPERATOR를 말하지 않음, 관리자 비밀번호 없으면 거부, 관리자 계정만으로 사전 검사 통과)와 실제 `verify-flow.cjs` 실행 8개 추가. 계수기를 3001에도(시험이 직접 열 수 있을 때만)
+  - `docs/VERIFY.md`: `verify:flow` 실행 방법(필수 변수), 한계(실수 방지일 뿐 DB 증명·유료 AI 승인이 아님, 유료 호출은 백엔드 실행 설정이 정함)
+- **검증(기준 `6ef7b96` + 이 절의 미커밋 변경, Node 24.20.0):**
+  - `node --check`: `lib/write-target.cjs`·`verify-write-target.cjs`·`verify-content-roles.cjs`·`verify-flow.cjs` 통과
+  - `npm run verify:write-target` **51개 통과, 실패 0, 건너뜀 0** = 함수 30(기존 27 + `verify:flow` 3) + 양성 대조 3(`127.0.0.1`·`localhost`·`::1` 연결 모두 계수) + 역할 검사 스크립트 10(기존 보호 유지) + `verify-flow.cjs` 8(주소 없음, `127.0.0.1:3000`·`localhost:3000`+확인 값, `127.0.0.1:3001`+확인 값, 외부 호스트, 확인 값 없음, 확인 값 불일치, 가짜 비밀번호 든 사용자 정보 → 모두 종료 코드 1, `verify:flow` 안내, 비밀값 미출력, **연결 0**). 리스너는 이 시험이 직접 연 것만(시험 포트·3000·3001 각각 `127.0.0.1`+`::1`, 실행 전후 3000·3001 미사용 확인)
+  - 대조: 보호 전 `verify-flow.cjs`(`6ef7b96`)로 바꾸면 `verify-flow.cjs` 8개 모두 **실패**, 그중 7개는 계수기가 직접 잡음(주소 없음·3000 → 이 시험의 3000 리스너에 새 연결 2회, 3001 → 2회, 시험 포트 → 2회; 외부 호스트는 예전 스크립트도 거부했으나 안내 문구가 없어 실패). 되돌린 뒤 51개 통과
+- **미실행:** `verify:flow` 전체 흐름(실제 RSS 수집·유료 AI 호출을 포함하므로 이번에 실행하지 않음, 정상 설정은 서버 없이 사전 검사 통과까지만 확인), 백엔드 `mvn test`, 권한 화면 11단계·화면 전체 검증(관련 코드 변경 없음)
+- **남은 제한:** 확인 값·포트 제한은 실제 DB나 유료 AI 사용을 증명하지 않음(VERIFY.md). `verify:dashboard`·`verify:ai-usage`는 조회만 하므로 `localhost:3000` 기본값 그대로
+- `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+- 23-3절 작업은 `0456aee`로 커밋·`claude/operator-ui-check`에 일반 push
+
+## 24. 2026-10-19 밤 최소 GitHub Actions CI (`claude/ci-checks`, 기준 `0456aee`)
+
+- 브랜치: `origin/claude/operator-ui-check`(`0456aee`, fetch 후 변경 없음, 미커밋 없음)에서 `claude/ci-checks` 새로 만듦(같은 이름 로컬·원격 없음, 추적 대상은 새 원격 브랜치). 기존 `.github` 워크플로 없음 → 새로 작성. `main`·`claude/content-a`·`claude/operator-ui-check`에는 병합·커밋하지 않음
+- **실제 설정 확인:** Java 21(`pom.xml`, Spring Boot 3.3.5), 통합 테스트는 PostgreSQL + pgvector(`application-test.yml`의 `TEST_DB_URL`·`DB_USER`·`DB_PASSWORD`, V1이 `CREATE EXTENSION vector`), Redis는 테스트에 쓰이지 않음(잠금·Redis health 기본 꺼짐), surefire 필터 없음 → `mvn test`가 통합 테스트까지 실행. 통합 테스트는 stub AI·고정 데이터·로컬 `HttpServer` 모의 OpenAI(가짜 키)라 외부 네트워크·유료 호출 없음. 화면: Node `^18.18 || ^19.8 || >=20`(next 15.5), `package-lock.json` v3. 서버 없이 도는 검사는 `verify:content-session`·`verify:auth-client`(TypeScript 변환 + 백엔드 Java 상수 읽기)·`verify:write-target`, 그 밖의 `verify:*`는 실행 중인 서버·계정·실제 RSS가 필요해 제외
+- **`.github/workflows/ci.yml`:**
+  - `backend`(ubuntu): JDK 21 temurin(Maven 캐시), 서비스 `pgvector/pgvector:pg16`(DB `aicontent_test`, CI 컨테이너 안에서만 쓰는 비밀번호, health 확인) → `mvn -B -ntp test`. 실패 시에만 `backend/target/surefire-reports/`를 7일 보관 아티팩트로 올림(DB 덤프·비밀값 없음)
+  - `admin-ui`(ubuntu, Node 24, npm 캐시): `npm ci` → `typecheck` → `build` → `verify:content-session` → `verify:auth-client` → `verify:write-target`. `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`, Next 원격 통계 끔
+  - `run-scripts`(windows, Windows PowerShell 5.1): `scripts/run/test-run-scripts.ps1`
+  - 트리거: 모든 push + pull_request. 이 저장소 브랜치에서 온 PR은 같은 커밋의 push 실행으로 갈음하고 포크 PR만 pull_request로 실행(작업 `if`). 같은 브랜치·이벤트의 새 실행이 이전 실행을 취소(`concurrency`). 권한 `contents: read`만, 저장소 비밀값 없음. 실패를 무시하는 설정(`continue-on-error` 등)·테스트 건너뛰기 없음
+- **로컬 확인:** YAML 파싱(작업 3개, 트리거 push·pull_request). 이 브랜치의 깨끗한 임시 작업 트리(`node_modules`·`next-env.d.ts` 없음)에서 CI와 같은 명령: `npm ci`·`typecheck`·`build` 통과, `verify:content-session` 15/15, `verify:auth-client` 통과, `verify:write-target` 통과, `test-run-scripts.ps1`(PowerShell 5.1.26100) 통과. 빈 새 DB `aicontent_ci_sim`에 CI와 같은 변수로 `mvn -B -ntp test` → Flyway "Successfully applied 7 migrations … v7", **257개 통과, 실패·오류·건너뜀 0**
+- **GitHub Actions 실제 실행:** `8228f21` push → 실행 39260567544(https://github.com/Kdhcode/AI-content-platform/actions/runs/39260567544) **success**. `admin-ui` 46초(9단계 모두 성공), `run-scripts` 89초(성공), `backend` 91초(`mvn test` 성공, 실패 시 업로드 단계는 조건대로 건너뜀). 워크플로 파일 push·Actions 사용에 제한 없었음
+- **확인 못 한 것:** GitHub 작업 로그 본문은 로그인해야 보여서(내장 브라우저 미로그인) CI의 테스트 개수를 로그로 확인하지 못함 — 단계 성공과 같은 명령의 로컬 빈 DB 결과(257개)로만 판단. 실패할 때 아티팩트가 실제로 올라가는지는 일부러 실패시키지 않아 미확인. 포크 PR 실행 경로 미확인(포크 없음). PR은 인증 문제로 만들지 않음
+- `aicontent_main`·daily 미사용, 유료 AI 호출 0, 실제 RSS 수집 0
+
+## 25. 2026-10-16 콘텐츠 편집기 뒤로 가기 보호 (이 PC, `claude/content-a` `ad9d5a2` 기준 미커밋 · 10-20에 커밋해 `280d4c5` 위로 옮김 `1b83c43`. 노트북의 23·24절과 번호가 겹치지 않게 25절로 둠)
+
+- 시작 상태: `main` `8e0c6d7`(원격과 같음, 미커밋 없음), `claude/content-a` `ad9d5a2`(main보다 19개 앞섬, 미병합), `claude/post-merge-check` 문서 커밋 1개 미병합. `AGENTS.md` 없음(협업 규칙은 `docs/collaboration/RULES.md`)
+- 검수 대기 이슈 EXCLUDED→CLOSED 우회: `main`에 방어 있음(`af174d9`, 검수 대기 기사가 남은 이슈는 어떤 상태에서든 CLOSED 불가, 회귀 테스트 `PublicNewsReviewFlowIntegrationTest`). 다른 CLOSED 경로도 확인 — 자동 종료는 ACTIVE만, 집계 재계산은 기사 0개일 때만, 병합·분리·이동으로 ACTIVE 이슈에 들어간 기사는 CLASSIFIED. 오늘 이슈 코드는 바꾸지 않음
+- 선정: A7 요구사항 "페이지 이동 시 미저장 손실 방지" 중 브라우저 뒤로/앞으로 가기가 빠져 있었음(10-15 보고에 남은 문제로 적음). 다음 계획 B(LIFE 판정)는 카테고리 목록·기준점수·판정 대상 결정(NEXT_CONTENT_SCOPE 6절 3·4)과 노션 07 출력 형식이 필요해 보류
+- 변경: `admin-ui/src/lib/backGuard.ts`(새 파일, 순수 로직), `app/contents/[id]/page.tsx`(가드 연결, 떠날 때 남은 편집 저장, 확인 문구), `scripts/verify-content-session.cjs`(가드 테스트 9개). 서버 코드·DB 변경 없음
+- 테스트(기준 `ad9d5a2` + 위 변경):
+  - `node scripts/verify-content-session.cjs` **24/24 통과**(기존 15 + 가드 9). 가드 코드를 일부러 깨뜨린 5가지(머무를 때 다시 쌓지 않음, 뒤로 가기를 잇지 않음, 같은 주소 검사 제거, 남은 가드 항목 무시, 저장됐는데도 물음) 모두 실패로 잡힘
+  - `tsc --noEmit` 통과, `next build` 통과(verify-content UI 다시 빌드), `verify-auth-client` 통과
+  - 전체 `mvn test` **257개 통과**(백엔드 변경 없음, 기준 확인용)
+  - `verify-public-news`는 **미실행**: 주소가 `localhost:3000`(daily)으로 고정돼 있는데 daily 서버가 꺼져 있었음. 편집기와 무관
+- 브라우저 확인(내장 브라우저, verify-content 13093, 로그인 생략 모드): 저장 대기 중 뒤로 가기 → 확인 창, "머무르기" 2번 모두 주소·입력 그대로; "떠나기" → 목록으로 한 번에; 저장이 끝난 뒤 뒤로 가기 → 묻지 않고 한 번에; 앞으로 가기로 남은 가드 항목에 돌아온 뒤 뒤로 가기 → 한 번에; 저장 대기 0.3초 만에 링크로 떠남 → 서버에 저장됨; 저장이 끝나지 못한 채 떠남 → 다시 열 때 보관본 복원 화면; 링크 확인 "머무르기"·`beforeunload` 처리 기존대로
+- 미검증: 실제 뒤로 가기 키·버튼. 내장 브라우저에서 Alt+← 가 기록 이동을 일으키지 않아 `history.back()`으로 확인(같은 popstate 경로). Chrome은 사용자 조작 없이 쌓인 기록 항목을 뒤로 가기 버튼에서 건너뛸 수 있다. 가드 항목은 입력(사용자 조작) 뒤에 쌓이지만, "머무르기" 뒤 다시 쌓는 항목이 버튼에서 건너뛰어지는지는 실제 Chrome에서 확인 필요(건너뛰어도 보관본과 떠날 때 저장은 그대로)
+- DB: 오늘 세션 시작 시 PostgreSQL·daily 서버가 모두 꺼져 있었음. 프로젝트 스크립트(`start-db.ps1`)로 DB만 켜고 daily 서버는 띄우지 않음. 유료 AI 호출 0
+
+## 26. 2026-10-20 콘텐츠 A 묶음 통합 검증과 병합 준비 (이 PC, `claude/content-a` `540062f`, 검증 브랜치 `verify/content-a-integration-20261020`)
+
+- **시작 상태(실제 확인):**
+  - 사용자 작업 폴더는 `main`인데 `280d4c5`(= `origin/claude/content-a`, 원격 `main` `8e0c6d7`보다 23커밋 앞). reflog: 10-20 15:39 Fork의 `pull --rebase=false main claude/content-a`가 **로컬 `main`을 fast-forward**함(원격 이름이 `main`이라 `main claude/content-a` = 원격 `main`의 `claude/content-a` 브랜치). `claude/content-a`가 이 PC의 다른 작업 트리(도구 검증 폴더)에 체크아웃돼 있어 작업 폴더에서 그 브랜치로 바꿀 수 없었던 것으로 보임. 원격 `main`은 그대로, 강제 초기화·stash 안 함. **로컬 `main`을 Fork에서 push하면 `content-a`가 원격 `main`에 들어가므로 push하지 말 것**
+  - 도구 검증 폴더의 `claude/content-a`는 `ad9d5a2`(원격보다 4커밋 뒤) + 10-16 미커밋 변경(뒤로 가기 보호, 25절). 이 변경을 커밋(`c8d9c6d`)한 뒤 아직 push되지 않은 로컬 커밋이라 `280d4c5` 위로 rebase → `1b83c43`(충돌은 `TASK.md` 기록 위치뿐, 양쪽 기록 모두 유지)
+  - 원격 확인 중 `content-a`에 없는 원격 브랜치 2개 발견: `claude/operator-ui-check`(4커밋, 23절)와 그것을 포함한 `claude/ci-checks`(6커밋, 24절), 둘 다 `280d4c5`에서 갈라짐. 23절에 "`content-a`로 합칠지 결정"이라고 남아 있어 **`content-a`에는 합치지 않음** → 로컬 검증 브랜치에서 합쳐 통합 확인
+  - 저장소에 `AGENTS.md` 없음(`RULES.md`·이 문서 기준)
+- **확인한 구현 범위(코드·테스트 대조):** A1~A8과 A7 보완이 코드에 있고, 각 요구가 실제 검사로 덮여 있음 — 생성·중복 방지(`ContentApiIntegrationTest` 3개, `ContentCreateConcurrencyIntegrationTest`), 편집·출처·URL(`ContentApi`/`ContentRelationApi`/`ContentLinkLimit`), 상태 전이와 OPERATOR 승인·복귀 403(`ContentStatusApiIntegrationTest` 86·152·162행, `ContentStatusPolicyTest`), REVIEW·APPROVED 편집 시 DRAFT와 같은 값 저장 시 변화 없음(`editingAReviewedOrApprovedContentRevokesItButSavingTheSameValuesDoesNot`), version 충돌(`ContentStatus/RelationConcurrency`), 원천 변경(`ContentOriginChangeIntegrationTest` 8개), 공개 분리(`anApprovedContentStaysOutOfThePublicNewsroom` 외 3개), 자동저장 순서·저장 실패 시 동작 중단·충돌 시 초안 유지(`verify:content-session`)
+- **발견한 문제와 수정(`540062f`, `scripts/run/check-env.ps1`·`test-run-scripts.ps1`):**
+  1. JDK 24 이상에서 `mvn -v` 첫 줄이 JVM 경고(`WARNING: A restricted method in java.lang.System has been called`)라 `check-env`가 정상 Maven을 `[MISSING]`으로 보고 종료 코드 1(이 PC JDK 25에서 재현, 같은 `mvn.cmd`로 `mvn test`는 통과). 버전 줄을 패턴으로 찾게 함(Java도 같은 방식 — `JAVA_TOOL_OPTIONS` 안내 줄 대비)
+  2. 원격 비교·`-Fetch`가 `origin`만 봄 → 원격 이름이 `main`인 이 PC에서는 다른 PC가 push한 커밋 경고가 **한 번도 안 나옴**(오늘 `operator-ui-check`·`ci-checks`를 놓친 원인과 같은 종류). 현재 브랜치의 추적 원격 → `origin` → 하나뿐인 원격 순서로 고르고, 짧은 이름 대신 전체 ref로 비교(`main/main`처럼 로컬 브랜치 이름과 겹칠 때 모호함 방지)
+  - `test-run-scripts.ps1`에 2개 추가(가짜 `mvn.cmd`가 경고를 먼저 출력, 원격 이름 `main`인 임시 저장소) → **19개 통과**. 수정 전 `check-env.ps1`로 바꾸면 새 2개만 **실패**, 되돌린 뒤 통과. 고친 `check-env`가 이 PC에서 위 두 원격 브랜치를 실제로 경고함
+- **검증 결과(이 PC: Windows 10, PowerShell 5.1, JDK 25.0.4, Node 24.19.0, Next 15.5.28):**
+  - `claude/content-a` `1b83c43` 기준: `npm ci`(작업 트리 전용 설치, 사용자 폴더 `node_modules`는 건드리지 않음) 후 `typecheck` 통과, `verify:content-session` **24/24**, `verify:auth-client` 통과, `mvn test`(`aicontent_test`) **257개 통과·실패/오류/건너뜀 0**, `test-run-scripts.ps1` 17개 통과(수정 전)
+  - 통합 브랜치 `verify/content-a-integration-20261020`(`540062f` + `origin/claude/ci-checks` `0f4af9d` 병합, 로컬 전용·push 안 함) — 24절 CI와 같은 명령: `npm ci`·`typecheck`·`build`(Next 15.5.28) 통과, `verify:content-session` 24/24, `verify:auth-client` 통과, `verify:write-target` **51개 통과**, `test-run-scripts.ps1` **19개 통과**, 빈 새 DB `aicontent_ci_sim_20261020`에 `mvn -B -ntp test` → Flyway "Successfully applied 7 migrations … v7", **257개 통과**
+  - **격리 DB 마이그레이션(V3 → V7):** `aicontent_verify_real`(V3, 실제 기사 복사본) 덤프 → `aicontent_mig_upgrade_20261020` → 통합 jar(기본 프로필, AI none, 로그인 생략 꺼짐, 작업자·스케줄러 끔, 127.0.0.1:18099)로 기동 → V4~V7 적용(0.05초), health UP, 인증 없는 관리자 API 401, 공개 API 200. `issue`(새 열 제외)·`news_article`·`issue_article`·`app_user` 행 md5 **전후 동일**(29/35/35/2), 새 테이블 3개·트리거 생성, 원본 `aicontent_verify_real`·`aicontent_main` V3 그대로
+  - **일반 로그인 모드 권한 화면(23절 스크립트 재실행):** `aicontent_verify_content` 복사본 `aicontent_verify_roles_20261020`(V7)에 통합 jar 기본 프로필(127.0.0.1:18096, stub, 작업자·스케줄러 끔) + 그 주소로 빌드한 화면 13096. 검증 DB에만 있는 OPERATOR·SYSTEM_ADMIN 시험 계정(비밀번호는 Git 밖 파일, 환경 변수로만 전달) → `VERIFY_UI_URL=http://127.0.0.1:13096 VERIFY_CONFIRM_VERIFY_DB=13096 npm run verify:content-roles` **11단계 모두 통과**, 브라우저 오류 0, 출력에 비밀번호 없음
+  - **내장 브라우저(같은 13096, SYSTEM_ADMIN 로그인, 로그인 생략 띠 없음):** 이슈 #3 "NEWS 만들기" → 빈 본문 DRAFT v0 → 제목·섹션·문단 입력 직후 검수 요청 → 요청 순서 `PATCH v0` → `submit v1`(자동저장 완료 후 상태 변경) → REVIEW → 승인 APPROVED → 공개 `/api/public/issues`·`/issues/3`에 콘텐츠 제목 없음, `/api/public/contents/7` 401 → 같은 값 저장(API) `changed=false`·APPROVED·version 그대로 → "편집 시작" 확인 1회 → 본문 수정 → DRAFT, 승인·검수 요청 기록 지워짐 → 저장 실패(PATCH 500으로 바꿈) 중 검수 요청 → `PATCH`만 나가고 submit 미전송·DRAFT 유지 → "다시 저장" 성공 → 외부 URL 출처·관련 URL 추가 → 다른 편집자 저장(API) 뒤 입력 → 충돌, 자동저장 중지·편집기 잠금·상태 버튼 비활성·초안 유지(화면·보관본), 최신본/초안 비교 → 다시 불러오기 → 보관본 복원 저장 → 원천 이슈 #3 제목 변경 → "원천 변경 미확인" → 확인 처리(제목·상태 그대로, version +1) → 뒤로 가기 보호(Next 15에서 다시 확인: 머무르기 → 주소·입력 유지, 떠나기 → 목록, 남은 편집 저장됨) → 다시 승인 → 뉴스룸 `/news`·`/news/3`에 콘텐츠 제목·본문·URL 없음. `verify:public-news`(`VERIFY_UI_URL=http://127.0.0.1:13096`) 통과(이슈 5개라 페이지 넘김은 건너뜀 — 22-1절에서 15개로 확인)
+  - 확인 뒤 18093·13093·18096·13096·18099 종료. DB(55432)는 사용자 스크립트(`start-db.ps1`)로 별도 창에서 켜 둠
+- **미실행:** `verify:flow`(실제 RSS 수집·유료 AI 필요), daily(8080·3000)·`aicontent_main` 실제 V3→V7 적용(실행 금지, RUNBOOK 5-1 절차로 사용자가 진행), GitHub Actions 실행(push는 사용자가 Fork에서 함 — push하면 24절 워크플로가 도는 것은 `ci-checks`를 합친 뒤부터), 실제 뒤로 가기 버튼(내장 브라우저에서 Alt+← 미동작, `history.back()`으로 확인 — 25절), Docker compose(이 PC 미사용)
+- 새로 만든 검증 DB: `aicontent_ci_sim_20261020`(V7), `aicontent_mig_upgrade_20261020`(V7), `aicontent_verify_roles_20261020`(V7, 콘텐츠 #5~#7 추가). 기존 DB는 덤프만 하고 바꾸지 않음. `aicontent_main` V3·이슈 29, 유료 AI 호출 0(`ai_log` 오늘 0행), 실제 RSS 수집 0
+- **병합 준비 상태:** `content-a`(`540062f`)는 원격 `main`(`8e0c6d7`) 뒤처짐 0, 충돌 없음. 남은 결정 ① `claude/ci-checks`(23·24절, 권한 화면 스크립트·데이터 쓰는 검증 스크립트 보호·CI)를 `content-a`에 합칠지(통합 확인은 위 검증 브랜치로 끝남, 합치면 `TASK.md`만 충돌 — 23·24절을 25·26절 앞에 두면 됨) ② `claude/post-merge-check`(14절 문서 1커밋) 처리. 병합 차단 결함은 없음
+
+### 26-1. 2026-10-20 누락 수정 3개를 `claude/ci-checks`에 반영 (이 PC, 기준 원격 `0f4af9d`)
+
+- **결정(사용자):** `content-a`에만 있던 커밋 3개(`1b83c43` 뒤로 가기 보호, `540062f` check-env, `695c88e` 25·26절 기록)를 검토 후 `claude/ci-checks`에 반영. PR은 `claude/ci-checks` → `main`
+- **25·26절과의 구분:** 25·26절은 `claude/content-a`(`540062f`) 기준과, 그것에 `ci-checks`를 **병합**한 로컬 검증 브랜치(`5cd6414`) 기준으로 쓴 기록이다. 아래가 실제로 `ci-checks`에 올린 결과(체리픽)다. 26절의 "병합 준비 상태·남은 결정 ①"은 이 결정으로 해소됨
+- **복구 수단:** 로컬 백업 브랜치 `backup/content-a-20261020`(`695c88e`, 세 커밋 모두 포함 확인), `backup/local-main-20261020`(`280d4c5`, Fork pull로 앞서 있던 로컬 `main`)
+- **검토:** 세 커밋 모두 `280d4c5` 위에 있고 `280d4c5`는 `ci-checks`의 조상(선행 의존성 충족). `ci-checks`가 `280d4c5` 이후 바꾼 파일(`ci.yml`, `package.json`, `write-target.cjs`, `verify-content-roles.cjs`, `verify-flow.cjs`, `verify-write-target.cjs`, `VERIFY.md`, `TASK.md`)과 겹치는 것은 `TASK.md`뿐 → 중복 적용 없음
+- **체리픽(순서대로):** `1b83c43` → `d44f031`(`TASK.md` 충돌: 노트북 23·24절 다음에 이 PC 기록을 둠), `540062f` → `9daed2c`(충돌 없음), `695c88e` → `8f4e70f`(충돌 없음, 25절 제목·26절 추가). 결과 트리는 문서를 빼면 로컬 검증 브랜치 `5cd6414`와 **같음**(`git diff` 비어 있음), 백업 브랜치 대비 차이는 `ci-checks` 자체 파일뿐
+- **검증(기준 `8f4e70f`, Windows 10 · PowerShell 5.1 · JDK 25.0.4 · Node 24.19.0, 직접 실행):**
+  - `npm ci` · `typecheck` · `build`(Next.js 15.5.28) 통과, `verify:content-session` **24/24**(뒤로 가기 보호 9개 포함), `verify:auth-client` 통과, `verify:write-target` **51개 통과**
+  - `test-run-scripts.ps1` **19개 통과**(새 2개: Maven이 JVM 경고 뒤에 버전을 출력하는 경우, 원격 이름이 `origin`이 아닌 경우)
+  - 실제 `check-env.ps1`: Java 25.0.4·Maven `[OK]`(수정 전에는 이 PC에서 `[MISSING]`·종료 코드 1), 원격 `main`을 추적 원격으로 인식해 `main/claude/post-merge-check` 1커밋만 경고(이미 포함된 `content-a`·`operator-ui-check`는 경고 없음), 종료 코드 0
+  - `mvn test`(`aicontent_test`) **257개 통과**, 실패·오류·건너뜀 0
+  - 브라우저(verify-content 18093·13093, 이 커밋으로 빌드, 로그인 생략 모드): 콘텐츠 #1에서 제목 입력 직후 `history.back()` → 확인 창, "머무르기" → 주소·입력 그대로·가드 항목 다시 쌓임, "떠나기" → 목록으로 한 번에, 남은 편집이 서버에 저장됨. 확인 뒤 서버 종료
+- **미실행:** 새 커밋 3개에 대한 GitHub Actions(아직 push 전 — push하면 같은 커밋으로 실행됨), 실제 뒤로 가기 버튼(25절과 같은 제한), 일반 로그인 모드 권한 화면 재실행(코드가 26절 `5cd6414`와 같아 그 결과를 근거로 씀)
+- 원격 push·`main` 병합 안 함. `aicontent_main` V3, 유료 AI 호출 0, 실제 RSS 수집 0

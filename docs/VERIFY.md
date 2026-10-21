@@ -87,6 +87,20 @@ DB를 중지/시작하려면 프로젝트 루트에서 다음 명령을 사용�
 & .local/pg16/pgsql/bin/pg_ctl.exe -D .local/pgdata -l .local/postgres-server.log -o '-p 55432 -h 127.0.0.1' -w start
 ```
 
+## CI (GitHub Actions, `.github/workflows/ci.yml`, 2026-10-19)
+
+**실행 조건:** 모든 브랜치 push. pull_request는 포크에서 온 PR만 따로 돌린다(이 저장소 브랜치의 PR은 같은 커밋의 push 실행 결과가 PR에 표시됨). 같은 브랜치에 새로 push하면 이전 실행은 취소된다. 권한은 `contents: read`만, 저장소 비밀값은 쓰지 않는다.
+
+| 작업 | 실행 환경 | 검사 |
+|---|---|---|
+| `backend` | ubuntu, JDK 21(temurin), 서비스 컨테이너 `pgvector/pgvector:pg16`(DB `aicontent_test`, CI 안에서만 쓰는 비밀번호) | `mvn -B -ntp test` — 단위·통합 테스트 전체(통합 테스트는 stub AI·로컬 모의 서버·고정 데이터, 실제 RSS·유료 AI 없음). Redis는 테스트에 필요 없어 띄우지 않음 |
+| `admin-ui` | ubuntu, Node 24 | `npm ci` → `npm run typecheck` → `npm run build` → `verify:content-session` → `verify:auth-client` → `verify:write-target` |
+| `run-scripts` | windows, Windows PowerShell 5.1 | `scripts/run/test-run-scripts.ps1` |
+
+CI에 넣지 않은 검사: `verify:flow`(실제 RSS·실제 AI), `verify:dashboard`·`verify:ai-usage`·`verify:public-news`·`verify:content-roles`(실행 중인 백엔드·화면과 계정이 필요), daily·`aicontent_main` 관련 작업 전부.
+
+**실패 확인:** GitHub 저장소 → Actions → 해당 실행 → 실패한 작업의 단계 로그. `backend`가 실패하면 그 실행의 Artifacts에 `backend-surefire-reports`(테스트 보고서 XML·TXT, 7일 보관)가 올라간다. DB 덤프·비밀값은 올리지 않는다. 같은 검사를 로컬에서 다시 돌리려면 위 "표준 재실행"의 `mvn test`(빈 테스트 DB에서도 Flyway가 V1~V7을 만든다)와 `admin-ui`의 같은 npm 명령, `.\scripts\run\test-run-scripts.ps1`.
+
 ## 실제 OpenAI 연결
 
 어댑터는 [Chat Completions 공식 API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)와
@@ -123,15 +137,17 @@ mvn spring-boot:run '-Dspring-boot.run.profiles=live'
 
 ## 브라우저 흐름 재검증
 
-**로컬 개발 DB에만 실행한다.** 뉴스 수집과 이슈 상태 변경·확정을 수행한다.
-관리자 서버를 실행한 상태에서 별도 터미널을 사용한다.
+**검증 DB 복사본에 연결된 검증 환경에만 실행한다.** `verify:flow`는 실제 RSS 수집과 이슈 상태 변경·확정을 수행한다.
+관리자 서버를 실행한 상태에서 별도 터미널을 사용한다. 2026-10-19부터 주소 기본값(`http://localhost:3000` = daily)이 없고, `verify:content-roles`와 같은 사전 검사(`scripts/lib/write-target.cjs`)를 브라우저·요청보다 먼저 한다: `VERIFY_UI_URL`(로컬 `http://` 화면 주소, 포트 명시, 3000·3001 거부)과 `VERIFY_CONFIRM_VERIFY_DB`(같은 포트를 다시 입력) 필수, 계정은 이 스크립트가 쓰는 `ADMIN_USERNAME`·`ADMIN_PASSWORD`만.
 
 ```powershell
 cd admin-ui
+$env:VERIFY_UI_URL = 'http://127.0.0.1:<검증 환경 화면 포트>'
+$env:VERIFY_CONFIRM_VERIFY_DB = '<같은 포트>'
 $env:ADMIN_USERNAME = 'admin'
 $env:ADMIN_PASSWORD = '<실행 중인 관리자 비밀번호>'
 $env:VERIFY_SOURCE_NAME = 'bbc-world' # 또는 yonhap-latest
-npm run verify:flow
+npm run verify:flow   # 데이터를 씀: 검증 환경에서만
 # 화면·실제 DB 집계·모바일·캡처 검증(기사 상태를 변경하지 않음):
 npm run verify:dashboard
 # AI 사용량 화면(1440px·390px)과 API 합계 일치 확인(조회만 함):
@@ -142,8 +158,26 @@ npm run verify:ai-usage
 stub 흐름만 확인할 때는 `VERIFY_REQUIRE_REAL_AI=false`를 명시한다.
 Chrome 대신 Playwright Chromium을 사용하려면 `npx playwright install chromium` 후
 `VERIFY_BROWSER_CHANNEL=chromium`을 설정한다.
-`VERIFY_TIMEOUT_SECONDS`(기본 180), `VERIFY_UI_URL`(기본 `http://localhost:3000`)도 설정할 수 있다.
+`VERIFY_TIMEOUT_SECONDS`(기본 180)도 설정할 수 있다. `verify:dashboard`·`verify:ai-usage`(조회만 함)는 지금처럼 `VERIFY_UI_URL` 기본값 `http://localhost:3000`을 쓴다.
+**`verify:flow` 사전 검사의 한계:** 주소 확인 값과 포트 제한은 실수 방지일 뿐, 그 화면의 백엔드가 실제로 검증 DB에 연결됐다는 증명이 아니고 **유료 AI 호출을 승인하는 것도 아니다.** 유료 호출 여부·한도는 백엔드 실행 설정(`-Ai openai`, `AI_DAILY_MAX_CALLS` 등, RUNBOOK 4절)이 정하며, 이 스크립트의 `VERIFY_REQUIRE_REAL_AI` 검사(실제 임베딩 모델 요구)는 그대로다.
 유료 모델의 모든 호출·토큰을 최종 확인하려면 DB에서 `ai_log.provider`, `model`, `success`를 함께 확인한다.
+
+### 콘텐츠 역할별 화면 검증 (`verify:content-roles`, 데이터를 씀)
+
+일반 로그인 모드에서 OPERATOR·SYSTEM_ADMIN의 콘텐츠 동작을 확인한다(생성·편집·검수 요청, 승인·복귀 버튼 제한과 Next 프록시 직접 요청 403, 로그아웃·계정 전환). 연결된 DB의 첫 ACTIVE 이슈에 콘텐츠 2개를 만들고 승인·보관까지 하므로 **검증 DB 복사본에 연결된 환경에서만** 실행한다(로그인 생략 모드가 아니라 실제 계정 로그인으로 확인하는 검사).
+
+```powershell
+cd admin-ui
+$env:VERIFY_UI_URL = 'http://127.0.0.1:13098'      # 검증 환경 화면 주소(기본값 없음)
+$env:VERIFY_CONFIRM_VERIFY_DB = '13098'            # 그 화면의 백엔드가 검증 DB 복사본임을 확인: 같은 포트를 다시 입력
+$env:OPERATOR_USERNAME = '...'; $env:OPERATOR_PASSWORD = '...'   # 그 검증 DB의 시험 계정(파일·Git·채팅에 남기지 않음)
+$env:ADMIN_USERNAME = '...'; $env:ADMIN_PASSWORD = '...'
+npm run verify:content-roles
+```
+
+브라우저를 띄우거나 요청을 보내기 전에 `scripts/lib/write-target.cjs`가 거부하는 경우: `VERIFY_UI_URL` 없음, URL 형식 오류, `http://`가 아님, 주소에 사용자 정보·경로·쿼리, 호스트가 `localhost`·`127.0.0.1`이 아님, 포트 생략, **포트 3000(daily UI → `aicontent_main`)·3001(dev UI → `aicontent`)**, `VERIFY_CONFIRM_VERIFY_DB` 없음 또는 화면 포트와 다름, 계정 값 없음. 오류에는 위 실행 예시만 나오고 비밀번호는 출력하지 않는다. 사전 검사 자체는 `npm run verify:write-target`(서버 불필요)으로 확인한다.
+
+**한계:** 포트 제한과 확인 값은 실수를 막는 장치일 뿐, 그 화면 뒤의 백엔드가 실제로 검증 DB에 연결됐다는 증명이 아니다. 스크립트는 백엔드의 DB를 알 수 없고(앱은 DB 이름을 알려 주는 API를 두지 않는다), 확인 값을 입력하는 사람이 그 환경의 DB를 알고 있어야 한다(검증 환경과 포트는 `docs/RUNBOOK.md`·`TASK.md`에 기록). 다른 포트로 daily DB에 연결한 서버를 띄웠다면 이 검사로는 막을 수 없다.
 
 ```sql
 SELECT job_type, status, count(*) FROM async_job GROUP BY 1,2;
