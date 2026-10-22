@@ -2,14 +2,14 @@
 
 ## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
 
-- 작업 브랜치: `claude/v7-rehearsal` (기록만, PR #3 head `c615af3` 위). 원격 `main` = **`1dda07b`**(PR #3 병합 완료, 2026-10-21 15:03 KST, 병합 커밋. 그 전 `6a9ba31` = PR #2 병합, V4~V7 포함). `main` CI 39553091328 성공. 이 브랜치의 `main` 기준 변경은 `TASK.md`뿐(28-2절)
-- 검증한 코드 커밋: 리뷰 도구 `4d66eee`(55개 통과, 27-1·27-2절). 이번 28절은 코드 변경 없음
-- `aicontent_main`: V3 그대로. 적용 전 백업 `.local/backup-aicontent_main-20261021-1427-V3.dump` 복원 확인 완료(28절)
-- **V4~V7 리허설 완료(28-1절):** `main` `6a9ba31` 빌드 jar로 백업 복원본 `aicontent_main_v7rehearsal_20261021`에 V4~V7 적용, 확인 SQL·기존 데이터·API·트리거 확인 통과
-- 열린 PR: 없음. 이 브랜치의 기록용 PR(`claude/v7-rehearsal` → `main`)은 사용자가 만들 예정
-- 다음 작업: 실제 `aicontent_main` V7 적용(별도 승인) — **새 백업 생성·복원 확인부터** 시작한 뒤 RUNBOOK 5-1 4~5단계, 적용 후 확인과 화면 확인
+- 작업 브랜치: `claude/v7-apply` (기록만, `main` `b4462ed` 위). 원격 `main` = `b4462ed`(PR #4 병합 — 리허설 기록)
+- 실행 코드: `main` `b4462ed`(backend는 `6a9ba31`과 같음), jar `.local/run/platform-backend.jar` SHA-256 `727aa7ac…`(리허설과 같은 파일, V1~V7)
+- **`aicontent_main`: V7 적용 완료(2026-10-22 17:15 KST, 29절).** 기존 데이터 보존, Flyway·트리거·API·화면 확인 통과
+- 적용 전 백업: `.local/backup-aicontent_main-20261021-1622-V3-preapply.dump`(복원 검증 DB `aicontent_main_preapplycheck_20261021`)
+- 열린 PR: 없음. 이 브랜치의 기록용 PR은 사용자가 만들 예정
+- 다음 작업: daily 평소 사용(서버 종료·재시작은 29절). 화면에서 콘텐츠 생성 등 쓰기 동작 확인은 별도 판단
 
-최종 갱신: 2026-10-21 KST · 28-2절(PR #3 병합 후속). 이전: 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-22 KST · 29절(실제 `aicontent_main` V3 → V7 적용). 이전: 2026-10-21 28-2절(PR #3 병합 후속). 이전: 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -747,3 +747,21 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 - **CI(원격 조회):** `main` `1dda07b` push 실행 39553091328 — backend·admin-ui·run-scripts 모두 success. `claude/v7-rehearsal` `43fa5cf` push 실행 39552509826도 세 작업 모두 success
 - **이 브랜치와 새 `main`(직접 실행):** `git diff main...claude/v7-rehearsal` = `docs/collaboration/TASK.md` 1개. `git merge-tree --write-tree main claude/v7-rehearsal` 충돌 없음, 결과 트리 = `43fa5cf` 트리. rebase·force push 불필요
 - **변경 없음:** `aicontent_main` V3, daily·백엔드 미실행, 실제 Codex·유료 AI 호출 0
+
+### 29. 2026-10-22 실제 `aicontent_main` V3 → V7 적용 (사용자 승인)
+
+- **코드 기준(직접 실행·원격 조회):** `main` `b4462ed`(원격과 같음, 미커밋 변경 없음). `git diff 6a9ba31 b4462ed -- backend` 없음 → 리허설과 같은 코드. jar SHA-256 `727aa7ac…`(리허설과 같음), 마이그레이션 V1~V7 포함
+- **DB 시작(직접 실행):** PostgreSQL이 꺼져 있었음(10-21 16:26 앱 종료 때 함께 종료, 로그 `terminated by exception 0x40010004`). `start-db.ps1`(실행 정책 CurrentUser `RemoteSigned`)로 시작 — 첫 시도는 터미널 도구의 Ctrl-C로 시작 전 중단, 두 번째 성공. 비정상 종료 뒤 자동 복구(0.1초) 후 정상
+- **적용 전 확인(직접 실행):** `aicontent_main` Flyway 1~3(V3), 접속 0, 8080·3000·java 없음. 12개 테이블 행 수·md5가 백업 검증본 `aicontent_main_preapplycheck_20261021`(10-21 16:22 백업 복원)과 같음 → 새 백업·리허설 반복하지 않음. 백업 파일 SHA-256 `87fd8619…24cb` 기록과 같음. `check-env.ps1` "Nothing required is missing", `blocked variables none`
+- **권한 거부(기록):** Claude Code 세션이 auto 모드일 때 daily 실행 명령 `powershell.exe -NoProfile -File scripts/run/start-backend.ps1 -Target daily > .local/daily-backend-20261022-apply-v7.log 2>&1`이 자동 검사기에서 두 번 실행 전 거부(두 번째 사유 `[Production Deploy]`, 승인 창 없음). 이어진 읽기 전용 조회도 한 번 거부. 다른 방식으로 재시도하지 않음. 사용자 요청으로 세션을 default(Manual) 모드로 바꾼 뒤 적용 전 상태를 다시 확인(V3·데이터 일치·거부된 명령의 로그 파일 없음 = 실행되지 않았음)하고, 같은 명령을 승인 창으로 1회 실행
+- **적용(직접 실행, 17:15:34):** 로그 `[daily] DB aicontent_main (real embeddings), http://127.0.0.1:8080, AI none, profile default, admin login required` → `Database: jdbc:postgresql://127.0.0.1:55432/aicontent_main` → `Current version of schema "public": 3` → `Migrating … "4 - content"` … `"7 - issue change seq"` → `Successfully applied 4 migrations … now at version v7 (execution time 00:00.064s)` → `Started PlatformApplication in 2.62 seconds`. ERROR·WARN 없음. 스케줄러 꺼짐(`--app.news.scheduler-enabled=false`), OpenAI 키 비움
+- **DB 확인(직접 실행):** Flyway 1~7 모두 `true`, 트리거 3개(`trg_issue_change_seq`·`trg_issue_article_change_seq`·`trg_issue_article_move_change_seq`), 함수 2개, 새 테이블 `content`·`content_source`·`content_link` 0행, `issue.change_seq` 모두 0. 기존 11개 테이블을 적용 전 백업의 원래 열로 비교 — 행 수·md5 모두 같음(이슈 29·기사 35·연결 35·계정 2·작업 112 등). 화면 확인 뒤에도 다시 비교해 같음(`change_seq` 0, 콘텐츠 0)
+- **API(직접 실행, GET만):** `/actuator/health` 200 UP. 로그인 없이 `/api/admin/me`·`/issues`·`/contents` 401, 틀린 비밀번호 401. `viewer`(비밀번호 파일, 출력 안 함) `/me` 200 SYSTEM_ADMIN, `/issues` 총 29, `/articles` 총 35, `/contents` 200 빈 목록. 공개 `/api/public/issues` 총 29, `/categories` 200. 화면 서버(3000) 경유 `viewer` 요청도 200
+- **화면(직접 실행):** `start-ui.ps1 -Target daily -Rebuild` 빌드 성공(`/contents`·`/news` 경로 포함), `Ready`. 공개 `/news`(로그인 없음) 이슈 29개. 사용자가 브라우저에서 로그인 → 대시보드(기사 35·이슈 29·검수 대기 0·작업 112, AI `NONE` 안내), `/contents` 총 0건, 이슈 #8 상세(핵심 사실·콘텐츠 만들기·기사 목록) 정상. 모든 화면에 "로컬 검증 모드" 띠 없음. "뉴스 수집"·콘텐츠 만들기 등 쓰기 버튼은 누르지 않음
+- **로그인 실패 1회(원인 확인):** 화면에 아이디 `admin`을 입력해 `/api/admin/issues?size=1`이 401. `aicontent_main`의 계정은 `viewer`·`aicheck`(둘 다 ACTIVE·SYSTEM_ADMIN)뿐이고 `admin`은 없음(백엔드 로그 `no admin bootstrap credentials configured; no admin user is created`는 정상 메시지). `viewer`로 다시 로그인해 성공. 계정·비밀번호는 바꾸지 않음
+- **실행 중인 서버(이 기록 시점):** PostgreSQL 55432(Claude 앱 터미널 탭 `db`에서 시작), 백엔드 8080·화면 3000(Claude Code 세션 백그라운드 실행 — 세션·앱이 끝나면 함께 종료될 수 있음). 로그 `.local/daily-backend-20261022-apply-v7.log`, `.local/daily-ui-20261022.log`(Git 제외)
+  - 종료: 백엔드·화면은 Claude Code가 띄운 경우 그 세션에서 중지하거나 앱 종료, 직접 띄운 경우 각 창에서 Ctrl+C. DB는 `& .local/pg16/pgsql/bin/pg_ctl.exe -D .local/pgdata -m fast -w stop`
+  - 평소 재시작(본인 터미널): `.\scripts\run\start-db.ps1` → `.\scripts\run\start-backend.ps1 -Target daily` → `.\scripts\run\start-ui.ps1 -Target daily`(이미 V7이라 마이그레이션 없음)
+- **남겨 둔 DB:** `aicontent_main_preapplycheck_20261021`(V3), `aicontent_main_backupcheck_20261021`(V3), `aicontent_main_v7rehearsal_20261021`(V7). 삭제하지 않음
+- **복원이 필요할 때:** 역방향 마이그레이션은 없지만 적용 전 백업으로 V3 복원 가능(RUNBOOK 5-1 "복원"). 적용 뒤 생긴 데이터는 복원본에 없으므로 따로 보존·처리. 실제 복원은 별도 승인
+- **미실행:** 화면의 쓰기 동작(콘텐츠 생성·편집·승인, 뉴스 수집), 실제 RSS 수집, 유료 AI, 외부 발행, Codex 호출
