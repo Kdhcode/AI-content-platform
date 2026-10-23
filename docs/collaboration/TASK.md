@@ -784,7 +784,7 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
 | 검수 요청(사유 없음) | "검수 요청 처리했습니다. (상태 DRAFT → REVIEW)" | REVIEW v7, `submitted_at` 10:48:38 | 9 `CONTENT_SUBMIT` DRAFT v6 → REVIEW v7 |
 | 승인(사유 없음) | "승인 처리했습니다. (상태 REVIEW → APPROVED)" | APPROVED v8, `approved_by` viewer, `approved_at` 10:49:17 | 10 `CONTENT_APPROVE` REVIEW v7 → APPROVED v8 |
 
-- **공개 노출 없음(직접 실행):** `/api/public/contents`·`/api/public/contents/1` 401(공개 콘텐츠 API 없음), 공개 이슈 목록·이슈 #18 API에 콘텐츠 제목 없음. 화면 `/news` 이슈 29개만, `/news/18`에 이슈 제목만 있고 콘텐츠 제목·소제목·문단 없음. 검증 모드 띠 없음
+- **공개 노출 없음(직접 실행):** `/api/public/contents`·`/api/public/contents/1` 경로는 미인증 요청에 401을 반환했고(401만으로 해당 API의 존재 여부는 판단하지 않음 — 정정: 처음 기록 `273989c`에는 "공개 콘텐츠 API 없음"으로 적었음), 공개 이슈 목록·이슈 #18 API에는 콘텐츠 제목이 노출되지 않음. 화면 `/news` 이슈 29개만, `/news/18`에 이슈 제목만 있고 콘텐츠 제목·소제목·문단 없음. 검증 모드 띠 없음
 - **영향 범위:** 이슈 #18 `change_seq` 0 그대로, 이슈 29·기사 35 그대로. 유료 AI·RSS 수집·외부 발행 없음
 - **관찰(고치지 않음):**
   - 이슈 변경 없는 수정 요청: 10-22 19:00:59 감사 기록 4 `ISSUE_UPDATE`(이슈 #18) — 요청 값이 모두 비어(after_state `"title": "null"` 등, `summaryChanged: false`) 실제 제목·상태는 바뀌지 않았는데 감사 기록이 남고 `issue.updated_at`이 바뀜. `change_seq`는 그대로(트리거가 실제 변경만 셈). 화면의 어떤 조작이 이 요청을 보냈는지는 미확인
