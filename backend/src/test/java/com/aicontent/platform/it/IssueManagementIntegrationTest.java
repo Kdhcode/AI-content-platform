@@ -132,4 +132,48 @@ class IssueManagementIntegrationTest extends IntegrationTestBase {
         assertThatThrownBy(() -> management.update(1, new IssueManagementService.IssuePatch(null, null, null, "MERGED"), "a", null, null))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
     }
+
+    private String issueRow(long id) {
+        return jdbc.sql("""
+                SELECT title || '|' || coalesce(summary, '') || '|' || coalesce(category, '') || '|' || status || '|'
+                       || title_source || '|' || summary_source || '|' || updated_at
+                FROM issue WHERE id = :i""").param("i", id).query(String.class).single();
+    }
+
+    @Test
+    void anEditWithNoFieldIsRefusedAndChangesNothing() {
+        String before = issueRow(1);
+        assertThatThrownBy(() -> management.update(1, new IssueManagementService.IssuePatch(null, null, null, null), "admin", "r", null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+        assertThat(issueRow(1)).isEqualTo(before);
+        assertThat(count("SELECT count(*) FROM admin_audit_log WHERE action = 'ISSUE_UPDATE'")).isZero();
+    }
+
+    @Test
+    void sendingTheCurrentValuesSucceedsWithoutTouchingTheIssueOrTheAuditLog() {
+        var head = jdbc.sql("SELECT title, summary, category, status FROM issue WHERE id = 1")
+                .query((rs, n) -> new String[] {rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)}).single();
+        String before = issueRow(1);
+        // title is compared after trimming, as it is stored
+        management.update(1, new IssueManagementService.IssuePatch("  " + head[0] + " ", head[1], head[2], head[3]), "admin", "r", null);
+        assertThat(issueRow(1)).isEqualTo(before);   // same data, same sources (still AUTO), same updated_at
+        assertThat(count("SELECT count(*) FROM admin_audit_log WHERE action = 'ISSUE_UPDATE'")).isZero();
+    }
+
+    @Test
+    void theAuditRecordListsOnlyTheFieldsThatChanged() {
+        String oldTitle = jdbc.sql("SELECT title FROM issue WHERE id = 1").query(String.class).single();
+        String oldSummary = jdbc.sql("SELECT summary FROM issue WHERE id = 1").query(String.class).single();
+        // summary sent unchanged, category and status omitted
+        management.update(1, new IssueManagementService.IssuePatch("새 제목", oldSummary, null, null), "admin", "r", "c-audit");
+        assertThat(jdbc.sql("SELECT title || '/' || title_source || '/' || summary_source FROM issue WHERE id = 1")
+                .query(String.class).single()).isEqualTo("새 제목/MANUAL/AUTO");
+        assertThat(jdbc.sql("SELECT before_state::text FROM admin_audit_log WHERE correlation_id = 'c-audit'").query(String.class).single())
+                .isEqualTo("{\"title\": \"" + oldTitle + "\"}");
+        assertThat(jdbc.sql("SELECT after_state::text FROM admin_audit_log WHERE correlation_id = 'c-audit'").query(String.class).single())
+                .isEqualTo("{\"title\": \"새 제목\"}");                      // no "null" strings, no summaryChanged
+        management.update(1, new IssueManagementService.IssuePatch(null, "바뀐 요약", null, "EXCLUDED"), "admin", null, "c-audit-2");
+        assertThat(jdbc.sql("SELECT after_state::text FROM admin_audit_log WHERE correlation_id = 'c-audit-2'").query(String.class).single())
+                .isEqualTo("{\"status\": \"EXCLUDED\", \"summaryChanged\": true}");
+    }
 }
