@@ -50,8 +50,11 @@ export default function IssueDetailPage() {
   }
 
   const r = reason.trim() || undefined;
+  // same comparison as the server (title is trimmed there): nothing changed means nothing to send
+  const titleChanged = d != null && title.trim() !== d.title;
+  const summaryChanged = d != null && summary !== (d.summary ?? "");
   const save = () => run("저장했습니다.", () => api(`/api/admin/issues/${id}`, { method: "PATCH", body: {
-    title: title !== d?.title ? title : undefined, summary: summary !== (d?.summary ?? "") ? summary : undefined, reason: r } }));
+    title: titleChanged ? title : undefined, summary: summaryChanged ? summary : undefined, reason: r } }));
   const setStatus = (status: string) => run(`상태를 ${status}(으)로 변경했습니다.`, () =>
     api(`/api/admin/issues/${id}`, { method: "PATCH", body: { status, reason: r } }));
   const split = () => run("선택한 기사를 새 이슈로 분리했습니다.", () => api(`/api/admin/issues/${id}/split`, { method: "POST", body: {
@@ -84,7 +87,8 @@ export default function IssueDetailPage() {
             <div className="muted">제목 출처: {d.titleSource}{d.titleSource === "MANUAL" ? " (자동 갱신 안 함)" : " (가장 이른 기사 제목을 따름)"} · 요약 출처: {d.summarySource}{d.summarySource === "MANUAL" && " (자동 갱신 안 함)"}</div>
             <div className="row" style={{ marginTop: 8 }}>
               <input type="text" placeholder="변경 사유(선택, 감사 로그에 기록)" value={reason} onChange={(e) => setReason(e.target.value)} style={{ minWidth: 280 }} />
-              <button className="primary" disabled={busy || !editable} onClick={save}>제목/요약 저장</button>
+              <button className="primary" disabled={busy || !editable || !(titleChanged || summaryChanged)} onClick={save}
+                title={titleChanged || summaryChanged ? undefined : "바뀐 내용이 없습니다"}>제목/요약 저장</button>
               {d.status === "REVIEW" && <button disabled={busy} onClick={() => setStatus("ACTIVE")}>같은 사건으로 확정(ACTIVE)</button>}
               {editable && <button disabled={busy} onClick={() => setStatus("EXCLUDED")} className="danger">제외</button>}
               {(d.status === "CLOSED" || d.status === "EXCLUDED") && <button disabled={busy} onClick={() => setStatus("ACTIVE")}>다시 활성화</button>}
