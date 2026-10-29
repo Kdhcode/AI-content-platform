@@ -2,17 +2,18 @@
 
 ## 현재 상태 (검증한 코드 커밋 기준, RULES.md 4절)
 
-- 작업 브랜치: `claude/news-input-plan` (문서만, PR #10, `main` `6208fc3` 위). 원격 `main` = `6208fc3`(PR #7 병합, 2026-10-25 `git fetch`로 확인). ~~`claude/content-docs-followup` (문서만, `main` `c94a50e` 위). 원격 `main` = `c94a50e`~~(10-23 기록, PR #7로 병합됨)
+- 작업 브랜치: `claude/news-input-plan` (문서만, PR #10, `main` `6208fc3` 위). 원격 `main` = `6208fc3`(PR #7 병합, 2026-10-25 `git fetch`로 확인, 2026-10-29 재확인 — 변경 없음). ~~`claude/content-docs-followup` (문서만, `main` `c94a50e` 위). 원격 `main` = `c94a50e`~~(10-23 기록, PR #7로 병합됨)
 - 실행 코드: `main` `b4462ed`(backend는 `6a9ba31`과 같음), jar `.local/run/platform-backend.jar` SHA-256 `727aa7ac…`(리허설과 같은 파일, V1~V7)
 - **`aicontent_main`: V7 적용 완료(2026-10-22 17:15 KST, 29절).** 기존 데이터 보존, Flyway·트리거·API·화면 확인 통과
 - 적용 전 백업: `.local/backup-aicontent_main-20261021-1622-V3-preapply.dump`(복원 검증 DB `aicontent_main_preapplycheck_20261021`)
 - **실제 DB 콘텐츠 흐름 확인(30절):** 콘텐츠 #1(NEWS, 원천 이슈 #18) 편집·저장 → 검수 요청 → 승인 완료(APPROVED v8). 공개 뉴스룸·공개 API에 노출 안 됨
-- 열린 PR(2026-10-25 GitHub API 원격 조회): #8 `claude/issue-noop-save`(32절), #9 `claude/life-b-plan`(B1 설계), #10 `claude/news-input-plan`(33·34절, 문서만). ~~없음~~(10-23 기록)
+- 열린 PR(2026-10-29 GitHub API 원격 조회): #8 `claude/issue-noop-save` `1a3c964`(32절, **36-1절 검토: 결함 없음, 관련 시험 47개 통과, CI push 성공**), #9 `claude/life-b-plan` `62e84b7`(B1 설계), #10 `claude/news-input-plan` `7d9f705`(33~36절, 문서만, CI push 성공). 셋 다 base `main` `6208fc3`. ~~(2026-10-25 조회) #8·#9·#10~~ ~~없음~~(10-23 기록)
 - **수집 자료 보강(33·34절, 문서만):** `NEWS_INPUT_PLAN.md`(이용 범위 네 항목, AI 제공자 조건 분리, 관찰 상태 표시), `NEWS_SOURCE_OPTIONS.md`(후보 3개, 35절: 공공누리 제1유형 조건 확인·실제 공공자료 2건). 외부 AI 분석 입력·자동 수집의 허용 여부는 확정하지 않음
 - **30절 관찰 정리(31절):** 3번(기본 소제목) 해소 + 수동 생성 빈 본문 결정(10-23), 2번(자동 저장) 설계대로, 1번(변경 없는 이슈 저장) **사용자 결정 완료(2026-10-23), PR #8 구현·검토 대기**(결정 내용은 31절 갱신 표시, 구현 기록은 PR #8 브랜치의 32절)
-- 다음 작업: PR #8 검토·병합 판단, 다음 구현 후보 B1(LIFE 판정 저장 구조) 결정 사항 확인. 34·35절 결정(RSS 분석 계속 여부, 공공누리 문의 질문 발송 여부). daily 평소 사용(서버 종료·재시작은 29절)
+- **시험·검증 원칙(36절, 현재 방침):** `NEWS_INPUT_PLAN.md` 11절 — 프로젝트 OpenAI API 미호출 / 외부 AI 사용 / AI 미사용 구분, 발췌 판정 시험 자료, LIFE 예시 ≠ B4 정답, 이용조건 확인/해석 구분. 33~35절의 "AI 호출 없음"은 프로젝트 API 미호출만 뜻함(정정)
+- 다음 작업: PR #8 병합 판단(사용자, 36-1절 남은 조건), 다음 구현 후보 B1(LIFE 판정 저장 구조) 결정 사항 확인. 34·35절 결정(RSS 분석 계속 여부, 공공누리 문의 질문 발송 여부). daily 평소 사용(서버 종료·재시작은 29절). ~~PR #8 검토·병합 판단~~(10-25 기록, 검토는 36-1절에서 함)
 
-최종 갱신: 2026-10-25 KST · 35절(공공누리 제1유형 원문·실제 공공자료 2건·변경 없는 이슈 저장 상태 갱신). 이전: 34절(PR #10 수집 자료 설계 보완·자료 공급 후보 조사). 이전: 2026-10-23 33절(이슈 내용이 짧은 원인·수집 자료 보강 설계). 이전: 2026-10-23 31절(30절 관찰 정리·기본 소제목 결정·다음 작업 제안). 이전: 30절(실제 DB 수동 콘텐츠 흐름 확인). 이전: 2026-10-22 29절(실제 `aicontent_main` V3 → V7 적용). 이전: 2026-10-21 28-2절(PR #3 병합 후속). 이전: 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
+최종 갱신: 2026-10-29 KST · 36절(PR #10 시험·검증 원칙·AI 사용 기록 정정)·36-1절(PR #8 검토). 이전: 2026-10-25 35절(공공누리 제1유형 원문·실제 공공자료 2건·변경 없는 이슈 저장 상태 갱신). 이전: 34절(PR #10 수집 자료 설계 보완·자료 공급 후보 조사). 이전: 2026-10-23 33절(이슈 내용이 짧은 원인·수집 자료 보강 설계). 이전: 2026-10-23 31절(30절 관찰 정리·기본 소제목 결정·다음 작업 제안). 이전: 30절(실제 DB 수동 콘텐츠 흐름 확인). 이전: 2026-10-22 29절(실제 `aicontent_main` V3 → V7 적용). 이전: 2026-10-21 28-2절(PR #3 병합 후속). 이전: 28-1절(V4~V7 리허설). 이전: 28절(백업·리허설 보류). 이전: 27-2절(수정 커밋 재리뷰)·RULES.md 리뷰 운영 원칙 추가. 이전: 2026-10-20 27절(협업 자동화)·27-1절(전체 흐름 시험 결과). 이전: 26-1절(누락 수정 3개를 `claude/ci-checks`에 반영), 기준 `claude/ci-checks`. 25·26절은 `claude/content-a` `540062f` 기준으로 쓴 기록. 이전: 2026-10-19 20절(새 노트북 점검·실행 스크립트), 기준 `ad9d5a2`. 아래 이전 기록은 2026-10-13 기준 커밋 `191bc8b` + 커밋 9개(6절, 클라우드에 GitHub 쓰기 권한이 없어 패치로 전달)
 
 목표: 뉴스 수집 → 분석 → 임베딩 → 이슈 분류 → 관리자 검수 흐름 검토.
 
@@ -871,3 +872,22 @@ Phase 2 기능이 아니며 스키마 변경(새 Flyway 버전)도 없다.
   - `NEWS_SOURCE_OPTIONS.md`: 머리말·4-2절에 정정 표시(외부 AI 사용), 4-2절 끝에 "RSS 대비는 발췌 근거가 아님·B4 정답 아님" 보완
 - **정정(33·34·35절):** 그 절들의 "AI 호출 없음"·"유료 AI·Codex 호출 없음"은 **프로젝트 OpenAI API 미호출**만 뜻한다. 세 커밋(`072c0fb`·`f64b3f7`·`0f7f4c9`)은 Claude 공동 작성이고 공개 안내·공공자료 2건의 내용을 Claude가 요약했으므로 외부 AI 사용이었다. 35절 4-2 제목의 "사람이 브라우저로 읽음"은 페이지를 연 주체가 기록에 없어 확인되지 않는다(원래 문장은 그대로 둠)
 - **하지 않은 것:** 조사 범위 확대, 실제 자료로 LIFE 글 생성, B4 세트 작성, 문의 발송, 코드·DB 변경, 테스트·빌드·Codex 호출(문서만 — RULES.md 5절 운영 원칙). 이 절 작업에서도 Claude(외부 AI)가 저장소 문서를 읽고 썼으며, 새로 읽은 외부 실제 자료는 없음
+- 위 문서 변경은 `7d9f705`로 커밋해 `claude/news-input-plan`에 일반 push(로컬 = 원격 `7d9f705`, 직접 확인). PR #10 본문은 이 노트북에 GitHub 인증 수단이 없어 갱신하지 못함(초안은 사용자에게 전달)
+
+### 36-1. 2026-10-29 PR #8 "변경 없는 이슈 저장" 검토 (이 노트북, 코드 변경 없음)
+
+- **검토 대상(원격 조회 2026-10-29):** PR #8 open·미병합, head `claude/issue-noop-save` `1a3c964`(전달받은 마지막 head와 같음), base `main` `6208fc3` = merge-base(뒤처짐 없음). 커밋 1개, 6개 파일(`IssueManagementService`·`IssueRepository`·`issues/[id]/page.tsx`·`IssueManagementIntegrationTest`·`API.md`·`TASK.md` 32절). 별도 임시 작업 트리(분리 HEAD)에서 읽고 시험, 검토 뒤 제거. PR #10 문서 변경은 섞지 않음
+- **요구사항 기준:** 31절 "갱신(2026-10-25)"·PR #8 브랜치 32절의 사용자 결정(2026-10-23) — ① 수정할 필드가 없는 요청 400 ② 필드는 있지만 기존 값과 같으면 성공, 데이터·`updated_at`·변경 감사 기록 그대로 ③ 감사 기록에서 보내지 않은 필드 생략 ④ 화면은 변경이 없으면 저장 버튼 비활성화
+- **검토 결과: 결함 없음(확인한 범위 안에서).** 근거(코드 읽기, `1a3c964`):
+  - 부수효과: 같은 값만 온 경우 `IssueManagementService.update`가 `updateFields` 전에 `return`(UPDATE·`trg_issue_updated`·`change_seq`·감사 기록 없음). 실제 변경 필드만 `updateFields`에 넘기므로 같은 제목·요약을 다시 보내도 `title_source`·`summary_source`가 MANUAL로 바뀌지 않음(`IssueRepository.updateFields`는 넘긴 필드만 MANUAL로 표시)
+  - 실제 변경: 바뀐 필드는 전처럼 저장, 컨트롤러는 `update` 뒤 `get(id)`로 현재 상세 200(`IssueAdminController` 53~55행)
+  - 정규화: 제목은 trim 후 비교·저장(서버 182행, 화면 `title.trim() !== d.title`). 저장된 제목은 모든 코드 경로에서 이미 trim됨(RSS `clean()`·`NewsCollectionService` 111행·분리·수동 수정, AUTO는 기사 제목 복사) → 저장값에 앞뒤 공백이 있어 화면·서버가 어긋나는 경우는 앱 코드로는 생기지 않음. 요약·분류·상태는 정규화 없이 `Objects.equals`
+  - 상태·검수·공개 제약: 허용 상태 검사·MERGED 거부·빈 제목 거부는 같은 값 판정보다 먼저. 상태 전이 검사(기사 없는 ACTIVE·REVIEW, 검수 대기 있는 CLOSED)는 상태가 실제로 바뀔 때만 적용 — 상태를 그대로 두는 요청은 새 상태로 들어가지 않으므로 공개(CLOSED) 조건을 우회하지 않음. ACTIVE 확정 시 기사 `CLASSIFIED` 처리 조건은 이전(`ACTIVE` 요청 && 기존이 ACTIVE 아님)과 같은 결과
+  - 응답·화면: 화면은 제목·요약 둘 다 안 바뀌면 버튼 비활성화(안내 "바뀐 내용이 없습니다"), 저장·상태 동작 뒤 `load()`로 다시 읽어 버튼 상태가 갱신됨. 상태 버튼은 현재와 다른 상태만 보이므로 화면에서 같은 상태를 보내는 경로 없음
+  - 감사 기록: 바뀐 필드만 `before`/`after`, 요약은 `summaryChanged: true`, `"null"` 문자열 없음
+- **정책 확인이 필요한 점(결함 아님, 결정 범위 밖):** 요약이 `null`인 이슈에 API로 `summary: ""`를 보내면 `""` ≠ `null`로 보아 변경으로 저장(`summary = ""`, MANUAL). 화면은 `null`을 `""`로 보여 주고 바꾸지 않으면 보내지 않으므로 화면 경로에서는 생기지 않음. `null`과 빈 문자열을 같은 값으로 볼지는 결정에 없음
+- **시험 범위의 한계:** 새 시험 3개는 서비스 직접 호출이다. HTTP 계층(검증 어노테이션·컨트롤러 응답 본문)으로 "필드 없음 400 / 같은 값 200 + 현재 상세"를 확인하는 시험은 없음. 화면 버튼 비활성화는 자동 시험 없음(CI의 typecheck·build만)
+- **테스트(직접 실행, `1a3c964` 임시 작업 트리, 격리 DB):** 실행 전 확인 — 테스트 프로필은 stub AI·작업자·스케줄러 끔, 고정 데이터, OpenAI 흐름 시험은 로컬 모의 서버, 실제 RSS·외부 AI 호출 없음. 꺼져 있던 프로젝트 PostgreSQL을 `start-db.ps1`로 켜고 빈 새 DB `aicontent_pr8_test_20261029`를 만들어 `TEST_DB_URL`로 지정(`aicontent_main`·`aicontent_test` 미사용) → `mvn -B -ntp test -Dtest=IssueManagementIntegrationTest,ContentApiIntegrationTest,ContentOriginChangeIntegrationTest,ContentStatusApiIntegrationTest,LocalVerifyIntegrationTest,OpenAiFlowIntegrationTest,PendingReviewFollowUpIntegrationTest,PublicNewsReviewFlowIntegrationTest`(이슈 수정을 호출하는 시험 클래스 전부) **47개 통과, 실패·오류·건너뜀 0**, Flyway V1~V7 적용. 대조: 같은 작업 트리에서 `IssueManagementService`·`IssueRepository`만 `main`(`6208fc3`) 버전으로 바꾸면 `IssueManagementIntegrationTest` 13개 중 **새 3개만 실패**(146·159·170행), 나머지 10개 통과 → 되돌림. 시험 뒤 DB 삭제, PostgreSQL 다시 끔, 작업 트리 제거. 백엔드 전체 테스트·화면 빌드는 실행하지 않음(CI가 같은 SHA에서 실행)
+- **CI(원격 조회, GitHub 공개 API, 2026-10-29):** PR #8 `1a3c964` — push run 39889050371 **성공**(`backend`·`admin-ui`·`run-scripts` 모두 success), pull_request 실행 39889083938 **skipped**(같은 저장소 PR은 push 실행으로 갈음하는 `ci.yml` 설계, 성공으로 세지 않음). PR #10 `7d9f705`(새 head) — push run 40840514986 **성공**(3개 작업 success), pull_request run 40840519541 **skipped**. 이전 head `0f7f4c9`의 push 성공(run 40190168365)은 과거 SHA 결과
+- **병합 전 남은 조건(사용자 판단):** ① PR #8 리뷰·병합 결정(RULES.md 1절: 병합은 사용자) ② 위 `null`/빈 문자열 처리를 지금 정책대로 둘지 ③ 병합 후 daily 반영은 `main` 재빌드·재시작이 필요(32절 "실제 daily에는 아직 반영 안 함") ④ 필요하면 HTTP 계층 시험 추가(별도 작업)
+- **하지 않은 것:** PR #8 코드·시험 수정, 병합, daily 실행, `aicontent_main`·`aicontent_test` 접근, 유료 AI·Codex 호출
