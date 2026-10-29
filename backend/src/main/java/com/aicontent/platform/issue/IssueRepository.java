@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class IssueRepository {
 
-    public record IssueHead(long id, String title, String summary, String summaryStatus, String status,
+    public record IssueHead(long id, String title, String summary, String summaryStatus, String category, String status,
                             Long mergedIntoIssueId, int articleCount) {}
 
     private final JdbcClient jdbc;
@@ -30,10 +30,10 @@ public class IssueRepository {
 
     public Optional<IssueHead> findHead(long id) {
         return jdbc.sql("""
-                SELECT id, title, summary, summary_source, status, merged_into_issue_id, article_count
+                SELECT id, title, summary, summary_source, category, status, merged_into_issue_id, article_count
                 FROM issue WHERE id = :id""").param("id", id)
                 .query((rs, n) -> new IssueHead(rs.getLong("id"), rs.getString("title"), rs.getString("summary"),
-                        rs.getString("summary_source"), rs.getString("status"),
+                        rs.getString("summary_source"), rs.getString("category"), rs.getString("status"),
                         (Long) rs.getObject("merged_into_issue_id"), rs.getInt("article_count")))
                 .optional();
     }
