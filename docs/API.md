@@ -82,7 +82,10 @@
 
 ### `PATCH /issues/{id}` — 수정 (OPERATOR+) · 동기
 본문(전부 선택, 보낸 필드만 변경): `{ "title": "≤300자", "summary": "≤5000자", "category": "≤50자", "status": "ACTIVE|REVIEW|CLOSED|EXCLUDED", "reason": "≤500자" }`.
-- `summary`를 보내면 `summarySource=MANUAL`이 되어 이후 자동 갱신하지 않음. `title`도 같음(`titleSource=MANUAL`). AUTO 제목은 멤버십이 바뀔 때 가장 이른 기사 제목으로 맞춰짐.
+- `title`·`summary`·`category`·`status`가 모두 없으면 400 `VALIDATION_ERROR`(`reason`만으로는 수정 아님).
+- 보낸 값이 지금 값과 같으면(제목은 앞뒤 공백 제거 후 비교) 그 필드는 바뀌지 않은 것으로 본다. 바뀐 필드가 하나도 없으면 200으로 현재 상세를 돌려주고 이슈 데이터·`updatedAt`·출처 표시·감사 로그는 그대로(2026-10-23).
+- 감사 로그 `ISSUE_UPDATE`에는 실제로 바뀐 필드만 남는다(보내지 않았거나 같은 값인 필드는 키 자체를 생략, 요약은 `summaryChanged: true`).
+- `summary`를 실제로 바꾸면 `summarySource=MANUAL`이 되어 이후 자동 갱신하지 않음. `title`도 같음(`titleSource=MANUAL`). AUTO 제목은 멤버십이 바뀔 때 가장 이른 기사 제목으로 맞춰짐.
 - `REVIEW → ACTIVE`는 검수 확정: 소속 기사들의 `classificationStatus`가 `CLASSIFIED`로 바뀜.
 - `status=MERGED`는 직접 지정 불가(병합 API 사용).
 응답: 수정 후 이슈 상세.
