@@ -41,9 +41,20 @@ public class LifeJudgmentRepository {
         this.jdbc = jdbc;
     }
 
+    /** Version of the snapshot format below. Raise it whenever a field is added, removed or changes meaning. */
+    public static final int SNAPSHOT_SCHEMA_VERSION = 1;
+
     /**
-     * Issue fields that raise change_seq (title, summary, category, key facts, entities) and the primary member ids.
-     * No article text: re-analysing an article does not raise change_seq, so it must not reach the input either.
+     * The judgment input (snapshot format v1, docs/LIFE_B_PLAN.md §4-1): {@code schemaVersion} plus the issue fields
+     * that raise change_seq (title, summary, category, key facts, entities) and the primary member article ids in
+     * ascending order. Values are copied as stored: NULL stays JSON null, "" stays "" (never merged).
+     * <p>
+     * Not in the snapshot, so not in the hash: issue id (stored in its own column), status and change_seq (returned
+     * next to it), merge target, aggregates, embedding and article text. Re-analysing an article does not raise
+     * change_seq, so article text must not reach the input either.
+     * <p>
+     * The hash is SHA-256 over the UTF-8 bytes of PostgreSQL's jsonb text output of the snapshot (jsonb sorts keys and
+     * normalises whitespace, so equal snapshots always give equal text on the same server version).
      */
     public Optional<JudgmentInput> readInput(long issueId) {
         return jdbc.sql("""
@@ -52,6 +63,7 @@ public class LifeJudgmentRepository {
                 FROM issue i
                 CROSS JOIN LATERAL (
                     SELECT jsonb_build_object(
+                        'schemaVersion', :version,
                         'title', i.title,
                         'summary', i.summary,
                         'category', i.category,
@@ -61,10 +73,23 @@ public class LifeJudgmentRepository {
                                                 FROM issue_article ia WHERE ia.issue_id = i.id AND ia.is_primary),
                                                '[]'::jsonb)) AS snap) s
                 WHERE i.id = :id""")
-                .param("id", issueId)
+                .param("id", issueId).param("version", SNAPSHOT_SCHEMA_VERSION)
                 .query((rs, n) -> new JudgmentInput(rs.getLong("id"), rs.getLong("change_seq"), rs.getString("status"),
                         rs.getString("snap"), rs.getString("hash")))
                 .optional();
+    }
+
+    /**
+     * The hash {@link #readInput} would give for this snapshot text: SHA-256 of its jsonb text output. Only for text
+     * that already parsed as JSON (an invalid cast would abort the caller's transaction).
+     */
+    public String hashOf(String snapshotJson) {
+        return jdbc.sql("SELECT encode(sha256(convert_to(CAST(CAST(:snap AS jsonb) AS text), 'UTF8')), 'hex')")
+                .param("snap", snapshotJson).query(String.class).single();
+    }
+
+    public Optional<Long> currentChangeSeq(long issueId) {
+        return jdbc.sql("SELECT change_seq FROM issue WHERE id = :id").param("id", issueId).query(Long.class).optional();
     }
 
     /** @return the new row id, or empty when a row for {@code sourceJobId} already exists (a retried job) */

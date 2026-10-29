@@ -12,14 +12,22 @@ import com.aicontent.platform.life.LifeJudgmentRepository.Judgment;
 import com.aicontent.platform.life.LifeJudgmentRepository.JudgmentInput;
 import com.aicontent.platform.life.LifeJudgmentService;
 import com.aicontent.platform.life.LifeJudgmentService.NewJudgment;
+import com.aicontent.platform.life.LifeJudgmentService.Outcome;
+import com.aicontent.platform.life.LifeJudgmentService.RecordResult;
 import com.aicontent.platform.life.LifeJudgmentService.Status;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -142,37 +150,143 @@ class LifeJudgmentIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void retryingTheSameJobKeepsOneRow() {
+    void retryingTheSameJobReusesTheRowAndAnyDifferenceIsAConflict() {
         long jobId = job();
         JudgmentInput input = life.readInput(1);
         var first = life.record(judgment(input, "0.8", jobId));
-        assertThat(first.created()).isTrue();
-        assertThat(first.mismatch()).isFalse();
-        // an identical retry returns the stored row and reports no mismatch
+        assertThat(first.outcome()).isEqualTo(Outcome.CREATED);
+        assertThat(first.saved()).isTrue();
+        // same job, same input, same result: the stored row, nothing written
         var same = life.record(judgment(input, "0.800", jobId));
-        assertThat(same.created()).isFalse();
+        assertThat(same.outcome()).isEqualTo(Outcome.REUSED);
+        assertThat(same.saved()).isTrue();
         assertThat(same.judgment()).isEqualTo(first.judgment());
-        assertThat(same.inputMatches()).isTrue();
-        assertThat(same.resultMatches()).isTrue();
-        // the retry may have read a newer input and got another answer; the stored row wins, the mismatch is reported
+        // same job, newer input and another answer: a conflict, not a save; the stored row is unchanged
         management.update(1, new IssuePatch(null, null, "SOCIETY", null), "op", null, null);
         var retry = life.record(judgment(life.readInput(1), "0.1", jobId));
-        assertThat(retry.created()).isFalse();
+        assertThat(retry.outcome()).isEqualTo(Outcome.CONFLICT);
+        assertThat(retry.saved()).isFalse();
         assertThat(retry.judgment()).isEqualTo(first.judgment());
         assertThat(retry.inputMatches()).isFalse();
         assertThat(retry.resultMatches()).isFalse();
-        // same input, different answer
+        // same input, another answer
         var otherAnswer = life.record(judgment(input, "0.1", jobId));
+        assertThat(otherAnswer.outcome()).isEqualTo(Outcome.CONFLICT);
         assertThat(otherAnswer.inputMatches()).isTrue();
         assertThat(otherAnswer.resultMatches()).isFalse();
+        // newer input, same answer
+        var otherInput = life.record(judgment(life.readInput(1), "0.8", jobId));
+        assertThat(otherInput.outcome()).isEqualTo(Outcome.CONFLICT);
+        assertThat(otherInput.inputMatches()).isFalse();
+        assertThat(otherInput.resultMatches()).isTrue();
         // the job id reused for another issue
         var otherIssue = life.record(judgment(life.readInput(2), "0.8", jobId));
+        assertThat(otherIssue.outcome()).isEqualTo(Outcome.CONFLICT);
         assertThat(otherIssue.inputMatches()).isFalse();
         assertThat(otherIssue.judgment()).isEqualTo(first.judgment());
         assertThat(count("SELECT count(*) FROM life_judgment")).isEqualTo(1);
+        assertThat(life.history(1)).containsExactly(first.judgment());
+        assertThat(life.findBySourceJob(jobId)).contains(first.judgment());
         // a new request is a new job and a new row (D2)
-        assertThat(life.record(judgment(life.readInput(1), "0.1", job())).created()).isTrue();
+        assertThat(life.record(judgment(life.readInput(1), "0.1", job())).outcome()).isEqualTo(Outcome.CREATED);
         assertThat(count("SELECT count(*) FROM life_judgment")).isEqualTo(2);
+    }
+
+    @Test
+    void concurrentSavesOfOneJobKeepOneRowAndAgreeOnIt() throws Exception {
+        for (boolean sameResult : new boolean[] {true, false}) {
+            long jobId = job();
+            JudgmentInput input = life.readInput(1);
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                List<Future<RecordResult>> calls = new ArrayList<>();
+                for (String score : List.of("0.8", sameResult ? "0.8" : "0.3")) {
+                    calls.add(pool.submit(() -> {
+                        start.await();
+                        return life.record(judgment(input, score, jobId));
+                    }));
+                }
+                start.countDown();
+                List<RecordResult> results = new ArrayList<>();
+                for (var call : calls) {
+                    results.add(call.get(30, TimeUnit.SECONDS));
+                }
+                assertThat(count("SELECT count(*) FROM life_judgment WHERE source_job_id = " + jobId)).isEqualTo(1);
+                assertThat(results).extracting(r -> r.judgment().id()).containsOnly(results.get(0).judgment().id());
+                assertThat(results).extracting(RecordResult::outcome).containsExactlyInAnyOrder(
+                        Outcome.CREATED, sameResult ? Outcome.REUSED : Outcome.CONFLICT);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void anInputWhoseSnapshotAndHashDisagreeIsRejectedButAnOlderValidInputIsStored() {
+        JudgmentInput input = life.readInput(1);
+        String otherSnapshot = input.snapshotJson().replace("\"articleIds\": [1, 2]", "\"articleIds\": [1]");
+        assertThat(otherSnapshot).isNotEqualTo(input.snapshotJson());
+        long seq = input.changeSeq();
+        for (JudgmentInput bad : List.of(
+                new JudgmentInput(1, seq, "ACTIVE", otherSnapshot, input.hash()),                // edited snapshot
+                new JudgmentInput(1, seq, "ACTIVE", input.snapshotJson(), "0".repeat(64)),       // made-up hash
+                new JudgmentInput(1, seq, "ACTIVE", input.snapshotJson(), null),
+                new JudgmentInput(1, seq, "ACTIVE", "not json", input.hash()),
+                new JudgmentInput(1, seq, "ACTIVE", "[1, 2]", input.hash()),
+                new JudgmentInput(1, seq, "ACTIVE",
+                        input.snapshotJson().replace("\"schemaVersion\": 1", "\"schemaVersion\": 2"), input.hash()),
+                new JudgmentInput(1, seq + 1, "ACTIVE", input.snapshotJson(), input.hash()),    // ahead of the issue
+                new JudgmentInput(1, -1, "ACTIVE", input.snapshotJson(), input.hash()))) {
+            assertThatThrownBy(() -> life.record(judgment(bad, "0.5", null))).as(bad.toString())
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).errorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+        }
+        assertThatThrownBy(() -> life.record(judgment(
+                new JudgmentInput(99, 0, "ACTIVE", input.snapshotJson(), input.hash()), "0.5", null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode()).isEqualTo(ErrorCode.ISSUE_NOT_FOUND);
+        assertThat(count("SELECT count(*) FROM life_judgment")).isZero();
+        // an input read correctly before the issue changed is still stored (no "equals the issue now" check)
+        management.update(1, new IssuePatch("나중 제목", null, null, null), "op", null, null);
+        assertThat(life.record(judgment(input, "0.5", null)).outcome()).isEqualTo(Outcome.CREATED);
+        assertThat(life.state(1).status()).isEqualTo(Status.STALE);
+    }
+
+    @Test
+    void theHashFollowsTheInputFieldsOnly() {
+        String h0 = life.readInput(1).hash();
+        // the same input read again
+        assertThat(life.readInput(1).hash()).isEqualTo(h0);
+        // the same article set linked in another order
+        jdbc.sql("""
+                WITH gone AS (DELETE FROM issue_article WHERE issue_id = 1 RETURNING *)
+                INSERT INTO issue_article SELECT * FROM gone ORDER BY article_id DESC""").update();
+        assertThat(jdbc.sql("SELECT article_id FROM issue_article WHERE issue_id = 1 ORDER BY ctid").query(Long.class).list())
+                .containsExactly(2L, 1L);
+        assertThat(life.readInput(1).hash()).isEqualTo(h0);
+        // status only: same hash, but change_seq moved, so the judgment made before is STALE
+        judge(1, "0.8");
+        long seq = life.readInput(1).changeSeq();
+        management.update(1, new IssuePatch(null, null, null, "CLOSED"), "op", null, null);
+        JudgmentInput closed = life.readInput(1);
+        assertThat(closed.hash()).isEqualTo(h0);
+        assertThat(closed.status()).isEqualTo("CLOSED");
+        assertThat(closed.changeSeq()).isGreaterThan(seq);
+        assertThat(life.state(1).status()).isEqualTo(Status.STALE);
+        // a real input field changes the hash
+        management.update(1, new IssuePatch(null, "새 요약", null, null), "op", null, null);
+        String h1 = life.readInput(1).hash();
+        assertThat(h1).isNotEqualTo(h0);
+        // NULL and "" stay different
+        jdbc.sql("UPDATE issue SET summary = NULL WHERE id = 1").update();
+        JudgmentInput nullSummary = life.readInput(1);
+        jdbc.sql("UPDATE issue SET summary = '' WHERE id = 1").update();
+        JudgmentInput emptySummary = life.readInput(1);
+        assertThat(nullSummary.snapshotJson()).contains("\"summary\": null");
+        assertThat(emptySummary.snapshotJson()).contains("\"summary\": \"\"");
+        assertThat(nullSummary.hash()).isNotEqualTo(emptySummary.hash()).isNotEqualTo(h1);
+        assertThat(emptySummary.changeSeq()).isGreaterThan(nullSummary.changeSeq());
     }
 
     @Test
@@ -264,7 +378,7 @@ class LifeJudgmentIntegrationTest extends IntegrationTestBase {
         assertThat(input.status()).isEqualTo("ACTIVE");
         JsonNode snap = M.readTree(input.snapshotJson());
         assertThat(M.convertValue(snap, java.util.Map.class).keySet())
-                .containsExactlyInAnyOrder("title", "summary", "category", "keyFacts", "entities", "articleIds");
+                .containsExactlyInAnyOrder("schemaVersion", "title", "summary", "category", "keyFacts", "entities", "articleIds");
         assertThat(snap.get("title").asText()).isEqualTo(
                 jdbc.sql("SELECT title FROM issue WHERE id = 1").query(String.class).single());
         assertThat(snap.get("articleIds").toString()).isEqualTo("[1,2]");

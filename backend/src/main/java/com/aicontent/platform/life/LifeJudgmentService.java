@@ -3,14 +3,17 @@ package com.aicontent.platform.life;
 import com.aicontent.platform.audit.AuditService;
 import com.aicontent.platform.common.BusinessException;
 import com.aicontent.platform.common.ErrorCode;
+import com.aicontent.platform.common.Json;
 import com.aicontent.platform.life.LifeJudgmentRepository.Exclusion;
 import com.aicontent.platform.life.LifeJudgmentRepository.Judgment;
 import com.aicontent.platform.life.LifeJudgmentRepository.JudgmentInput;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,20 +30,38 @@ public class LifeJudgmentService {
     /** Computed on read, never stored. Exclusion is shown next to it, not instead of it. */
     public enum Status { UNJUDGED, JUDGED, STALE }
 
-    /** One judgment result to store; {@code input} must come from {@link #readInput}. */
+    /**
+     * One judgment result to store. {@code input} should come from {@link #readInput}; {@link #record} re-checks the
+     * parts it can (issue exists, change_seq not ahead of the issue, snapshot format and hash) but cannot prove the
+     * snapshot was the issue's content at that change_seq.
+     */
     public record NewJudgment(JudgmentInput input, boolean lifeRelated, String category, BigDecimal relevanceScore,
                               String reason, String promptVersion, String model, Long sourceJobId, String judgedBy) {}
 
     /**
-     * @param created       false when the job had already stored its row (a retry); {@code judgment} is that row
-     * @param inputMatches  on a retry: the stored row was made from the same issue, change_seq and snapshot hash
-     * @param resultMatches on a retry: the stored row has the same answer (related, category, score, reason, prompt,
-     *                      model). The stored row is never replaced; a mismatch is only reported to the caller.
+     * How a {@link #record} call ended.
+     * <ul>
+     *   <li>CREATED: a new row was stored.</li>
+     *   <li>REUSED: the job had already stored a row with the same issue, input (change_seq + hash) and result; that
+     *       row is returned and nothing is written. Same outcome as CREATED for the caller.</li>
+     *   <li>CONFLICT: the job id already has a row for another issue, input or result. That row is returned unchanged
+     *       and nothing is written. Not a successful save: the caller reports it as its own error and does not retry
+     *       blindly (a retry with the same job id can only conflict again).</li>
+     * </ul>
      */
-    public record RecordResult(Judgment judgment, boolean created, boolean inputMatches, boolean resultMatches) {
+    public enum Outcome { CREATED, REUSED, CONFLICT }
 
-        public boolean mismatch() {
-            return !inputMatches || !resultMatches;
+    /**
+     * @param judgment      the row now stored for this call or job (on CONFLICT: the earlier row, unchanged)
+     * @param inputMatches  false when the stored row has another issue, input_change_seq or input_hash
+     * @param resultMatches false when the stored row has another answer (related, category, score, reason, prompt
+     *                      version, model) or requester
+     */
+    public record RecordResult(Outcome outcome, Judgment judgment, boolean inputMatches, boolean resultMatches) {
+
+        /** CREATED or REUSED: the job's judgment is stored. Never true for CONFLICT. */
+        public boolean saved() {
+            return outcome != Outcome.CONFLICT;
         }
     }
 
@@ -49,10 +70,12 @@ public class LifeJudgmentService {
 
     private final LifeJudgmentRepository repository;
     private final AuditService audit;
+    private final Json json;
 
-    public LifeJudgmentService(LifeJudgmentRepository repository, AuditService audit) {
+    public LifeJudgmentService(LifeJudgmentRepository repository, AuditService audit, Json json) {
         this.repository = repository;
         this.audit = audit;
+        this.json = json;
     }
 
     public JudgmentInput readInput(long issueId) {
@@ -60,23 +83,34 @@ public class LifeJudgmentService {
     }
 
     /**
-     * Appends a judgment (D2: a re-judgment is a new row). A retry of the same job returns the row it already stored.
-     * The current judgment is not "the newest row": an older input finishing late stays history (see {@link #state}).
+     * The row a job already stored, if any. B3 contract: a job handler calls this first and, when a row exists, skips
+     * the AI call (the job was stopped after the save but before the worker marked it SUCCESS).
+     */
+    public Optional<Judgment> findBySourceJob(long sourceJobId) {
+        return repository.findBySourceJob(sourceJobId);
+    }
+
+    /**
+     * Appends a judgment (D2: a re-judgment is a new row); see {@link Outcome} for a job id that already has a row.
+     * The current judgment is not "the newest row": an older input finishing late is stored and stays history (see
+     * {@link #state}), so the input is NOT required to match the issue as it is now.
      * <p>
      * Only the row is idempotent here. Marking the job SUCCESS is a separate step of the job worker (not in this
      * transaction): if the worker stops between the two, the job runs again and the UNIQUE source_job_id makes this
-     * call return the stored row instead of adding a second one.
+     * call return the stored row instead of adding a second one. Concurrent calls with one job id are serialised by
+     * that UNIQUE index: one inserts, the other waits for it and then compares against the committed row.
      */
     @Transactional
     public RecordResult record(NewJudgment j) {
         validate(j);
+        checkInput(j.input());
         String category = j.category() == null || j.category().isBlank() ? null : j.category().strip();
         String reason = j.reason().strip();
         String promptVersion = j.promptVersion().strip();
         var id = repository.insert(j.input(), j.lifeRelated(), category, j.relevanceScore(), reason, promptVersion,
                 j.model(), j.sourceJobId(), j.judgedBy());
         if (id.isPresent()) {
-            return new RecordResult(repository.findById(id.get()).orElseThrow(), true, true, true);
+            return new RecordResult(Outcome.CREATED, repository.findById(id.get()).orElseThrow(), true, true);
         }
         Judgment stored = repository.findBySourceJob(j.sourceJobId()).orElseThrow();
         boolean inputMatches = stored.issueId() == j.input().issueId()
@@ -87,8 +121,37 @@ public class LifeJudgmentService {
                 && stored.relevanceScore().compareTo(j.relevanceScore()) == 0
                 && stored.reason().equals(reason)
                 && stored.promptVersion().equals(promptVersion)
-                && Objects.equals(stored.model(), j.model());
-        return new RecordResult(stored, false, inputMatches, resultMatches);
+                && Objects.equals(stored.model(), j.model())
+                && stored.judgedBy().equals(j.judgedBy());
+        Outcome outcome = inputMatches && resultMatches ? Outcome.REUSED : Outcome.CONFLICT;
+        return new RecordResult(outcome, stored, inputMatches, resultMatches);
+    }
+
+    /**
+     * Minimal checks of a caller-built input. Deliberately no "equals the issue now" check: an older input that was
+     * read correctly must still be storable.
+     */
+    private void checkInput(JudgmentInput input) {
+        long issueChangeSeq = repository.currentChangeSeq(input.issueId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ISSUE_NOT_FOUND));
+        if (input.changeSeq() < 0 || input.changeSeq() > issueChangeSeq) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "판정 입력의 change_seq가 이슈와 맞지 않습니다.");
+        }
+        JsonNode snap;
+        try {
+            snap = input.snapshotJson() == null ? null : json.parse(input.snapshotJson());
+        } catch (IllegalStateException e) {
+            snap = null;
+        }
+        if (snap == null || !snap.isObject() || !snap.path("schemaVersion").isIntegralNumber()
+                || snap.get("schemaVersion").asInt() != LifeJudgmentRepository.SNAPSHOT_SCHEMA_VERSION
+                || !snap.path("articleIds").isArray()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "판정 입력 스냅샷 형식이 올바르지 않습니다(schemaVersion " + LifeJudgmentRepository.SNAPSHOT_SCHEMA_VERSION + ").");
+        }
+        if (input.hash() == null || !input.hash().equals(repository.hashOf(input.snapshotJson()))) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "판정 입력 스냅샷과 해시가 맞지 않습니다.");
+        }
     }
 
     public LifeState state(long issueId) {
